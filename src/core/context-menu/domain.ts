@@ -1,18 +1,16 @@
 /**
  * @file src/core/context-menu/domain.ts
  * 文件职责：定义右键菜单的产品模型，把“用户右键了什么”映射为可创建的菜单结构，并按页面状态解析每一项的显示文案与点击动作。
- * 主要内容：声明选区、页面和图片三类右键场景的入口目录与出现条件，每个场景只选择一个启用的直达操作，并在网站被关闭时改写入口，让菜单始终留有一个可执行的出口。 可核对的公开符号包括 ContextMenuBucket、ContextMenuActionId、CONTEXT_MENU_ENTRIES、CONTEXT_MENU_BUCKET_CONTEXTS、resolveContextMenuEntryToggles、buildContextMenuPlan、resolveContextMenuPresentation。
+ * 主要内容：声明选区和页面两类右键场景的入口目录与出现条件，每个场景只选择一个启用的直达操作，并在网站被关闭时改写入口，让菜单始终留有一个可执行的出口。 可核对的公开符号包括 ContextMenuBucket、ContextMenuActionId、CONTEXT_MENU_ENTRIES、CONTEXT_MENU_BUCKET_CONTEXTS、resolveContextMenuEntryToggles、buildContextMenuPlan、resolveContextMenuPresentation。
  * 模块边界：本文件是纯数据推导，不调用 browser.contextMenus、不读取配置存储、不生成本地化文案；菜单生命周期由 app/background 编排，标题渲染由 presentation.ts 完成。
  */
 
 /** 右键场景：每个场景只提供一个直达操作，避免浏览器自动创建品牌子菜单。 */
-export type ContextMenuBucket = 'selection' | 'page' | 'image';
+export type ContextMenuBucket = 'selection' | 'page';
 
 export type ContextMenuActionId =
     | 'translateSelection'
     | 'translatePage'
-    | 'translateArea'
-    | 'translateImage'
     | 'toggleSite';
 
 export type ContextMenuItemRole = 'standalone';
@@ -27,33 +25,30 @@ export type ContextMenuTitleState =
 export interface ContextMenuEntryDefinition {
     readonly id: ContextMenuActionId;
     readonly buckets: readonly ContextMenuBucket[];
-    /** 未被用户显式设置时的默认可见性；图片入口由图片翻译设置单独持有。 */
+    /** 未被用户显式设置时的默认可见性。 */
     readonly defaultEnabled: boolean;
     /** 该动作是否会把内容译成目标语言，决定标题能否附带语言名。 */
     readonly translatesIntoTarget: boolean;
     /** 该动作是否拥有可提示的快捷键。 */
     readonly hasShortcut: boolean;
-    /** 是否由右键菜单设置持有显示开关；图片入口的开关归图片翻译设置。 */
+    /** 是否由右键菜单设置持有显示开关。 */
     readonly preferenceOwned: boolean;
 }
 
 /** 目录顺序即菜单显示顺序：先处理“我右键的这个东西”，再提供页面级动作，最后才是网站级开关。 */
 export const CONTEXT_MENU_ENTRIES: readonly ContextMenuEntryDefinition[] = Object.freeze([
     Object.freeze({id: 'translateSelection', buckets: Object.freeze(['selection'] as const), defaultEnabled: true, translatesIntoTarget: true, hasShortcut: false, preferenceOwned: true}),
-    Object.freeze({id: 'translateImage', buckets: Object.freeze(['image'] as const), defaultEnabled: true, translatesIntoTarget: true, hasShortcut: false, preferenceOwned: false}),
     Object.freeze({id: 'translatePage', buckets: Object.freeze(['page'] as const), defaultEnabled: true, translatesIntoTarget: true, hasShortcut: true, preferenceOwned: true}),
-    Object.freeze({id: 'translateArea', buckets: Object.freeze(['page'] as const), defaultEnabled: false, translatesIntoTarget: true, hasShortcut: false, preferenceOwned: true}),
     Object.freeze({id: 'toggleSite', buckets: Object.freeze(['selection', 'page'] as const), defaultEnabled: false, translatesIntoTarget: false, hasShortcut: false, preferenceOwned: true}),
 ]) as readonly ContextMenuEntryDefinition[];
 
-/** 三个场景的原生 contexts；不注册 link，避免链接图片同时命中全文和图片操作。 */
+/** 各场景的原生 contexts。 */
 export const CONTEXT_MENU_BUCKET_CONTEXTS: Readonly<Record<ContextMenuBucket, readonly string[]>> = Object.freeze({
     selection: Object.freeze(['selection'] as const),
     page: Object.freeze(['page'] as const),
-    image: Object.freeze(['image'] as const),
 }) as Readonly<Record<ContextMenuBucket, readonly string[]>>;
 
-const BUCKET_ORDER: readonly ContextMenuBucket[] = Object.freeze(['selection', 'page', 'image'] as const);
+const BUCKET_ORDER: readonly ContextMenuBucket[] = Object.freeze(['selection', 'page'] as const);
 
 export type ContextMenuEntryToggles = Readonly<Record<ContextMenuActionId, boolean>>;
 
@@ -75,8 +70,6 @@ export function normalizeContextMenuEntryPreferences(value: unknown): ContextMen
 /** 功能可用性：入口只在对应能力真正可用时出现，避免点了没有反应的菜单。 */
 export interface ContextMenuFeatureAvailability {
     readonly selectionTranslation: boolean;
-    readonly imageTranslation: boolean;
-    readonly areaTranslation: boolean;
 }
 
 export interface ContextMenuDisplayOptions {
@@ -121,8 +114,6 @@ export function contextMenuItemId(bucket: ContextMenuBucket, suffix: ContextMenu
 
 /**
  * 把用户偏好与功能可用性合并为最终的入口开关。
- *
- * 图片入口不读取偏好表：它的唯一真源是图片翻译设置里的右键开关，避免两处开关互相打架。
  */
 export function resolveContextMenuEntryToggles(
     preferences: ContextMenuEntryPreferences | undefined,
@@ -131,8 +122,6 @@ export function resolveContextMenuEntryToggles(
     const capable: Readonly<Record<ContextMenuActionId, boolean>> = {
         translateSelection: availability.selectionTranslation,
         translatePage: true,
-        translateArea: availability.areaTranslation,
-        translateImage: availability.imageTranslation,
         toggleSite: true,
     };
     const toggles = {} as Record<ContextMenuActionId, boolean>;

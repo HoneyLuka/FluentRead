@@ -87,7 +87,6 @@ function configuredTongyiDestinations(config: Config): string {
     const service = services.tongyi;
     const configuredModels = [
         resolveConfiguredModel(config.model[service], config.customModel[service]),
-        resolveConfiguredModel(config.documentModel[service], config.documentCustomModel[service]),
     ];
     return Array.from(new Set(configuredModels.map((model) => (
         model === currentModelIds.tongyiTokenPlan

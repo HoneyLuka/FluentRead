@@ -1,32 +1,22 @@
-import {sharedOnnxBuildPlugin, sharedOnnxDist} from './scripts/wasm/manga-onnx-build';
-import {defineConfig, type ConfigEnv, type UserManifest, type Entrypoint, type EntrypointGroup} from 'wxt';
+import {defineConfig, type ConfigEnv, type UserManifest} from 'wxt';
 import vue from '@vitejs/plugin-vue';
 import {resolve} from 'path';
 import fs from 'fs';
 import JSZip from 'jszip';
 import {resolveBrowserCapabilities} from './src/platform/browser/capabilities';
 import {checkExtensionSize} from './scripts/testing/extension-size-budget';
-import {wllamaExtensionWorker} from './scripts/testing/wllama-extension-build';
 import {createExtensionMetadataLocaleFiles, createUiLanguageBundleFiles} from './src/core/i18n/bundles';
 import {UI_LANGUAGE_BUNDLE_DIRECTORY} from './src/core/i18n/language';
-import {packageWasmDiagnostics, packageTesseractWasm, packageTesseractWorker} from './scripts/wasm/package-diagnostics';
-import {tesseractSdkBuildPlugin} from './scripts/wasm/tesseract-sdk-build';
 import {GOOGLE_DRIVE_DEFAULT_CLIENT_ID, GOOGLE_DRIVE_EXTENSION_PUBLIC_KEY, GOOGLE_DRIVE_SCOPES} from './src/platform/google-drive/constants';
 import {createDeepLXRuntimeBuildPlugin} from './scripts/testing/deeplx-runtime-build';
-import {createPdfReaderBidiBuildPlugin} from './scripts/testing/pdfjs-bidi-build';
 import {FREE_PROVIDER_ORIGINS} from './src/core/config/freeProviderOrigins';
-import {createReadingDictionaryAliases} from './scripts/testing/reading-annotation-build';
 import {extensionCspBuildPlugin} from './scripts/testing/extension-csp-build';
 import {defuddleEntityBuildPlugin} from './scripts/testing/defuddle-entity-build';
 import {francRuntimeBuildPlugin} from './scripts/testing/franc-runtime-build';
-import {compactExtensionZip} from './scripts/wasm/compact-extension-zip';
 import type {InlineConfig} from 'vite';
 
 
 const packageJson = JSON.parse(fs.readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
-const firefoxRunnerBinary = process.env.FLUENTREAD_FIREFOX_RUNNER_BINARY;
-const firefoxRunnerProfile = process.env.FLUENTREAD_FIREFOX_RUNNER_PROFILE;
-const firefoxRunnerStartUrl = process.env.FLUENTREAD_FIREFOX_RUNNER_START_URL;
 
 /** Safari 的自动 MV2 后台页没有编码声明；显式页面在任何宿主语言下均按 UTF-8 加载原后台脚本。 */
 export function createSafariBackgroundPage(env: Pick<ConfigEnv, 'browser' | 'manifestVersion'>): {relativeDest: string; contents: string}[] {
@@ -58,7 +48,7 @@ export function configureStableContentUiResources(
     env: Pick<ConfigEnv, 'browser' | 'manifestVersion'>,
     manifest: Pick<UserManifest, 'web_accessible_resources'>,
 ): void {
-    if (env.manifestVersion !== 3 || !['chrome', 'edge'].includes(env.browser)) return;
+    if (env.manifestVersion !== 3 || env.browser !== 'chrome') return;
     const rules = manifest.web_accessible_resources;
     if (!rules || rules.some(rule => typeof rule === 'string')) return;
     const stableResources = new Set([
@@ -147,18 +137,6 @@ export function extendRemoteConfigBuildConfig(
     viteConfig.plugins = [...(viteConfig.plugins ?? []), remoteConfigStorageBuildPlugin()];
 }
 
-/** 这些入口都由 new Worker(..., {type: 'module'}) 启动，可共享一次 ESM 构建及依赖 chunk。 */
-export function groupModuleWorkers(groups: EntrypointGroup[]): void {
-    const moduleWorkers = new Set(['localTranslationWorker', 'localTtsWorker', 'videoTranscriptionWorker', 'mangaInferenceWorker', 'informationHighlightWorker', 'readingAnnotationWorker']);
-    const workers = groups.filter((group): group is Entrypoint =>
-        !Array.isArray(group) && group.type === 'unlisted-script' && moduleWorkers.has(group.name));
-    if (workers.length < 2) return;
-    const index = groups.indexOf(workers[0]);
-    for (const worker of workers) groups.splice(groups.indexOf(worker), 1);
-    // 只组合明确使用模块加载的自有 Worker；内容脚本和 classic background 仍由 WXT 单独打包。
-    groups.splice(index, 0, workers);
-}
-
 /** 页面共用的框架与域名数据独立成块，避免与中文目录及配置合成一个超大公共块。 */
 export function configureExtensionUiChunks(entrypoints: readonly {type: string}[], config: InlineConfig): void {
     const pages = new Set(['popup', 'options', 'unlisted-page', 'sidepanel']);
@@ -187,25 +165,6 @@ export function createExtensionManifest(
         oauth2: {client_id: process.env.WXT_GOOGLE_CLIENT_ID?.trim() || GOOGLE_DRIVE_DEFAULT_CLIENT_ID, scopes: [...GOOGLE_DRIVE_SCOPES]},
         key: process.env.WXT_EXTENSION_KEY?.trim() || GOOGLE_DRIVE_EXTENSION_PUBLIC_KEY,
     } : {};
-    const firefoxManifest = env.browser === 'firefox' ? {
-        // 大型材料备份需要在用户主动导出时观察下载终态；安装时不请求此权限。
-        optional_permissions: ['downloads'],
-        browser_specific_settings: {
-            gecko: {
-                id: '{3096bd53-3bda-4556-b076-ebf47442a5c1}',
-                // 桌面内置同意机制从 Firefox 140 起支持，保留 ESR 140。
-                // Android 从 142 起支持；未经实机验收不通过 gecko_android 声明 Android 支持。
-                // 因而 AMO 可能提示 Android 最低版本告警，提交说明中应解释这一兼容范围。
-                strict_min_version: '140.0',
-                // Firefox taxonomy counts any transmission outside the add-on/browser.
-                // FluentRead sends page/image/subtitle text, user-supplied provider credentials,
-                // and may translate text/chat/social content through the selected provider.
-                data_collection_permissions: {
-                    required: ['websiteContent', 'authenticationInfo', 'personalCommunications'],
-                },
-            },
-        },
-    } : {};
     // Safari 26 起支持现有 DNR initiatorDomains/requestMethods 隔离条件；iOS 与 Safari 版本号一致。
     // 更早系统不应安装后才发现请求头适配不可用，最低版本同时写入可检查的清单。
     const safariManifest = env.browser === 'safari' ? {
@@ -228,9 +187,8 @@ export function createExtensionManifest(
             ...(capabilities.offscreenDocument ? ['offscreen'] : []),
         ],
         content_security_policy: {
-            // 扩展页面只执行自身静态脚本和 WASM；本地 TTS Worker 通过打包的
-            // 静态 MJS 与随包原始 CPU/WebGPU WASM（Edge 商店拒绝嵌套压缩文件），不放宽到 blob 脚本。
-            extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+            // 扩展页面只执行自身静态脚本，不放开 eval 或 WebAssembly 编译。
+            extension_pages: "script-src 'self'; object-src 'self';",
         },
         host_permissions: [
             '<all_urls>',
@@ -240,8 +198,6 @@ export function createExtensionManifest(
             'https://dev.microsofttranslator.com/*',
             'https://*.tts.speech.microsoft.com/*',
             'https://deeplx.1stg.me/*',
-            'https://freeapi.fanyimao.cn/*',
-            'https://api.deeplx.org/*',
             'http://localhost/*',
             'http://127.0.0.1/*',
             'http://*/*',
@@ -261,7 +217,6 @@ export function createExtensionManifest(
                 ...(env.browser === 'safari' ? {} : {use_dynamic_url: true}),
             },
         ],
-        ...firefoxManifest,
         ...safariManifest,
         ...googleDriveManifest,
     } as UserManifest;
@@ -271,29 +226,8 @@ export function createExtensionManifest(
 // WXT 配置参考：https://wxt.dev/api/config.html
 export default defineConfig({
     modules: ['@wxt-dev/webextension-polyfill'],
-    // Firefox 的开发 runner 使用一次性 profile；预置启动参数，避免每轮 UI
-    // 回归都被 about:welcome 首次启动引导遮挡。仅影响 pnpm dev:firefox，
-    // 不会写入用户 Firefox profile，也不会进入扩展发布产物。
     webExt: {
         disabled: process.env.FLUENTREAD_DISABLE_BROWSER_RUNNER === '1',
-        binaries: firefoxRunnerBinary ? {firefox: firefoxRunnerBinary} : undefined,
-        firefoxProfile: firefoxRunnerProfile || undefined,
-        startUrls: [firefoxRunnerStartUrl || 'about:blank'],
-        firefoxPref: {
-            'browser.aboutwelcome.enabled': false,
-            'browser.aboutwelcome.screens': '',
-            'browser.startup.homepage_override.mstone': 'ignore',
-            'browser.startup.homepage_override.buildID': 'ignore',
-            'startup.homepage_override_url': 'about:blank',
-            'startup.homepage_override_nimbus_disable_wnp': true,
-            'browser.messaging-system.whatsNewPanel.enabled': false,
-            'browser.startup.homepage': 'about:blank',
-            'startup.homepage_welcome_url': 'about:blank',
-            'startup.homepage_welcome_url.additional': '',
-            'trailhead.firstrun.didSeeAboutWelcome': true,
-            'trailhead.firstrun.branches': 'nofirstrun-exp',
-            'browser.shell.checkDefaultBrowser': false,
-        },
     },
     imports: {
         addons: {
@@ -303,9 +237,7 @@ export default defineConfig({
     vite: (env) => {
         const isProductionBuild = env.command === 'build' && env.mode === 'production';
         return {
-            // 固定版本的本地分词算法通过缓存适配器读取纯数据，不采用供应商自带的网络加载器。
-            resolve: {alias: createReadingDictionaryAliases(__dirname)},
-            plugins: [createDeepLXRuntimeBuildPlugin(__dirname), createPdfReaderBidiBuildPlugin(__dirname), extensionCspBuildPlugin(), defuddleEntityBuildPlugin(), francRuntimeBuildPlugin(), vue(), sharedOnnxBuildPlugin(), wllamaExtensionWorker(), tesseractSdkBuildPlugin(), escapeExtensionNoncharacters()],
+            plugins: [createDeepLXRuntimeBuildPlugin(__dirname), extensionCspBuildPlugin(), defuddleEntityBuildPlugin(), francRuntimeBuildPlugin(), vue(), escapeExtensionNoncharacters()],
             // WXT 默认在每个开发脚本中内联源码与 sourcemap；需要源码调试时显式开启。
             build: {
                 // WXT 不展示 Vite 的 gzip 统计；实际产物和安装包继续由独立体积门禁校验。
@@ -331,14 +263,12 @@ export default defineConfig({
             'reports/release/**',
             'docs/**',
             'marketing/**',
-            'userscript/**',
             'storybook/**',
-            'integrations/**',
             'examples/**',
             'scripts/testing/evidence/**',
         ],
         // 保留源码中的第三方来源说明；includeSources 会覆盖上述排除规则。
-        includeSources: ['docs/development/service-icons.md', 'docs/guide/deepseek-harness.md'],
+        includeSources: ['docs/development/service-icons.md'],
     },
     hooks: {
         'build:manifestGenerated': (wxt, manifest) => {
@@ -347,20 +277,13 @@ export default defineConfig({
         },
         'zip:extension:done': async (wxt, zipPath) => {
             await finalizeExtensionZip(wxt.config.browser, zipPath);
-            const compact = await compactExtensionZip(zipPath, __dirname);
-            wxt.logger.info(`WASM ZIP compression saved ${compact.savedBytes.toLocaleString('en-US')} bytes`);
         },
         'build:done': async (wxt) => {
             const dev = wxt.config.command === 'serve';
             // PDF 字体首次导出时下载并缓存，不进入安装包；fontkit 仍使用包内静态代码。
             // 恢复字体加入前的生产体积预算，防止完整字体再次随 public/ 打包。
             const budget = dev ? (process.env.FLUENTREAD_DEV_SOURCEMAPS === '1' ? 170_000_000 : 70_000_000) : 65_000_000;
-            // 可选词典按需下载，不再为离线读音放宽安装包体积预算。
-            if (fs.existsSync(resolve(wxt.config.outDir, 'reading-annotation'))) throw new Error('读音离线数据不得随扩展打包');
             await checkExtensionSize(wxt.config.outDir, budget);
-        },
-        'entrypoints:grouped': (_wxt, groups) => {
-            groupModuleWorkers(groups);
         },
         'vite:build:extendConfig': (entrypoints, viteConfig) => {
             // CommonJS 26 的 auto 判定有条件/无条件 require 竞态。固定后台 CryptoJS
@@ -381,35 +304,11 @@ export default defineConfig({
         },
         'build:publicAssets': (wxt, files) => {
             files.push(...createSafariBackgroundPage(wxt.config));
-            // 仅保留本地算法的许可；日语词典与印地语语言数据首次使用时下载校验并缓存。
-            for (const [source, destination] of [['@faanau/kuromoji/LICENSE-2.0.txt','kuromoji-Apache-2.0.txt'],['@faanau/kuromoji/NOTICE.md','kuromoji-NOTICE.md'],['kuroshiro/LICENSE','kuroshiro-MIT.txt'],['pinyin-pro/LICENSE','pinyin-pro-MIT.txt'],['thai-rtgs/LICENSE','thai-rtgs-MIT.txt']]) {
-                files.push({absoluteSrc: resolve(__dirname, 'node_modules', source), relativeDest: `third-party-notices/${destination}`});
-            }
+            files.push({absoluteSrc: resolve(__dirname, 'node_modules/@noble/hashes/LICENSE'), relativeDest: 'third-party-notices/noble-hashes-MIT.txt'});
             // 非中文界面文案只生成一份 JSON，由各运行上下文按当前语言加载，不再内联进每个 bundle。
             files.push(...createUiLanguageBundleFiles());
             // 安装名称与功能说明由浏览器原生 locale 解析，复用七语资源，不复制完整界面目录。
             files.push(...createExtensionMetadataLocaleFiles());
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/@wllama/wllama/LICENCE'), relativeDest: 'third-party-notices/wllama-MIT.txt'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/@noble/hashes/LICENSE'), relativeDest: 'third-party-notices/noble-hashes-MIT.txt'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/pdfjs-dist/LICENSE'), relativeDest: 'third-party-notices/pdfjs-bidi-Apache-2.0.txt'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/bidi-js/LICENSE.txt'), relativeDest: 'third-party-notices/bidi-js-MIT.txt'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/ppu-paddle-ocr/LICENSE'), relativeDest: 'third-party-notices/ppu-paddle-ocr-MIT.txt'});
-            files.push({absoluteSrc: resolve(fs.realpathSync(resolve(__dirname, 'node_modules/ppu-paddle-ocr')), '../ppu-ocv/LICENSE'), relativeDest: 'third-party-notices/ppu-ocv-MIT.txt'});
-            // JS 和 WASM 来自同一锁定版本；模型数据继续按需下载，执行代码只用包内资源。
-            const ortDist = sharedOnnxDist();
-            files.push({absoluteSrc: packageWasmDiagnostics(__dirname, resolve(ortDist, 'ort-wasm-simd-threaded.asyncify.mjs'), 'ort-wasm-simd-threaded.asyncify.mjs', 'onnx'), relativeDest: 'fluent-read-ai/ort-wasm-simd-threaded.asyncify.mjs'});
-            files.push({absoluteSrc: resolve(ortDist, 'ort-wasm-simd-threaded.asyncify.wasm'), relativeDest: 'fluent-read-ai/ort-wasm-simd-threaded.asyncify.wasm'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/@wllama/wllama/esm/wasm/wllama.wasm'), relativeDest: 'fluent-read-ai/wllama.wasm'});
-            const ocrCore = files.find(file => file.relativeDest === 'fluent-read-ocr/core/tesseract-core-simd-lstm.wasm.js');
-            if (!ocrCore || !('absoluteSrc' in ocrCore)) throw new Error('Missing packaged OCR core');
-            const packagedOcr = packageTesseractWasm(__dirname, ocrCore.absoluteSrc);
-            ocrCore.absoluteSrc = packagedOcr.glue;
-            files.push({absoluteSrc: packagedOcr.wasm, relativeDest: 'fluent-read-ocr/core/tesseract-core-simd-lstm.wasm'});
-            const ocrWorker = files.find(file => file.relativeDest === 'fluent-read-ocr/worker/worker.min.js');
-            if (!ocrWorker || !('absoluteSrc' in ocrWorker)) throw new Error('Missing packaged OCR worker');
-            ocrWorker.absoluteSrc = packageTesseractWorker(__dirname, ocrWorker.absoluteSrc);
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/tesseract.js/dist/worker.min.js.LICENSE.txt'), relativeDest: 'fluent-read-ocr/worker/worker.min.js.LICENSE.txt'});
-            files.push({absoluteSrc: resolve(__dirname, 'node_modules/tesseract.js/LICENSE.md'), relativeDest: 'fluent-read-ocr/LICENSE.md'});
         },
     },
 

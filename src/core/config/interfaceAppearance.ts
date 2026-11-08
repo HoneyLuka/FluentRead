@@ -274,8 +274,6 @@ export const POPUP_QUICK_FEATURE_IDS = [
   'hover',
   'selection',
   'appearance',
-  'image',
-  'document',
 ] as const
 
 export type PopupQuickFeatureId = typeof POPUP_QUICK_FEATURE_IDS[number]
@@ -367,20 +365,6 @@ export const popupQuickFeatureOptions: readonly PopupQuickFeatureOption[] = [
     labelKey: 'settings.interface.popupQuickFeatures.modules.appearance.label',
     descriptionKey: 'settings.interface.popupQuickFeatures.modules.appearance.description',
   },
-  {
-    id: 'image',
-    label: '图片翻译',
-    description: '识别并翻译图片中的文字',
-    labelKey: 'settings.interface.popupQuickFeatures.modules.image.label',
-    descriptionKey: 'settings.interface.popupQuickFeatures.modules.image.description',
-  },
-  {
-    id: 'document',
-    label: '文档翻译',
-    description: '打开文档翻译入口',
-    labelKey: 'settings.interface.popupQuickFeatures.modules.document.label',
-    descriptionKey: 'settings.interface.popupQuickFeatures.modules.document.description',
-  },
 ] as const
 
 export const interfaceVisibilityOptions = INTERFACE_VISIBILITY_KEYS.map((key) => {
@@ -460,7 +444,7 @@ export function normalizePopupQuickFeatureVisibility(value: unknown): PopupQuick
   return Object.fromEntries(
     POPUP_QUICK_FEATURE_IDS.map((id) => [
       id,
-      id === 'image' && source.area === true ? true : typeof source[id] === 'boolean' ? source[id] : DEFAULT_POPUP_QUICK_FEATURE_VISIBILITY[id],
+      typeof source[id] === 'boolean' ? source[id] : DEFAULT_POPUP_QUICK_FEATURE_VISIBILITY[id],
     ]),
   ) as PopupQuickFeatureVisibility
 }
@@ -505,6 +489,6 @@ export function normalizePopupModuleOrder(value: unknown): PopupModuleId[] {
 /** 快捷入口顺序采用与顶层模块相同的插件式兼容策略。 */
 export function normalizePopupQuickFeatureOrder(value: unknown): PopupQuickFeatureId[] {
   // 旧圈选入口并入图片，保留用户排列意图；视频配置本身不受入口收敛影响。
-  const migrated = Array.isArray(value) ? value.map(id => id === 'area' ? 'image' : id) : value
+  const migrated = value
   return normalizeRegisteredOrder(migrated, POPUP_QUICK_FEATURE_IDS)
 }

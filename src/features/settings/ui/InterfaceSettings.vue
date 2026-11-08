@@ -196,10 +196,6 @@
   />
 </SettingsPanel>
 
-  <SettingsPanel name="video-learning" :active="props.activePanel">
-    <VideoSentenceLearningAppearanceSettings :config="props.config" data-settings-anchor="video-learning" />
-  </SettingsPanel>
-
   <SettingsPanel name="font" :active="props.activePanel">
 <SettingsGroup
     class="interface-font-group"
@@ -286,7 +282,6 @@
 <script lang="ts" setup>
 import './interface-font-previews.css'
 import SettingsPanel from './components/SettingsPanel.vue'
-import VideoSentenceLearningAppearanceSettings from './VideoSentenceLearningAppearanceSettings.vue'
 import {computed, onActivated, onBeforeUnmount, onDeactivated, ref, watch} from 'vue'
 import {ElMessage} from 'element-plus'
 import type {Config} from '@/src/core/config/model'

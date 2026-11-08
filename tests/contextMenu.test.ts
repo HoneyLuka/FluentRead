@@ -2,8 +2,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 const state = vi.hoisted(() => ({
     config: {} as Record<string, unknown>,
-    capability: {browser: 'chrome', imageTranslation: true, areaTranslation: true},
-    openPdfSelection: vi.fn(),
+    capability: {browser: 'chrome'},
 }));
 const subscriptions: Array<(config: unknown) => void> = [];
 
@@ -16,7 +15,6 @@ vi.mock('@/src/services/config/store', () => ({
     },
 }));
 vi.mock('@/src/platform/browser/capabilities', () => ({browserCapabilities: state.capability}));
-vi.mock('@/src/app/background/nativePdfSelection', () => ({openNativePdfSelection: state.openPdfSelection}));
 
 import {
     buildContextMenuPlan,
@@ -29,7 +27,6 @@ import {
     type ContextMenuItemPresentation,
 } from '@/src/core/context-menu/domain';
 import {renderContextMenuTitle} from '@/src/core/context-menu/presentation';
-import {imageMenuEnabled} from '@/src/app/background/imageContextMenu';
 import {readContextMenuSettings} from '@/src/app/background/contextMenuPreferences';
 import {runContextMenuAction, toggleSiteExtensionDisabled} from '@/src/app/background/contextMenuActions';
 import {reportContextMenuFailure} from '@/src/app/background/contextMenuFeedback';
@@ -39,12 +36,8 @@ import {
     setSelectionContextMenuHandler,
     translateSelectionFromContextMenu,
 } from '@/src/features/selection-translation/content/contextMenuBridge';
-import {
-    setAreaContextMenuHandler,
-    startAreaTranslationFromContextMenu,
-} from '@/src/features/area-translation/content/contextMenuBridge';
 
-const ALL_AVAILABLE = {selectionTranslation: true, imageTranslation: true, areaTranslation: true};
+const ALL_AVAILABLE = {selectionTranslation: true};
 const SHOW_ALL = {showTargetLanguage: true, showShortcut: true};
 const NEUTRAL = {isTranslated: false, isSiteDisabled: false};
 const ZH_CONTEXT = {language: 'zh-CN' as const, targetLanguage: '简体中文', shortcut: 'Option+T'};
@@ -62,9 +55,6 @@ function defaultConfig(): Record<string, unknown> {
         customFloatingBallHotkey: '',
         selectionTranslatorMode: 'bilingual',
         disableSelectionTranslator: false,
-        selectionAreaEnabled: true,
-        disableImageTranslator: false,
-        imageTranslationContextMenuEnabled: true,
         disabledExtensionDomains: [],
     };
 }
@@ -89,10 +79,7 @@ beforeEach(() => {
     subscriptions.length = 0;
     for (const key of Object.keys(state.config)) delete state.config[key];
     Object.assign(state.config, defaultConfig());
-    state.capability.imageTranslation = true;
-    state.capability.areaTranslation = true;
     state.capability.browser = 'chrome';
-    state.openPdfSelection.mockReset().mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -102,13 +89,12 @@ afterEach(() => {
 });
 
 describe('右键菜单入口偏好', () => {
-    it('只接受已知入口的布尔偏好，图片入口不写入偏好表', () => {
+    it('只接受已知入口的布尔偏好，未知入口不写入偏好表', () => {
         expect(normalizeContextMenuEntryPreferences(null)).toEqual({});
         expect(normalizeContextMenuEntryPreferences('translateSelection')).toEqual({});
         expect(normalizeContextMenuEntryPreferences({
             translateSelection: false,
             translatePage: 'yes',
-            translateImage: false,
             unknownEntry: true,
         })).toEqual({translateSelection: false});
     });
@@ -116,50 +102,41 @@ describe('右键菜单入口偏好', () => {
     it('缺省偏好按产品默认值，功能不可用时入口一律关闭', () => {
         expect(toggles({})).toEqual({
             translateSelection: true,
-            translateImage: true,
             translatePage: true,
-            translateArea: false,
             toggleSite: false,
         });
         expect(resolveContextMenuEntryToggles(undefined, ALL_AVAILABLE).translatePage).toBe(true);
-        expect(toggles({translateSelection: true, translateArea: true}, {
+        expect(toggles({translateSelection: true}, {
             selectionTranslation: false,
-            imageTranslation: false,
-            areaTranslation: false,
         })).toEqual({
             translateSelection: false,
-            translateImage: false,
             translatePage: true,
-            translateArea: false,
             toggleSite: false,
         });
     });
 });
 
 describe('右键菜单结构', () => {
-    it('默认三个场景各有一个不带品牌前缀的直达入口', () => {
+    it('默认两个场景各有一个不带品牌前缀的直达入口', () => {
         expect(titlesFor({})).toEqual([
             {id: contextMenuItemId('selection', 'translateSelection'), bucket: 'selection', role: 'standalone', visible: true, action: 'translateSelection', title: '翻译选中文本'},
             {id: contextMenuItemId('page', 'translatePage'), bucket: 'page', role: 'standalone', visible: true, action: 'translatePage', title: '翻译全文'},
-            {id: contextMenuItemId('image', 'translateImage'), bucket: 'image', role: 'standalone', visible: true, action: 'translateImage', title: '翻译这张图片'},
         ]);
     });
 
-    it('所有旧入口都启用时仍然不生成子菜单，链接图片不会命中全文入口', () => {
-        const plan = buildContextMenuPlan(toggles({translateArea: true, toggleSite: true}));
-        expect(plan).toHaveLength(3);
+    it('所有入口都启用时仍然不生成子菜单，链接不会命中全文入口', () => {
+        const plan = buildContextMenuPlan(toggles({toggleSite: true}));
+        expect(plan).toHaveLength(2);
         expect(plan.every((item) => item.role === 'standalone' && !Object.hasOwn(item, 'parentId') && !Object.hasOwn(item, 'fallbackOnly'))).toBe(true);
         expect(plan.find((item) => item.bucket === 'selection')!.contexts).toEqual(['selection']);
         expect(plan.find((item) => item.bucket === 'page')!.contexts).toEqual(['page']);
-        expect(plan.find((item) => item.bucket === 'image')!.contexts).toEqual(['image']);
         expect(CONTEXT_MENU_BUCKET_CONTEXTS.page).not.toContain('link');
     });
 
     it('关掉某个场景的全部入口后该场景不再创建菜单', () => {
-        const items = titlesFor({translateSelection: false, translatePage: false});
-        expect(items.map((item) => item.bucket)).toEqual(['image']);
-        expect(buildContextMenuPlan(toggles({}, {...ALL_AVAILABLE, imageTranslation: false}))
-            .some((item) => item.bucket === 'image')).toBe(false);
+        expect(titlesFor({translateSelection: false, translatePage: false})).toEqual([]);
+        expect(buildContextMenuPlan(toggles({}, {selectionTranslation: false}))
+            .some((item) => item.bucket === 'selection')).toBe(false);
     });
 
     it('页面已翻译时整页入口改为显示原文', () => {
@@ -192,7 +169,7 @@ describe('网站被关闭时的菜单出口', () => {
             .toEqual(['恢复在此网站使用']);
     });
 
-    it('一级直达项改写为恢复网站，图片场景无处可恢复则直接隐藏', () => {
+    it('一级直达项改写为恢复网站', () => {
         const items = titlesFor({}, disabled);
         expect(items.find((item) => item.bucket === 'page')).toEqual({
             id: contextMenuItemId('page', 'translatePage'),
@@ -202,9 +179,6 @@ describe('网站被关闭时的菜单出口', () => {
             action: 'toggleSite',
             title: '恢复在此网站使用',
         });
-        const image = items.find((item) => item.bucket === 'image')!;
-        expect(image.visible).toBe(false);
-        expect(image.action).toBe('translateImage');
     });
 
     it('用户已启用网站开关时它保持可见，不因兜底而重复出现', () => {
@@ -232,8 +206,8 @@ describe('右键菜单标题渲染', () => {
             .toBe('翻译全文');
         expect(renderContextMenuTitle(presentation({
             title: {role: 'standalone', state: 'translate', withTargetLanguage: false, withShortcut: false},
-            action: 'translateArea',
-        }), ZH_CONTEXT)).toBe('截图翻译屏幕区域');
+            action: 'translateSelection',
+        }), ZH_CONTEXT)).toBe('翻译选中文本');
     });
 
     it('缺少动作时按整页翻译兜底', () => {
@@ -289,119 +263,25 @@ describe('右键菜单设置快照', () => {
         const snapshot = readContextMenuSettings();
         expect(snapshot.enabled).toBe(false);
         expect(snapshot.toggles.translateSelection).toBe(false);
-        expect(snapshot.toggles.translateArea).toBe(false);
     });
 
-    it('划词、圈选与图片入口分别跟随各自功能开关和浏览器能力', () => {
+    it('划词入口跟随划词功能开关', () => {
         state.config.selectionTranslatorMode = 'disabled';
         expect(readContextMenuSettings().toggles.translateSelection).toBe(false);
         state.config.selectionTranslatorMode = 'bilingual';
         state.config.disableSelectionTranslator = true;
         expect(readContextMenuSettings().toggles.translateSelection).toBe(false);
-        state.config.selectionAreaEnabled = false;
-        expect(readContextMenuSettings().toggles.translateArea).toBe(false);
-        state.capability.areaTranslation = false;
-        expect(readContextMenuSettings().toggles.translateArea).toBe(false);
-        expect(imageMenuEnabled()).toBe(true);
-        state.config.imageTranslationContextMenuEnabled = false;
-        expect(readContextMenuSettings().toggles.translateImage).toBe(false);
-        Object.assign(state.config, {imageTranslationContextMenuEnabled: true, disableImageTranslator: true});
-        expect(imageMenuEnabled()).toBe(false);
-        Object.assign(state.config, {disableImageTranslator: false});
-        state.capability.imageTranslation = false;
-        expect(imageMenuEnabled()).toBe(false);
+        state.config.disableSelectionTranslator = false;
+        expect(readContextMenuSettings().toggles.translateSelection).toBe(true);
     });
 });
 
 describe('右键菜单动作执行', () => {
-    it.each(['success', 'disabled'] as const)('文档页划词右键通过带目标页 ID 的 runtime 消息回复 %s', async status => {
-        const sendMessage = vi.fn(async () => ({status})), tabMessage = vi.fn();
-        vi.stubGlobal('browser', {tabs: {sendMessage: tabMessage}, runtime: {sendMessage, getURL: () => 'chrome-extension://test/document.html'}});
-        expect(await runContextMenuAction('translateSelection', 12, {}, {url: 'chrome-extension://test/document.html#pdf=source'}, false)).toEqual({handled: status === 'success'});
-        expect(sendMessage).toHaveBeenCalledWith({type: 'documentSelectionTranslate', tabId: 12});
-        expect(tabMessage).not.toHaveBeenCalled();
-    });
-    it('原生在线 PDF 的整页入口仍打开阅读器，不向内部查看器发消息', async () => {
-        const sendMessage = vi.fn(), create = vi.fn().mockResolvedValue({id: 8});
-        vi.stubGlobal('browser', {tabs: {sendMessage, create}, runtime: {getURL: () => 'chrome-extension://test/document.html'}});
-        const source = 'https://arxiv.org/pdf/1706.03762';
-        expect(await runContextMenuAction('translatePage', 7, {pageUrl: 'chrome-extension://native-pdf/index.html'}, {id: 7, url: source}, false))
-            .toEqual({handled: true});
-        expect(create).toHaveBeenCalledWith({url: `chrome-extension://test/document.html#pdf=${encodeURIComponent(source)}`});
-        expect(sendMessage).not.toHaveBeenCalled();
-        expect(state.openPdfSelection).not.toHaveBeenCalled();
-    });
-
-    it.each([true, false])('原生 PDF 划词交接本次菜单文本，窗口打开结果 %s 如实返回', async handled => {
-        const sendMessage = vi.fn(), create = vi.fn();
-        vi.stubGlobal('browser', {tabs: {sendMessage, create}});
-        state.openPdfSelection.mockResolvedValue(handled);
-        const source = 'https://www.usenix.org/system/files/conference/fast27/fast27spring_prepub-kong.pdf';
-        const text = 'Time series databases (TSDBs) are crucial for performance';
-        expect(await runContextMenuAction('translateSelection', 7, {pageUrl: 'chrome-extension://native-pdf/index.html', selectionText: text}, {id: 7, url: source, title: 'PromTCS'}, false))
-            .toEqual(handled ? {handled: true} : {handled: false, reason: 'selectionUnavailable'});
-        expect(state.openPdfSelection).toHaveBeenCalledWith({text, sourceUrl: source, title: 'PromTCS'});
-        expect(sendMessage).not.toHaveBeenCalled(); expect(create).not.toHaveBeenCalled();
-    });
-
-    it('原生 PDF 菜单没有选区时不改为打开整份阅读器', async () => {
-        const create = vi.fn(); vi.stubGlobal('browser', {tabs: {create}});
-        state.openPdfSelection.mockResolvedValue(false);
-        expect(await runContextMenuAction('translateSelection', 7, {pageUrl: 'https://example.com/paper.pdf'}, {}, false)).toEqual({handled: false, reason: 'selectionUnavailable'});
-        expect(state.openPdfSelection).toHaveBeenCalledWith({text: '', sourceUrl: 'https://example.com/paper.pdf', title: ''});
-        expect(create).not.toHaveBeenCalled();
-    });
-
-    it.each([{on: false}, {disableSelectionTranslator: true}, {selectionTranslatorMode: 'disabled'}, {disabledExtensionDomains: ['usenix.org']}])('原生查看器外壳也遵守源站与划词开关 %j', async change => {
-        vi.stubGlobal('browser', {tabs: {}});
-        Object.assign(state.config, change);
-        expect(await runContextMenuAction('translateSelection', 7, {pageUrl: 'chrome-extension://native-pdf/index.html', selectionText: 'selected text'}, {url: 'https://www.usenix.org/paper.pdf'}, false))
-            .toEqual({handled: false, reason: 'disabled'});
-        expect(state.openPdfSelection).not.toHaveBeenCalled();
-    });
-
-    it('嵌入 PDF 的选区入口使用 frame 源，整页入口继续作用于普通宿主页', async () => {
-        const sendMessage = vi.fn().mockResolvedValue({status: 'success', isTranslated: true}), create = vi.fn().mockResolvedValue({});
-        vi.stubGlobal('browser', {tabs: {sendMessage, create}, runtime: {getURL: () => 'chrome-extension://test/document.html'}});
-        const source = 'https://cdn.example.com/book.pdf?download=1', pageUrl = 'https://example.com/article';
-        await runContextMenuAction('translateSelection', 7, {frameId: 3, frameUrl: source, pageUrl, selectionText: 'selected PDF text'}, {id: 7, url: pageUrl}, false);
-        expect(state.openPdfSelection).toHaveBeenCalledWith({text: 'selected PDF text', sourceUrl: source, title: ''});
-        expect(create).not.toHaveBeenCalled();
-        expect(sendMessage).not.toHaveBeenCalled();
-        await runContextMenuAction('translatePage', 7, {frameId: 3, frameUrl: source, pageUrl}, {id: 7, url: pageUrl}, false);
-        expect(create).not.toHaveBeenCalled();
-        expect(sendMessage).toHaveBeenCalledWith(7, {type: 'contextMenuTranslate', action: 'fullPage'}, {frameId: 0});
-    });
-
-    it('图片、圈选和本地 file PDF 不借原生 PDF 分流发起跨域加载', async () => {
-        const sendMessage = vi.fn().mockResolvedValue({status: 'success'}), create = vi.fn();
-        vi.stubGlobal('browser', {tabs: {sendMessage, create}});
-        for (const action of ['translateImage', 'translateArea'] as const) {
-            await runContextMenuAction(action, 7, {pageUrl: 'https://example.com/book.pdf'}, {id: 7}, false);
-        }
-        await runContextMenuAction('translatePage', 7, {pageUrl: 'file:///Users/test/book.pdf'}, {id: 7}, false);
-        expect(create).not.toHaveBeenCalled();
-        expect(sendMessage).toHaveBeenCalledTimes(3);
-    });
-
-    it('PDF 阅读器创建失败向调用方传递失败，不伪造原页翻译状态', async () => {
-        const sendMessage = vi.fn(), create = vi.fn().mockRejectedValue(new Error('Tab creation failed'));
-        vi.stubGlobal('browser', {tabs: {sendMessage, create}, runtime: {getURL: () => 'chrome-extension://test/document.html'}});
-        await expect(runContextMenuAction('translatePage', 7, {pageUrl: 'https://example.com/book.pdf'}, {id: 7}, true))
-            .rejects.toThrow('Tab creation failed');
-        expect(sendMessage).not.toHaveBeenCalled();
-    });
-
-    it('划词、圈选和图片只发往用户右键所在的 frame', async () => {
+    it('划词只发往用户右键所在的 frame', async () => {
         const sendMessage = vi.fn().mockResolvedValue({status: 'success'});
         vi.stubGlobal('browser', {tabs: {sendMessage}});
         await runContextMenuAction('translateSelection', 7, {frameId: 3}, {id: 7}, false);
         expect(sendMessage).toHaveBeenLastCalledWith(7, {type: 'contextMenuTranslate', action: 'selection'}, {frameId: 3});
-        await runContextMenuAction('translateArea', 7, {}, {id: 7}, false);
-        expect(sendMessage).toHaveBeenLastCalledWith(7, {type: 'contextMenuTranslate', action: 'area'}, {frameId: 0});
-        const image = await runContextMenuAction('translateImage', 7, {frameId: -1, srcUrl: 'https://img.test/a.png'}, {id: 7}, false);
-        expect(sendMessage).toHaveBeenLastCalledWith(7, {type: 'contextMenuTranslateImage', srcUrl: 'https://img.test/a.png'}, {frameId: 0});
-        expect(image).toEqual({handled: true});
     });
 
     it('把浏览器的选区文本仅转发到点击所在 frame', async () => {
@@ -414,10 +294,7 @@ describe('右键菜单动作执行', () => {
     it.each([
         ['translateSelection', undefined, 'selectionUnavailable'],
         ['translateSelection', {status: 'failed'}, 'selectionUnavailable'],
-        ['translateArea', {status: 'failed'}, 'areaUnavailable'],
-        ['translateImage', {}, 'imageUnavailable'],
-        ['translateImage', {status: 'disabled'}, 'disabled'],
-        ['translateArea', {status: 'disabled'}, 'disabled'],
+        ['translateSelection', {status: 'disabled'}, 'disabled'],
     ] as const)('%s 对未成功的回复 %j 据实返回失败原因', async (action, response, reason) => {
         vi.stubGlobal('browser', {tabs: {sendMessage: vi.fn().mockResolvedValue(response)}});
         expect(await runContextMenuAction(action, 7, {}, {id: 7}, false)).toEqual({handled: false, reason});
@@ -479,7 +356,6 @@ describe('后台右键菜单生命周期', () => {
         expect(created.map((menu) => menu.id)).toEqual([
             contextMenuItemId('selection', 'translateSelection'),
             contextMenuItemId('page', 'translatePage'),
-            contextMenuItemId('image', 'translateImage'),
         ]);
         expect(created[0]).toMatchObject({contexts: ['selection'], title: '翻译选中文本'});
         expect(created.every((menu) => !menu.parentId)).toBe(true);
@@ -494,11 +370,11 @@ describe('后台右键菜单生命周期', () => {
         subscriptions.at(-1)!(state.config);
         await settle();
         expect(api.contextMenus.create).not.toHaveBeenCalled();
-        state.config.contextMenuEntries = {translatePage: false, translateArea: true, toggleSite: true};
+        state.config.contextMenuEntries = {translatePage: false, translateSelection: false, toggleSite: true};
         subscriptions.at(-1)!(state.config);
         await settle();
         expect(api.contextMenus.create.mock.calls.map((call: unknown[]) => (call[0] as Record<string, unknown>).id)).toContain(
-            contextMenuItemId('page', 'translateArea'),
+            contextMenuItemId('page', 'toggleSite'),
         );
     });
 
@@ -573,19 +449,13 @@ describe('后台右键菜单生命周期', () => {
 describe('内容脚本右键触发桥', () => {
     it('未挂载覆盖层时如实返回失败，挂载后转交当前实例', () => {
         expect(translateSelectionFromContextMenu()).toBe(false);
-        expect(startAreaTranslationFromContextMenu()).toBe(false);
 
         const openCard = vi.fn().mockReturnValue(true);
         const releaseSelection = setSelectionContextMenuHandler(openCard);
-        const beginSelection = vi.fn().mockReturnValue(false);
-        const releaseArea = setAreaContextMenuHandler(beginSelection);
         expect(translateSelectionFromContextMenu()).toBe(true);
-        expect(startAreaTranslationFromContextMenu()).toBe(false);
 
         releaseSelection();
-        releaseArea();
         expect(translateSelectionFromContextMenu()).toBe(false);
-        expect(startAreaTranslationFromContextMenu()).toBe(false);
     });
 
     it('旧实例的注销句柄不会清掉后一次挂载注册的处理函数', () => {
@@ -593,18 +463,12 @@ describe('内容脚本右键触发桥', () => {
         setSelectionContextMenuHandler(() => true);
         releaseFirst();
         expect(translateSelectionFromContextMenu()).toBe(true);
-
-        const releaseFirstArea = setAreaContextMenuHandler(() => false);
-        setAreaContextMenuHandler(() => true);
-        releaseFirstArea();
-        expect(startAreaTranslationFromContextMenu()).toBe(true);
     });
 });
 
-
 describe('右键失败反馈交付', () => {
     it('只接受有限原因，不展示任意异常或选区文本', () => {
-        for (const reason of ['selectionUnavailable', 'imageUnavailable', 'areaUnavailable', 'disabled', 'unavailable', 'failed']) {
+        for (const reason of ['selectionUnavailable', 'disabled', 'unavailable', 'failed']) {
             expect(isContextMenuFailureReason(reason)).toBe(true);
         }
         for (const value of [null, {}, 42, '', 'Unknown API key: secret']) expect(isContextMenuFailureReason(value)).toBe(false);
@@ -644,7 +508,6 @@ describe('右键失败反馈交付', () => {
     });
 });
 
-
 describe('右键消息等待期限', () => {
     it('成功和拒绝都立即释放计时器', async () => {
         vi.useFakeTimers();
@@ -678,13 +541,12 @@ describe('右键消息等待期限', () => {
     });
 });
 
-
 it('右键操作反馈在六种非中文界面中完整本地化', async () => {
     const {UI_LANGUAGE_BUNDLES, registerAllUiLanguageBundles} = await import('./helpers/uiLanguageBundles');
     const {translate} = await import('@/src/core/i18n');
     registerAllUiLanguageBundles();
     for (const [language, bundle] of Object.entries(UI_LANGUAGE_BUNDLES)) {
-        for (const reason of ['selectionUnavailable', 'imageUnavailable', 'areaUnavailable', 'disabled', 'unavailable', 'failed']) {
+        for (const reason of ['selectionUnavailable', 'disabled', 'unavailable', 'failed']) {
             const key = `contextMenu.notice.${reason}`;
             expect(bundle.messages[key], `${language} ${key}`).toBeTruthy();
             expect(translate(key, language as never)).toBe(bundle.messages[key]);

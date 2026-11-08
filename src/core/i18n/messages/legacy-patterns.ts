@@ -7,10 +7,8 @@
  */
 import type {LegacyPatternEntry, LegacyPatternSet, LocalizedLegacyPattern, RegisteredUiLanguage} from '../types';
 import {runtimeFeedbackPatterns} from './runtime-feedback-patterns';
-import {learningMaterialPatterns} from './learningMaterials';
 
 export const localizedLegacyPatterns: readonly LocalizedLegacyPattern[] = [
-    ...learningMaterialPatterns,
     // 两点选取将起点、终点或拒绝原因与取消提示组成一个文本节点，捕获前缀继续按当前语言翻译。
     {pattern: "^(.+) · Esc 取消$", localizedCaptures: [1], messages: {
         'en-US': "{1} · Esc to cancel",

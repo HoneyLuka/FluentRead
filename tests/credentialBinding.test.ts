@@ -99,7 +99,6 @@ describe('凭据与真实请求目的地绑定', () => {
         const service = services.tongyi;
         const current = configured(service, {
             model: {...new Config().model, [service]: 'qwen3.6-flash'},
-            documentModel: {...new Config().documentModel, [service]: 'qwen3.7-plus'},
         });
         const ordinaryModel = transition(current, {
             model: {...current.model, [service]: 'qwen3.7-max'},
@@ -193,7 +192,6 @@ describe('凭据与真实请求目的地绑定', () => {
         const current = configured(service, {
             customOpenAIProviders: [profile('https://custom.example/v1/chat/completions/')],
             model: {...new Config().model, [service]: 'canonical-model'},
-            documentModel: {...new Config().documentModel, [service]: 'canonical-model'},
         });
         const equivalent = transition(current, {
             customOpenAIProviders: [profile('https://custom.example/v1/chat/completions#ignored')],

@@ -10,14 +10,14 @@ import {createPopupPageActions, type PopupActiveTab, type PopupPageState} from '
 
 function deferred<T=unknown>() {let resolve!: (value:T)=>void,reject!: (error:unknown)=>void;const promise=new Promise<T>((yes,no)=>{resolve=yes;reject=no});return {promise,resolve,reject}}
 async function settle() {for(let i=0;i<10;i++)await Promise.resolve()}
-function setup(pdfEnabled = true) {
+function setup() {
   const cfg=new Config();cfg.on=true;cfg.autoTranslate=false;cfg.alwaysTranslateDomains=[];cfg.disabledExtensionDomains=[]
   const state:PopupPageState={tabId:7,url:'https://example.com/a',domain:'example.com',translated:false,busy:false,savingRule:false}
   let active=true,warning='',thunderbird=false
   const getTab=vi.fn(async():Promise<PopupActiveTab|undefined>=>({id:7,url:'https://example.com/a'})),send=vi.fn(async(_id:number,_message:{type:string;action?:string}):Promise<unknown>=>({status:'success',isTranslated:true})),notice=vi.fn(),close=vi.fn()
-  const openPdf=vi.fn(async(_sourceUrl:string):Promise<unknown>=>undefined),persistRule=vi.fn(async():Promise<void>=>undefined),failure=vi.fn(),status=vi.fn()
-  const actions=createPopupPageActions({state,config:()=>cfg,active:()=>active,warning:()=>warning,getTab,send,persistRule,openPdf:pdfEnabled?openPdf:undefined,notice,close,translate:key=>key,onFailure:failure,onStatus:status,get thunderbird(){return thunderbird}})
-  return {cfg,state,getTab,send,openPdf,persistRule,notice,close,actions,failure,status,setActive:(value:boolean)=>{active=value},setWarning:(value:string)=>{warning=value},setThunderbird:()=>{thunderbird=true}}
+  const persistRule=vi.fn(async():Promise<void>=>undefined),failure=vi.fn(),status=vi.fn()
+  const actions=createPopupPageActions({state,config:()=>cfg,active:()=>active,warning:()=>warning,getTab,send,persistRule,notice,close,translate:key=>key,onFailure:failure,onStatus:status,get thunderbird(){return thunderbird}})
+  return {cfg,state,getTab,send,persistRule,notice,close,actions,failure,status,setActive:(value:boolean)=>{active=value},setWarning:(value:string)=>{warning=value},setThunderbird:()=>{thunderbird=true}}
 }
 afterEach(()=>vi.restoreAllMocks())
 describe('Popup 来源关闭诊断与读取归属',()=>{
@@ -109,35 +109,6 @@ describe('Popup 页面状态与操作所有权',()=>{
   })
   it('已经发送的旧成功或失败回复在失活后不关闭、不提示、不写状态',async()=>{
     for(const rejected of [false,true]){const {actions,send,setActive,notice,close,state}=setup(),old=deferred();send.mockReturnValueOnce(old.promise);const pending=actions.section();await settle();setActive(false);actions.invalidate();if(rejected)old.reject(Error('old'));else old.resolve({status:'success'});await pending;expect(close).not.toHaveBeenCalled();expect(notice).not.toHaveBeenCalled();expect(state.busy).toBe(false)}
-  })
-})
-describe('Popup 原生在线 PDF 阅读入口',()=>{
-  function bindPdf(value = 'https://arxiv.org/pdf/1706.03762') {
-    const fixture=setup();fixture.state.url=value;fixture.state.domain='arxiv.org';fixture.getTab.mockResolvedValue({id:7,url:value});return fixture
-  }
-  it('读取 PDF 标签页只绑定身份，不发送无法注入查看器的状态请求',async()=>{
-    const {actions,state,send,openPdf}=bindPdf();state.translated=true;await actions.hydrate();expect(state).toMatchObject({tabId:7,url:'https://arxiv.org/pdf/1706.03762',domain:'arxiv.org',translated:false});expect(send).not.toHaveBeenCalled();expect(openPdf).not.toHaveBeenCalled()
-  })
-  it('全文和局部入口打开同一 PDF 原文阅读器；缺翻译凭据不妨碍打开阅读',async()=>{
-    const {actions,state,send,openPdf,notice,close,setWarning}=bindPdf();setWarning('missing key');await actions.toggle();await actions.section();expect(openPdf.mock.calls).toEqual([[state.url],[state.url]]);expect(send).not.toHaveBeenCalled();expect(notice).not.toHaveBeenCalled();expect(close).toHaveBeenCalledTimes(2);expect(state.translated).toBe(false);expect(state.busy).toBe(false)
-  })
-  it('首屏身份尚未读回也先验证实际 PDF 标签页，再绕过凭据提醒',async()=>{
-    const {actions,state,getTab,send,openPdf,setWarning}=setup();state.tabId=null;state.url='';setWarning('missing key');getTab.mockResolvedValue({id:0,url:'https://example.com/book.pdf?download=1'});await actions.toggle();expect(openPdf).toHaveBeenCalledWith('https://example.com/book.pdf?download=1');expect(send).not.toHaveBeenCalled();expect(state.tabId).toBe(0)
-  })
-  it('失活或配置失效后晚标签页查询不再打开阅读器',async()=>{
-    const {actions,getTab,openPdf,close}=bindPdf(),query=deferred<PopupActiveTab>();getTab.mockReturnValueOnce(query.promise);const pending=actions.toggle();actions.invalidate();query.resolve({id:7,url:'https://arxiv.org/pdf/1706.03762'});await pending;expect(openPdf).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled()
-  })
-  it('导航到另一份 PDF 先刷新身份，旧操作不打开新文档',async()=>{
-    const {actions,state,getTab,openPdf,send}=bindPdf();getTab.mockResolvedValue({id:7,pendingUrl:'https://example.net/new.pdf'});await actions.toggle();expect(openPdf).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();expect(state.url).toBe('https://example.net/new.pdf');expect(state.busy).toBe(false);await actions.toggle();expect(openPdf).toHaveBeenCalledWith('https://example.net/new.pdf')
-  })
-  it('迟到的 PDF 创建不能关闭已失效的 Popup 或释放新操作',async()=>{
-    const {actions,state,openPdf,close}=bindPdf(),first=deferred(),second=deferred();openPdf.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);const old=actions.toggle();await settle();actions.invalidate();const fresh=actions.section();await settle();first.resolve({});await old;expect(close).not.toHaveBeenCalled();expect(state.busy).toBe(true);second.resolve({});await fresh;expect(close).toHaveBeenCalledOnce();expect(state.busy).toBe(false);expect(state.translated).toBe(false)
-  })
-  it('创建失败释放操作锁并可重试，原 PDF 不会被标记为已翻译',async()=>{
-    const {actions,state,openPdf,notice,close}=bindPdf();openPdf.mockRejectedValueOnce(Error('create failed'));await actions.toggle();expect(notice).toHaveBeenLastCalledWith('当前页面暂不支持翻译，请刷新后重试','error');expect(state).toMatchObject({busy:false,translated:false});expect(close).not.toHaveBeenCalled();await actions.toggle();expect(close).toHaveBeenCalledOnce();expect(openPdf).toHaveBeenCalledTimes(2)
-  })
-  it('没有 PDF 阅读端口的适配器继续使用原翻译协议',async()=>{
-    const {actions,state,getTab,send,openPdf}=setup(false);state.url='https://example.com/book.pdf';getTab.mockResolvedValue({id:7,url:state.url});await actions.hydrate();await actions.toggle();expect(send.mock.calls.map(call=>call[1].type)).toEqual(['getFullPageTranslationState','contextMenuTranslate']);expect(openPdf).not.toHaveBeenCalled()
   })
 })
 describe('Popup 站点规则与即时翻译',()=>{

@@ -27,7 +27,6 @@ import {resetPageTranslationContextCache} from '@/src/services/translation/conte
 import {getCenterPoint} from '@/src/shared/geometry/touch';
 import {mountHoverTranslationContentFeature} from '@/src/features/hover-translation/public';
 import {createContentHotkeyRuntime} from './hotkeyRuntime';
-import {mountConfiguredQuickTranslation} from './quickTranslationRuntime';
 import {installPageStyles} from './pageStyles';
 import {syncBilingualSentenceHighlight} from './bilingualSentenceHighlight';
 import {applyCoreTranslationPreferences, createContentSiteAdaptationRuntime} from './siteAdaptationRuntime';
@@ -141,16 +140,14 @@ export async function startEmbeddedFrameApp(ctx: ContentScriptContext): Promise<
         activation = new AbortController();
         removeStyles = installPageStyles(ctx);
         syncBilingualSentenceHighlight(document, config.bilingualSentenceHighlightEnabled === true, config.bilingualSentenceHighlightStyle, config.bilingualSentenceHighlightAppearance);
-        const resetHover = mountHoverTranslationContentFeature({
+        mountHoverTranslationContentFeature({
             config, constants, document, window, navigator, getCenterPoint,
             subscribeConfig: createHoverTranslationConfigSubscription(config, subscribeConfig, cancelPendingHoverTranslation),
             isSiteDisabled: () => !enabled() || !authorized,
             handleTranslation, noteBilingualHostGesture, cancelPendingHoverTranslation,
             ...hotkeys.selectionShortcutPorts,
         }, activation.signal);
-        const resetFull = hotkeys.installFloatingBallHotkey(activation.signal);
-        mountConfiguredQuickTranslation(config, hotkeys, () => !enabled() || !authorized,
-            activation.signal, () => { resetHover(); resetFull(); }, toggle);
+        hotkeys.installFloatingBallHotkey(activation.signal);
     };
     const controller = createFrameSessionController({
         readState: () => browser.runtime.sendMessage({type: EMBEDDED_FRAME_REQUEST, action: 'state'}),

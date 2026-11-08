@@ -1,21 +1,17 @@
 /**
  * @file src/app/content/messageRuntime.ts
  * 文件职责：创建 content 侧 runtime 消息处理函数，把 popup/background 的设置变化和功能命令映射为当前页面上的精确 mount、unmount 或状态响应。
- * 主要内容：处理悬浮球、划词模式与延迟、区域/图片能力、进度面板、站点禁用及旧缓存清理消息，将当前页字体查询和切换交给文档身份门禁，并把右键菜单的划词、圈选、整页与恢复请求及 Popup 的局部翻译请求转给对应 feature；结合 BrowserCapabilities 对不支持功能确定性拒绝，并更新共享运行时状态。
+ * 主要内容：处理悬浮球、划词模式与延迟、进度面板、站点禁用及旧缓存清理消息，将当前页字体查询和切换交给文档身份门禁，并把右键菜单的划词、整页与恢复请求及 Popup 的局部翻译请求转给对应 feature；并更新共享运行时状态。
  * 模块边界：本文件只做消息到 feature 生命周期的适配，右键动作与反馈委托给 contextMenuCommands，全文状态与完成查询委托给 fullPageCompletionQuery，不注册全局监听器、不执行供应商翻译，也不实现组件 UI；监听安装及配置订阅由 content/runtime 负责。
  */
 import type {ContentScriptContext} from 'wxt/utils/content-script-context';
 import {normalizeSelectionTranslatorDelay} from '@/src/core/config/model';
 import {config} from '@/src/services/config/store';
 import {
-    invalidateFullPageTranslationSessionCache,
-    mountAreaTranslator, mountFloatingBall,
-    mountImageTranslator,
+    invalidateFullPageTranslationSessionCache, mountFloatingBall,
     mountSelectionTranslator,
     mountTranslationProgressPanel,
-    unmountAreaTranslator,
     unmountFloatingBall,
-    unmountImageTranslator,
     unmountSelectionTranslator,
     unmountTranslationProgressPanel,
 } from './features';
@@ -23,10 +19,8 @@ import {handleFullPageCompletionQuery} from './fullPageCompletionQuery';
 import {forwardLegacyCacheClear} from './cacheMessage';
 import {handleContextMenuNotice, handleContextMenuTranslation} from './contextMenuCommands';
 import {browserCapabilities, type BrowserCapabilities} from '@/src/platform/browser/capabilities';
-import {rejectUnsupportedContentFeature} from './featureRegistry';
-import {handleInformationHighlightMessage, type InformationHighlightMessageState} from './informationHighlight';
 import {handlePageTranslationFontMessage, type PageTranslationFontMessageState} from './pageTranslationFontMessage';
-export interface ContentRuntimeMessageState extends InformationHighlightMessageState, PageTranslationFontMessageState {
+export interface ContentRuntimeMessageState extends PageTranslationFontMessageState {
     updateSiteDisabled(disabled: boolean): Promise<void>;
     reconcileUserscriptPage?(): Promise<boolean>;
 }
@@ -42,8 +36,6 @@ export function createContentRuntimeMessageHandler(ctx: ContentScriptContext, st
             if (pageFont !== undefined) return pageFont;
             const notice = handleContextMenuNotice(payload, ctx, state, sendResponse);
             if (notice !== undefined) return notice;
-            const handled = handleInformationHighlightMessage(payload, state, ctx.isInvalid || config.on === false, sendResponse);
-            if (handled !== undefined) return handled;
         }
         if (import.meta.env.BROWSER === 'userscript' && payload.type === 'reconcileUserscriptPage') {
             if (ctx.isInvalid || state.isSiteDisabled() || state.isPageSuspended?.() || !state.reconcileUserscriptPage) {
@@ -115,26 +107,6 @@ export function createContentRuntimeMessageHandler(ctx: ContentScriptContext, st
                 : 'none';
             config.customSelectionTranslatorHotkey = typeof customHotkey === 'string' ? customHotkey : '';
             if (delay !== undefined) config.selectionTranslatorDelay = normalizeSelectionTranslatorDelay(delay);
-            sendResponse();
-            return true;
-        }
-        if (payload.type === 'toggleSelectionAreaTranslator') {
-            if (rejectUnsupportedContentFeature(capabilities.areaTranslation, unmountAreaTranslator,
-                sendResponse, '当前浏览器暂不支持圈选翻译')) return true;
-            const requestedEnabled = payload.isEnabled === true;
-            config.selectionAreaEnabled = requestedEnabled;
-            if (requestedEnabled && config.on !== false) void mountAreaTranslator(ctx);
-            else unmountAreaTranslator();
-            sendResponse();
-            return true;
-        }
-        if (payload.type === 'toggleImageTranslator') {
-            if (rejectUnsupportedContentFeature(capabilities.imageTranslation, unmountImageTranslator,
-                sendResponse, '当前浏览器暂不支持图片翻译与 OCR')) return true;
-            const requestedEnabled = payload.isEnabled === true;
-            config.disableImageTranslator = !requestedEnabled;
-            if (requestedEnabled && config.on !== false) mountImageTranslator();
-            else unmountImageTranslator();
             sendResponse();
             return true;
         }

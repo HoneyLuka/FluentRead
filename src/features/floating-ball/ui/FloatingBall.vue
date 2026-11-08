@@ -1,7 +1,7 @@
 <!--
  * @file src/features/floating-ball/ui/FloatingBall.vue
- * 文件职责：呈现用户开启后的页面悬浮工具，将全文翻译、品牌手柄和漫画入口按顺序组织，并保留拖动停靠、可选常驻模式和可调边距。
- * 主要内容：品牌主体显示圆形本地图标，全文和漫画动作保留直接切换；活动漫画提供次级文字入口并与面板共享打开状态，键盘焦点和阅读期间不自动收起。默认与悬停展开边距分别控制横向停靠位置，悬停、触屏、拖动和视口变化沿用现有交互。
+ * 文件职责：呈现用户开启后的页面悬浮工具，将全文翻译、品牌手柄和设置入口按顺序组织，并保留拖动停靠、可选常驻模式和可调边距。
+ * 主要内容：品牌主体显示圆形本地图标，全文动作保留直接切换；默认与悬停展开边距分别控制横向停靠位置，悬停、触屏、拖动和视口变化沿用现有交互。
  * 模块边界：它只负责视觉与局部交互，不直接调用浏览器消息、保存配置或执行全文翻译；这些副作用由 content/runtime 通过 props、事件和 defineExpose 桥接，外观配置的归一化留在 core/config。
  -->
 <template>
@@ -14,7 +14,6 @@
       dragging: isDragging,
       'is-compact': presentation.compact,
       'is-touch-capable': isTouchCapable,
-      'manga-reader': !!manga?.available,
     }"
     :data-position="currentDisplayPosition"
     :data-tools-display="presentation.toolsDisplay"
@@ -22,7 +21,6 @@
     :style="rootStyle"
     @mouseenter="expandBall"
     @mouseleave="collapseBall"
-    @pointermove="keepMangaToolsVisible"
     @focusin="expandBallImmediately"
     @focusout="collapseBall"
     @keydown.esc.stop="handleDocumentKeydown"
@@ -67,34 +65,6 @@
       </svg>
     </div>
 
-    <button
-      v-if="manga?.available"
-      class="floating-ball-tool floating-ball-manga floating-ball-item"
-      :class="{'manga-active': manga.active, 'manga-pending': manga.pending}"
-      type="button"
-      :aria-label="t(manga.areaFallback ? '圈选漫画翻译' : manga.active ? '暂停并显示原图' : '漫画翻译')"
-      :aria-pressed="manga.active"
-      :aria-busy="manga.pending"
-      :title="mangaTitle"
-      @pointerdown.stop
-      @click.stop="handleMangaClick"
-    >
-      <svg class="manga-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1m0-14c3-2 6-2 9-1v14c-3-1-6-1-9 1V6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M5.5 8.5h4v4h-2l-1.5 1v-1h-.5v-4Zm9.5.5h3m-3 3h3m-3 3h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-      <span v-if="manga.active && !manga.pending && (manga.errors > 0 || (manga.completed ?? 0) > 0)" class="manga-check" :class="{'manga-error': manga.errors > 0}" aria-hidden="true">
-        <svg viewBox="0 0 16 16" fill="none"><path :d="manga.errors ? 'M8 4.5v4.3m0 2.2v.1' : 'm4 8 2.7 2.7L12 5.5'" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      </span>
-      <span v-if="manga.pending" class="manga-progress" aria-hidden="true" />
-    </button>
-
-    <button v-if="manga?.available && manga.active && !manga.areaFallback && onMangaReading"
-      class="floating-ball-tool floating-ball-reading floating-ball-item" type="button"
-      :aria-label="t(isMangaReadingOpen ? '关闭漫画文字' : '查看漫画文字')" :aria-expanded="isMangaReadingOpen" :title="t(isMangaReadingOpen ? '关闭漫画文字' : '查看漫画文字')"
-      @pointerdown.stop @click.stop="onMangaReading($event)">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 5h12M6 9.5h12M6 14h12M6 18.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" /></svg>
-    </button>
 
     <button
       v-if="showSettingsTool"
@@ -117,7 +87,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { PropType, CSSProperties } from 'vue';
 import {useUiI18n} from '@/src/ui/i18n';
-import type {MangaTranslationStatus} from '@/src/features/image-translation/public';
 import type {TranslationToolbarStatus} from '@/src/features/full-page-translation/public';
 import type { FloatingBallPresentation } from '@/src/features/floating-ball/types';
 import {resolveFloatingBallCenterY, toFloatingBallVerticalPosition} from '@/src/features/floating-ball/position';
@@ -179,11 +148,6 @@ const props = defineProps({
     type: Function as PropType<(isTranslating: boolean) => void>,
     default: () => {},
   },
-  manga: {type: Object as PropType<MangaTranslationStatus>, default: undefined},
-  onMangaToggle: {type: Function as PropType<(event: MouseEvent) => void>, default: () => {}},
-  onMangaReading: {type: Function as PropType<(event: MouseEvent) => void>, default: undefined},
-  mangaReadingOpen: {type: Boolean, default: false},
-  mangaReadingState: {type: Object as PropType<{open:boolean}>, default: undefined},
   initialTranslating: {
     type: Boolean,
     default: false,
@@ -222,7 +186,6 @@ const dragState = ref<PointerDragState | null>(null);
 const touchExpanded = ref(false);
 let pointerClickSuppressedUntil = 0;
 let expandTimer: ReturnType<typeof setTimeout> | null = null;
-let mangaIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 缺失字段按默认值补齐，避免旧配置或部分更新让模板读到 undefined。
 const presentation = computed<FloatingBallPresentation>(() => ({
@@ -247,13 +210,6 @@ const translationActionLabel = computed(() => {
     : status === 'error' ? 'fullPage.progress.failuresTitle'
     : status === 'translated' ? 'fullPage.progress.completed' : null;
   return key ? `${action} · ${translateMessage(key)}` : action;
-});
-const mangaTitle = computed(() => {
-  const manga = props.manga;
-  if (manga?.areaFallback) return t('画布或分片漫画 · 拖选可见区域翻译');
-  if (!manga?.active) return t('漫画翻译 · 自动翻译新页面');
-  const message = manga.pending ? manga.message || '正在处理当前漫画页' : manga.errors ? '部分页面未完成' : '连续翻译已开启';
-  return `${t(message)} · ${t('暂停并显示原图')}`;
 });
 const settingsActionLabel = computed(() => t('打开 FluentRead 设置').replace('FluentRead', translateMessage('common.brand')));
 const mainActionLabel = computed(() => {
@@ -283,36 +239,6 @@ function clearExpandTimer() {
   expandTimer = null;
 }
 
-function clearMangaIdleTimer() {
-  if (mangaIdleTimer !== null) clearTimeout(mangaIdleTimer);
-  mangaIdleTimer = null;
-}
-
-/** 单页反馈承担进度，工具入口不因后台推理常驻；键盘用户操作时不自动收起。 */
-const isMangaReadingOpen = computed(() => props.mangaReadingOpen || props.mangaReadingState?.open === true);
-function scheduleMangaCollapse() {
-  clearMangaIdleTimer();
-  if (!props.manga?.available || isAlwaysExpanded.value || isMangaReadingOpen.value || isDragging.value || floatingBall.value?.querySelector(':focus-visible')) return;
-  mangaIdleTimer = setTimeout(() => {
-    mangaIdleTimer = null;
-    if (isMangaReadingOpen.value || isDragging.value || floatingBall.value?.querySelector(':focus-visible')) return;
-    isExpanded.value = false;
-    touchExpanded.value = false;
-  }, 2500);
-}
-
-function keepMangaToolsVisible(event: PointerEvent) {
-  if (!props.manga?.available || event.pointerType !== 'mouse' || isDragging.value) return;
-  if (!isMenuExpanded.value) expandBall();
-  else scheduleMangaCollapse();
-}
-
-function handleMangaClick(event: MouseEvent) {
-  props.onMangaToggle(event);
-  // 鼠标点击留下的 focus 不应把工具锁在屏幕上，键盘点击则保留焦点。
-  if (event.detail > 0) (event.currentTarget as HTMLElement)?.blur();
-  scheduleMangaCollapse();
-}
 
 function expandBall() {
   if (isDragging.value || isAlwaysExpanded.value) return;
@@ -320,13 +246,12 @@ function expandBall() {
   clearExpandTimer();
   if (delay === 0) {
     isExpanded.value = true;
-    scheduleMangaCollapse();
     return;
   }
   // 悬停延迟只推迟展开，不改变已展开状态；越过页面边缘时不再误触工具按钮。
   expandTimer = setTimeout(() => {
     expandTimer = null;
-    if (!isDragging.value) {isExpanded.value = true; scheduleMangaCollapse();}
+    if (!isDragging.value) {isExpanded.value = true;}
   }, delay);
 }
 
@@ -335,20 +260,12 @@ function expandBallImmediately() {
   if (isDragging.value || isAlwaysExpanded.value) return;
   clearExpandTimer();
   isExpanded.value = true;
-  scheduleMangaCollapse();
 }
 
 function collapseBall() {
   clearExpandTimer();
-  if (isMangaReadingOpen.value) return;
-  // 鼠标仍在工具内时，点击后 blur 只释放焦点，不移动下一次点击的目标。
-  if (props.manga?.available && (floatingBall.value?.matches(':hover') || floatingBall.value?.querySelector(':focus-visible'))) {
-    scheduleMangaCollapse();
-    return;
-  }
   // 鼠标点击留下的焦点不能阻止移出收起；键盘可见焦点继续保留工具。
   if (!isDragging.value && !floatingBall.value?.querySelector(':focus-visible')) isExpanded.value = false;
-  scheduleMangaCollapse();
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -377,7 +294,7 @@ function updatePositionStyle() {
 
 function fallbackBallSize() {
   if (isTouchCapable) return TOUCH_BALL_SIZE;
-  return presentation.value.compact || props.manga?.available ? COMPACT_BALL_SIZE : BALL_SIZE;
+  return presentation.value.compact ? COMPACT_BALL_SIZE : BALL_SIZE;
 }
 
 function startDrag(event: PointerEvent) {
@@ -570,7 +487,6 @@ function handleSettingsClick(event: MouseEvent) {
 function handleDocumentKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return;
   clearExpandTimer();
-  clearMangaIdleTimer();
   if (!isMenuExpanded.value) return;
   floatingBall.value?.querySelector<HTMLElement>(':focus')?.blur();
   isExpanded.value = false;
@@ -603,7 +519,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearExpandTimer();
-  clearMangaIdleTimer();
   removePointerListeners();
   stopObservingViewport?.();
   document.removeEventListener('keydown', handleDocumentKeydown);
@@ -628,12 +543,11 @@ watch(() => props.initialTranslating, (nextState) => {
 watch(() => props.initialTranslationStatus, setTranslationStatus);
 
 // 尺寸切换会改变停靠高度，必须重新计算纵向居中，避免紧凑模式下出现偏移。
-watch(() => [presentation.value.compact, props.manga?.available], () => {
+watch(() => presentation.value.compact, () => {
   nextTick(updatePositionStyle);
 });
 
 watch(() => presentation.value.toolsDisplay, () => {
-  clearMangaIdleTimer();
   clearExpandTimer();
   isExpanded.value = false;
   touchExpanded.value = false;
@@ -718,9 +632,6 @@ watch(positionMargin, () => {
   --fr-ball-mascot-size: 19px;
   gap: 6px;
 }
-.fr-floating-ball.manga-reader {
-  --fr-ball-size:32px;--fr-ball-tool-size:32px;--fr-ball-icon-size:15px;--fr-ball-mascot-size:19px;gap:6px;
-}
 
 .fr-floating-ball[data-position="left"] {
   align-items: flex-start;
@@ -774,10 +685,7 @@ watch(positionMargin, () => {
 }
 
 .floating-ball-translate {order:0;}
-.floating-ball-manga {order:2;}
-.floating-ball-reading {order:3;}
-.floating-ball-reading svg {width:16px;height:16px;}
-.floating-ball-settings {order:4;}
+.floating-ball-settings {order:2;}
 
 .fr-floating-ball:not(.floating-ball-expanded):not(.dragging)[data-position="right"] .floating-ball-main {
   opacity: var(--fr-ball-collapsed-opacity, 0.52);
@@ -833,33 +741,6 @@ watch(positionMargin, () => {
   opacity: 1;
   pointer-events: auto;
 }
-
-.fr-floating-ball .floating-ball-manga {
-  opacity: var(--fr-ball-collapsed-opacity, 0.52);
-  pointer-events: auto;
-}
-/* 漫画入口与主体共用可调边距，收起时保持完整点击区域。 */
-.fr-floating-ball.manga-reader:not(.floating-ball-expanded):not(.dragging)[data-position] :is(.floating-ball-manga,.floating-ball-main) {transform:none;clip-path:none;opacity:var(--fr-ball-collapsed-opacity,.52);}
-.fr-floating-ball .floating-ball-manga.manga-active,
-.fr-floating-ball .floating-ball-manga:hover,
-.fr-floating-ball .floating-ball-manga:focus-visible { opacity: 1; color: #ec4d7d; }
-.fr-floating-ball .floating-ball-manga.manga-active {
-  border-color:#ec4d7d;background:#fff7fa;
-}
-.manga-check {
-  position: absolute; right: -4px; bottom: -4px; width: 19px; height: 19px;
-  display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%;
-  background: #15803d; color: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); pointer-events: none;
-}
-.manga-check svg { width: 15px; height: 15px; }
-.manga-check.manga-error { background: #b45309; }
-.manga-progress {
-  position: absolute; inset: 1px; border: 2px solid rgba(236,77,125,.18); pointer-events: none;
-  border-top-color: #ec4d7d; border-right-color: #ec4d7d; border-radius: 50%; animation: fr-manga-spin 1.2s linear infinite;
-}
-.manga-icon {width:18px;height:18px;}
-@keyframes fr-manga-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .manga-progress { animation: none; border-style: dotted; } }
 
 .floating-ball-settings {
   transition-delay: 0.1s;
@@ -954,13 +835,12 @@ watch(positionMargin, () => {
     transition: none;
   }
 }
-/* 浏览器可能没有把触屏报告为粗指针；硬件能力在首次渲染时保留完整入口，紧凑和漫画模式同样可触摸。 */
+/* 浏览器可能没有把触屏报告为粗指针；硬件能力在首次渲染时保留完整入口，紧凑模式同样可触摸。 */
 .fr-floating-ball.is-touch-capable {
   --fr-ball-size: 44px;
   --fr-ball-tool-size: 44px;
 }
-.fr-floating-ball.is-touch-capable:not(.floating-ball-expanded):not(.dragging)[data-position] :is(.floating-ball-main, .floating-ball-manga),
-.fr-floating-ball.is-touch-capable.manga-reader:not(.floating-ball-expanded):not(.dragging)[data-position] :is(.floating-ball-main, .floating-ball-manga) {
+.fr-floating-ball.is-touch-capable:not(.floating-ball-expanded):not(.dragging)[data-position] .floating-ball-main {
   transform: none;
   clip-path: none;
   opacity: max(.7, var(--fr-ball-collapsed-opacity, .52));
@@ -968,13 +848,11 @@ watch(positionMargin, () => {
 /* 同时支持浏览器报告的任一粗指针，保留运行期间媒体能力变化的 CSS 响应。 */
 @media (any-pointer: coarse) {
   .fr-floating-ball,
-  .fr-floating-ball.is-compact,
-  .fr-floating-ball.manga-reader {
+  .fr-floating-ball.is-compact {
     --fr-ball-size: 44px;
     --fr-ball-tool-size: 44px;
   }
-  .fr-floating-ball:not(.floating-ball-expanded):not(.dragging)[data-position] :is(.floating-ball-main, .floating-ball-manga),
-  .fr-floating-ball.manga-reader:not(.floating-ball-expanded):not(.dragging)[data-position] :is(.floating-ball-main, .floating-ball-manga) {
+  .fr-floating-ball:not(.floating-ball-expanded):not(.dragging)[data-position] .floating-ball-main {
     transform: none;
     clip-path: none;
     opacity: max(.7, var(--fr-ball-collapsed-opacity, .52));

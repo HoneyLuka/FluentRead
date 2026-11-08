@@ -5,16 +5,9 @@ import {createBackgroundMessageRouter, type BackgroundMessageHandler} from '@/sr
 import {createSelectionTtsBackgroundHandlers, type SelectionTtsContext} from '@/src/features/selection-translation/background/ttsHandler';
 import {createSelectionTtsSynthesizer} from '@/src/features/selection-translation/background/selectionTtsSynthesis';
 import {createSelectionTtsContentController} from '@/src/features/selection-translation/content/selectionTtsContentController';
-import {createAreaTranslationOffscreenAdapter} from '@/src/features/area-translation/background/offscreenAdapter';
-import {createImageTranslationOffscreenAdapter} from '@/src/features/image-translation/background/offscreenAdapter';
-import {createLocalTtsOffscreenAdapter} from '@/src/features/local-tts/background/offscreenAdapter';
 import {createSelectionTtsOffscreenAdapter} from '@/src/features/selection-translation/background/offscreenAdapter';
 import {setRuntimeFetch} from '@/src/platform/http/runtime';
-import {
-    OFFSCREEN_CANCEL_IMAGE_OPERATION_MESSAGE_TYPE,
-    OFFSCREEN_CANCEL_LOCAL_TTS_MESSAGE_TYPE,
-    type OffscreenClient,
-} from '@/src/platform/offscreen/client';
+import {type OffscreenClient} from '@/src/platform/offscreen/client';
 
 const send = vi.fn();
 const sendIfPresent = vi.fn();
@@ -31,249 +24,6 @@ beforeEach(() => {
 
 afterEach(() => {
     setRuntimeFetch();
-});
-
-describe('area translation Offscreen adapter', () => {
-    const adapter = createAreaTranslationOffscreenAdapter(client);
-    const selection = {left: 1, top: 2, width: 3, height: 4, viewportWidth: 100, viewportHeight: 80};
-
-    it('sends crop-only request and preserves metadata fields', async () => {
-        send.mockResolvedValueOnce({success: true, image: 'crop', lines: [], recognitionMethod: 'vision'});
-        await expect(adapter.cropArea('data:image/png,area', selection, {requestId: 'crop-1', signal: new AbortController().signal, timeoutMs: 5000}))
-            .resolves.toEqual({image: 'crop', lines: []});
-        expect(send).toHaveBeenCalledWith(expect.objectContaining({type: 'FLUENT_READ_AREA_CROP_OFFSCREEN', requestId: 'crop-1'}), expect.any(Object));
-        send.mockResolvedValueOnce({success: true, image: 1, lines: []});
-        await expect(adapter.cropArea('image', selection)).rejects.toThrow('圈选裁剪失败');
-    });
-
-    it('sends the complete feature payload and returns a validated result', async () => {
-        send.mockResolvedValueOnce({success: true, image: 'translated-area', lines: [{text: 'line'}]});
-        await expect(adapter.translateArea('data:image/png,area', 'en', 'Page', selection)).resolves.toEqual({
-            image: 'translated-area',
-            lines: [{text: 'line'}],
-        });
-        expect(send).toHaveBeenCalledWith({
-            type: 'FLUENT_READ_AREA_TRANSLATE_OFFSCREEN',
-            image: 'data:image/png,area',
-            sourceLanguage: 'en',
-            title: 'Page',
-            selection,
-        });
-    });
-
-    it('rejects failed and structurally invalid results with custom or fallback errors', async () => {
-        send.mockResolvedValueOnce({success: false, error: 'area custom'});
-        await expect(adapter.translateArea('image', 'en', '', selection)).rejects.toThrow('area custom');
-
-        send.mockResolvedValueOnce({success: true, image: 1, lines: []});
-        await expect(adapter.translateArea('image', 'en', '', selection)).rejects.toThrow('圈选翻译失败');
-
-        send.mockResolvedValueOnce({success: true, image: 'image', lines: {}});
-        await expect(adapter.translateArea('image', 'en', '', selection)).rejects.toThrow('圈选翻译失败');
-
-        send.mockResolvedValueOnce(undefined);
-        await expect(adapter.translateArea('image', 'en', '', selection)).rejects.toThrow('圈选翻译失败');
-    });
-
-    it('把圈选 requestId、取消信号与超时预算传给共享 Offscreen OCR 路由', async () => {
-        const controller = new AbortController();
-        send.mockResolvedValueOnce({success: true, image: 'translated-area', lines: []});
-
-        await expect(adapter.translateArea('data:image/png,area', 'en', 'Page', selection, {
-            requestId: 'area-1', signal: controller.signal, timeoutMs: 5_000,
-        })).resolves.toEqual({image: 'translated-area', lines: []});
-        expect(send).toHaveBeenCalledWith({
-            type: 'FLUENT_READ_AREA_TRANSLATE_OFFSCREEN',
-            image: 'data:image/png,area',
-            sourceLanguage: 'en',
-            title: 'Page',
-            selection,
-            requestId: 'area-1',
-        }, {
-            signal: controller.signal,
-            timeoutMs: 5_000,
-            cancelMessage: {
-                type: OFFSCREEN_CANCEL_IMAGE_OPERATION_MESSAGE_TYPE,
-                requestId: 'area-1',
-            },
-        });
-    });
-});
-
-describe('image translation Offscreen adapter', () => {
-    const adapter = createImageTranslationOffscreenAdapter(client);
-    it.each([undefined,{x:4,y:5,width:90,height:40},null,0,false])('viewport随既有RPC原样发送，取消和超时选项不增加请求 %#',async mangaViewport=>{
-        send.mockResolvedValueOnce({success:true,image:'translated',lines:[]});const signal=new AbortController().signal;
-        await adapter.translateImage('data:image/png,x','en','Page',{manga:true,requestId:'viewport-adapter',signal,timeoutMs:5000,mangaViewport:mangaViewport as never});
-        expect(send).toHaveBeenCalledOnce();const [message,options]=send.mock.calls[0];
-        expect(Object.hasOwn(message,'mangaViewport')).toBe(mangaViewport!==undefined);expect(message.mangaViewport).toEqual(mangaViewport);
-        expect(options).toEqual({signal,timeoutMs:5000,cancelMessage:{type:OFFSCREEN_CANCEL_IMAGE_OPERATION_MESSAGE_TYPE,requestId:'viewport-adapter'}});
-    });
-    it('validates the missing-segmentation retry marker only on an ordinary skipped unchanged result',async()=>{
-        const lines=[{text:'你好',sourceText:'Hello',renderSkipped:true}];
-        const response={success:true,image:'',imageUnchanged:true,retryWhenSegmentationReady:true,lines};
-        send.mockResolvedValueOnce(response);
-        await expect(adapter.translateImage('source','en','Page')).resolves.toEqual({image:'',imageUnchanged:true,retryWhenSegmentationReady:true,lines});
-        for(const invalid of [
-            {...response,retryWhenSegmentationReady:false},{...response,retryWhenSegmentationReady:'true'},
-            {...response,image:'encoded',imageUnchanged:undefined},{...response,lines:undefined},{...response,lines:[]},{...response,lines:[null,'bad',{}, {renderSkipped:'true'}]},
-        ]){send.mockResolvedValueOnce(invalid);await expect(adapter.translateImage('source','en','Page')).rejects.toThrow();}
-        send.mockResolvedValueOnce(response);await expect(adapter.translateImage('source','en','Page',{manga:true,requestId:'m',signal:new AbortController().signal,timeoutMs:1000})).rejects.toThrow();
-    });
-    it('preserves optional segmentation readiness, accepts older model statuses and rejects malformed optional fields',async()=>{
-        const base={success:true,ready:true,bytes:123,inpaintingReady:true};
-        for(const segmentationReady of [true,false]){
-            send.mockResolvedValueOnce({...base,segmentationReady});
-            await expect(adapter.getMangaModelStatus()).resolves.toEqual({ready:true,bytes:123,inpaintingReady:true,segmentationReady});
-        }
-        send.mockResolvedValueOnce(base);
-        expect(await adapter.getMangaModelStatus()).not.toHaveProperty('segmentationReady');
-        for(const segmentationReady of [null,0,'false',{}]){
-            send.mockResolvedValueOnce({...base,segmentationReady});
-            await expect(adapter.getMangaModelStatus()).rejects.toThrow('漫画识别模型状态读取失败');
-        }
-    });
-    it('普通图的未绘制文字或真正空识别可标记为保留宿主原图，其他消息形态仍拒绝',async()=>{
-        const lines=[{text:'你好',sourceText:'Hello',renderSkipped:true}];
-        send.mockResolvedValueOnce({success:true,image:'',imageUnchanged:true,lines});
-        await expect(adapter.translateImage('source','en','Page')).resolves.toEqual({image:'',imageUnchanged:true,lines});
-        send.mockResolvedValueOnce({success:true,image:'',imageUnchanged:true,lines:[]});
-        await expect(adapter.translateImage('source','en','Page')).resolves.toEqual({image:'',imageUnchanged:true,lines:[]});
-        for (const response of [
-            {success:true,image:'encoded',imageUnchanged:true,lines},
-            {success:true,image:'',imageUnchanged:false,lines},
-            {success:false,image:'',imageUnchanged:true,lines:[]},
-            {success:'false',image:'',imageUnchanged:true,lines:[]},
-            {success:1,image:'',imageUnchanged:true,lines:[]},
-            {success:true,image:'',imageUnchanged:true,lines,mangaPatches:{width:1,height:1,patches:[]}},
-        ]) {send.mockResolvedValueOnce(response);await expect(adapter.translateImage('source','en','Page')).rejects.toThrow();}
-        send.mockResolvedValueOnce({success:true,image:'',imageUnchanged:true,lines:[]});
-        await expect(adapter.translateImage('source','en','Page',{manga:true,requestId:'m',signal:new AbortController().signal,timeoutMs:1000})).rejects.toThrow();
-    });
-    it('单图识别选择透传到 Offscreen，不把普通图片变成漫画模式', async () => {
-        send.mockResolvedValueOnce({success:true,image:'translated',lines:[]});
-        await adapter.translateImage('source','ja','Page',{ocrEngine:'paddle',requestId:'single-paddle',signal:new AbortController().signal,timeoutMs:5000});
-        expect(send).toHaveBeenCalledWith({type:'FLUENT_READ_IMAGE_TRANSLATE_OFFSCREEN',image:'source',sourceLanguage:'ja',title:'Page',ocrEngine:'paddle',requestId:'single-paddle'},expect.any(Object));
-    });
-    it('验证并透传漫画局部结果，拒绝非法图块',async()=>{
-        const mangaPatches={width:100,height:100,patches:[{x:0,y:0,width:20,height:20,image:'data:image/png;base64,AQID'}]};
-        for(const image of ['',undefined]){send.mockResolvedValueOnce({success:true,image,lines:[],mangaPatches});await expect(adapter.translateImage('source','en','Page')).resolves.toEqual({image:'',lines:[],mangaPatches});}
-        send.mockResolvedValueOnce({success:true,lines:[],mangaPatches:null});await expect(adapter.translateImage('source','en','Page')).rejects.toThrow('无效');
-    });
-    it('校验漫画模型状态和清理结果，并把专用模式传到 Offscreen',async()=>{
-        send.mockResolvedValueOnce({success:true,ready:true,bytes:123,inpaintingReady:false});
-        expect(await adapter.getMangaModelStatus()).toEqual({ready:true,bytes:123,inpaintingReady:false});
-        const download={assetId:'detector',receivedBytes:40,totalBytes:100};
-        send.mockResolvedValueOnce({success:true,ready:false,bytes:0,inpaintingReady:false,source:'mirror',download});
-        expect(await adapter.getMangaModelStatus()).toEqual({ready:false,bytes:0,inpaintingReady:false,source:'mirror',download});
-        for(const response of [undefined,{success:true,ready:true,bytes:-1,inpaintingReady:false},{success:true,ready:true,bytes:0.5,inpaintingReady:false},
-            {success:true,ready:true,bytes:0},{success:false,error:'bad cache'}]){
-            send.mockResolvedValueOnce(response);await expect(adapter.getMangaModelStatus()).rejects.toThrow();
-        }
-        send.mockResolvedValueOnce({success:false});await expect(adapter.removeMangaModels()).rejects.toThrow('清除失败');
-        send.mockResolvedValueOnce({success:true});await adapter.removeMangaModels();
-        send.mockResolvedValueOnce({success:true,image:'translated',lines:[]});
-        await adapter.translateImage('data:image/png,x','en','',{manga:true,requestId:'manga',signal:new AbortController().signal,timeoutMs:1000});
-        expect(send).toHaveBeenLastCalledWith(expect.objectContaining({manga:true,type:'FLUENT_READ_IMAGE_TRANSLATE_OFFSCREEN'}),expect.any(Object));
-    });
-
-    it('translates images and validates success, image and line fields independently', async () => {
-        send.mockResolvedValueOnce({success: true, image: 'translated', lines: []});
-        await expect(adapter.translateImage('data:image/png,image', 'en', 'Page')).resolves.toEqual({
-            image: 'translated', lines: [],
-        });
-        expect(send).toHaveBeenCalledWith({
-            type: 'FLUENT_READ_IMAGE_TRANSLATE_OFFSCREEN',
-            image: 'data:image/png,image',
-            sourceLanguage: 'en',
-            title: 'Page',
-        });
-
-        send.mockResolvedValueOnce({success:false,error:'local model not ready',errorCode:'notDownloaded'});
-        await expect(adapter.translateImage('image','en','')).rejects.toMatchObject({errorCode:'notDownloaded'});
-        send.mockResolvedValueOnce({success: false, error: 'translation custom'});
-        await expect(adapter.translateImage('image', 'en', '')).rejects.toThrow('translation custom');
-        send.mockResolvedValueOnce({success: true, image: null, lines: [], error: 1});
-        await expect(adapter.translateImage('image', 'en', '')).rejects.toThrow('图片翻译失败');
-        send.mockResolvedValueOnce({success: true, image: 'translated', lines: null});
-        await expect(adapter.translateImage('image', 'en', '')).rejects.toThrow('图片翻译失败');
-    });
-
-    it('把跨域图片 URL 交给 Offscreen，并只接受 data:image 返回值', async () => {
-        send.mockResolvedValueOnce({success: true, image: 'data:image/png;base64,remote'});
-        await expect(adapter.fetchImage('https://pbs.twimg.com/media/demo.png')).resolves
-            .toBe('data:image/png;base64,remote');
-        expect(send).toHaveBeenCalledWith({
-            type: 'FLUENT_READ_IMAGE_FETCH_OFFSCREEN',
-            url: 'https://pbs.twimg.com/media/demo.png',
-        });
-
-        send.mockResolvedValueOnce({success: true, image: 'not-data'});
-        await expect(adapter.fetchImage('https://pbs.twimg.com/media/demo.png')).rejects.toThrow('远程图片读取失败');
-        send.mockResolvedValueOnce({success: false, error: 'media custom'});
-        await expect(adapter.fetchImage('https://pbs.twimg.com/media/demo.png')).rejects.toThrow('media custom');
-    });
-
-    it('把图片 requestId、取消信号与超时预算传给 Offscreen client', async () => {
-        const controller = new AbortController();
-        send
-            .mockResolvedValueOnce({success: true, image: 'translated', lines: []})
-            .mockResolvedValueOnce({success: true, image: 'data:image/png;base64,remote'});
-
-        await expect(adapter.translateImage('data:image/png,image', 'en', 'Page', {
-            requestId: 'image-1',
-            signal: controller.signal,
-            timeoutMs: 5_000,
-        })).resolves.toEqual({image: 'translated', lines: []});
-        expect(send).toHaveBeenNthCalledWith(1, {
-            type: 'FLUENT_READ_IMAGE_TRANSLATE_OFFSCREEN',
-            image: 'data:image/png,image',
-            sourceLanguage: 'en',
-            title: 'Page',
-            requestId: 'image-1',
-        }, {
-            signal: controller.signal,
-            timeoutMs: 5_000,
-            cancelMessage: {
-                type: OFFSCREEN_CANCEL_IMAGE_OPERATION_MESSAGE_TYPE,
-                requestId: 'image-1',
-            },
-        });
-
-        await expect(adapter.fetchImage('https://pbs.twimg.com/media/demo.png', {
-            requestId: 'fetch-1',
-            signal: controller.signal,
-            timeoutMs: 3_000,
-        })).resolves.toBe('data:image/png;base64,remote');
-        expect(send).toHaveBeenNthCalledWith(2, {
-            type: 'FLUENT_READ_IMAGE_FETCH_OFFSCREEN',
-            url: 'https://pbs.twimg.com/media/demo.png',
-            requestId: 'fetch-1',
-        }, {
-            signal: controller.signal,
-            timeoutMs: 3_000,
-            cancelMessage: {
-                type: OFFSCREEN_CANCEL_IMAGE_OPERATION_MESSAGE_TYPE,
-                requestId: 'fetch-1',
-            },
-        });
-    });
-
-    it('downloads OCR languages and reports custom, empty and fallback failures', async () => {
-        send.mockResolvedValueOnce({success: true});
-        await expect(adapter.downloadLanguages(['eng', 'jpn'])).resolves.toBeUndefined();
-        expect(send).toHaveBeenCalledWith({
-            type: 'FLUENT_READ_IMAGE_OCR_DOWNLOAD_OFFSCREEN',
-            languages: ['eng', 'jpn'],
-        });
-
-        send.mockResolvedValueOnce({success: false, error: 'download custom'});
-        await expect(adapter.downloadLanguages(['eng'])).rejects.toThrow('download custom');
-        send.mockResolvedValueOnce({success: false, error: ''});
-        await expect(adapter.downloadLanguages(['eng'])).rejects.toThrow('图片 OCR 语言包下载失败');
-        send.mockResolvedValueOnce(undefined);
-        await expect(adapter.downloadLanguages(['eng'])).rejects.toThrow('图片 OCR 语言包下载失败');
-    });
 });
 
 describe('selection TTS Offscreen adapter', () => {
@@ -446,59 +196,7 @@ describe('selection TTS Offscreen adapter', () => {
         expect(timings).toEqual([{startChar: 0, endChar: 5, startTime: 0, endTime: 1}]);
     });
 });
-
-describe('local TTS Offscreen adapter', () => {
-    const adapter = createLocalTtsOffscreenAdapter(client);
-
-    it('decodes Base64 audio returned across the runtime message boundary', async () => {
-        const controller = new AbortController();
-        send.mockResolvedValueOnce({
-            success: true,
-            audioBase64: 'UklG',
-            contentType: 'audio/wav' as const,
-            voice: 'zf_001',
-            backend: 'wasm',
-        });
-
-        await expect(adapter.synthesize('你好', 'zh-CN', 'zf_001', controller.signal)).resolves.toEqual({
-            audio: new Uint8Array([82, 73, 70, 70]).buffer,
-            contentType: 'audio/wav' as const,
-            voice: 'zf_001',
-            backend: 'wasm',
-        });
-        expect(send).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'LOCAL_TTS_SYNTHESIZE',
-            text: '你好',
-            language: 'zh-CN',
-            voice: 'zf_001',
-            requestId: expect.any(String),
-        }), expect.objectContaining({
-            signal: controller.signal,
-            timeoutMs: 120_000,
-            cancelMessage: {
-                type: OFFSCREEN_CANCEL_LOCAL_TTS_MESSAGE_TYPE,
-                requestId: expect.any(String),
-            },
-        }));
-    });
-
-    it('rejects missing or unsuccessful local audio responses', async () => {
-        send.mockResolvedValueOnce({success: false, error: 'local custom'});
-        await expect(adapter.synthesize('hello', 'en-US', 'af_maple')).rejects.toThrow('local custom');
-
-        send.mockResolvedValueOnce({success: true, audioBase64: ''});
-        await expect(adapter.synthesize('hello', 'en-US', 'af_maple')).rejects.toThrow('Offscreen LOCAL_TTS_SYNTHESIZE响应消息格式无效');
-    });
-});
-
-it('OCR 清除经离屏端确认且透传失败', async () => {
- const adapter=createImageTranslationOffscreenAdapter(client);
- send.mockResolvedValueOnce({success:true}); await adapter.removeLanguages(['eng']);
- expect(send).toHaveBeenCalledWith({type:'FLUENT_READ_IMAGE_OCR_REMOVE_OFFSCREEN',languages:['eng']});
- send.mockResolvedValueOnce({success:false,error:'busy'}); await expect(adapter.removeLanguages(['eng'])).rejects.toThrow('busy');
-});
-
-describe('TTS metadata across local synthesis, adapters and routed playback', () => {
+describe('TTS metadata across online synthesis, adapters and routed playback', () => {
     let player: ReturnType<typeof createSelectionTtsPlayer> | undefined;
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => { player?.dispose(); player = undefined; vi.useRealTimers(); });
@@ -508,8 +206,8 @@ describe('TTS metadata across local synthesis, adapters and routed playback', ()
     ];
 
     it.each([
-        ['timed', {timings}, timings], ['legacy', {}, undefined], ['invalid', {timings: [{...timings[0], endTime: 0}]}, []],
-    ])('plays %s local metadata through the actual cross-layer path and keeps progress cancellable', async (kind, metadata, expectedTimings) => {
+        ['timed', {timings}, timings], ['legacy', {}, undefined], ['invalid', {timings: [{...timings[0], endTime: 0}]}, [{...timings[0], endTime: 0}]],
+    ])('plays %s Edge metadata through the actual cross-layer path and keeps progress cancellable', async (kind, metadata, expectedTimings) => {
         const audios: Array<SelectionAudioPort & {currentTime: number; duration: number}> = [];
         const messages: Record<string, unknown>[] = [];
         const received: unknown[] = [];
@@ -532,23 +230,18 @@ describe('TTS metadata across local synthesis, adapters and routed playback', ()
             notify: (audioRequest, state) => notify(audioRequest, state),
             notifyProgress: (audioRequest, progress) => notify(audioRequest, 'progress', progress),
         });
-        const synthesizeLocal = vi.fn(async () => ({
+        const synthesizeOnline = vi.fn(async () => ({
             audio: new Uint8Array([82, 73, 70, 70]).buffer, contentType: 'audio/wav' as const, voice: 'zf_001', ...(metadata as object),
         }));
-        const offscreen = createOffscreenMessageListener({
-            ttsPlayer: player, translate: vi.fn(), fetchImage: vi.fn(), translateImage: vi.fn(), translateArea: vi.fn(), downloadOcrLanguages: vi.fn(),
-            localTts: {synthesize: synthesizeLocal, prepare: vi.fn(), status: vi.fn(), removeModel: vi.fn()},
-        });
+        const offscreen = createOffscreenMessageListener({ttsPlayer: player, translate: vi.fn()});
         const routeMessage = async (message: Record<string, unknown>) => {
             messages.push(message);
             return new Promise(resolve => expect(offscreen({...message, target: 'offscreen'}, {}, resolve)).toBe(true));
         };
-        const localClient = {send: vi.fn(routeMessage), sendIfPresent: vi.fn(routeMessage)} as unknown as OffscreenClient;
-        const local = createLocalTtsOffscreenAdapter(localClient);
-        const playback = createSelectionTtsOffscreenAdapter(localClient);
+        const client = {send: vi.fn(routeMessage), sendIfPresent: vi.fn(routeMessage)} as unknown as OffscreenClient;
+        const playback = createSelectionTtsOffscreenAdapter(client);
         const synthesize = createSelectionTtsSynthesizer({
-            getMode: () => 'local-only', getLocalVoice: () => 'zf_001', getOnlineVoices: () => [],
-            synthesizeLocal: local.synthesize, synthesizeOnline: vi.fn(),
+            getOnlineVoices: () => [], synthesizeOnline,
         });
         const background = createBackgroundMessageRouter<SelectionTtsContext>(createSelectionTtsBackgroundHandlers({
             getPreferredVoices: () => [], synthesize, playWithOffscreen: playback.play, stopWithOffscreen: playback.stop, seekWithOffscreen: playback.seek,
@@ -566,7 +259,7 @@ describe('TTS metadata across local synthesis, adapters and routed playback', ()
             type: 'PLAY_SELECTION_TTS', playbackToken: expect.any(String), audioBase64: 'UklGRg==', contentType: 'audio/wav' as const, text: 'Hello world', tabId: 0, clientRequestId: request.clientRequestId,
             ...(expectedTimings === undefined ? {} : {timings: expectedTimings}),
         });
-        expect(synthesizeLocal).toHaveBeenCalledWith(expect.objectContaining({text: 'Hello world', language: 'en-US', voice: 'zf_001'}), expect.any(AbortSignal));
+        expect(synthesizeOnline).toHaveBeenCalledWith('Hello world', 'en-US', [], expect.any(AbortSignal));
         audios[0].currentTime = 3;
         await vi.advanceTimersByTimeAsync(100);
         const progress = (received.at(-1) as {progress: {start: number; end: number; fraction: number; estimated: boolean}}).progress;

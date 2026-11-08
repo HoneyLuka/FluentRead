@@ -1,7 +1,7 @@
 /**
  * @file src/app/background/popupNavigation.ts
  * 文件职责：装配默认 popup 的页内授权端口与完整设置页的现有导航端口。
- * 主要内容：从清单读取精确默认页面，用加密随机数签发短期凭据，并组装白名单设置分区、生词本子页及同分区表单锚点的导航 URL。
+ * 主要内容：从清单读取精确默认页面，用加密随机数签发短期凭据，并组装白名单设置分区及同分区表单锚点的导航 URL。
  * 模块边界：仅装配浏览器能力；凭据与设置目标校验属于各 feature，不将悬浮球的默认 popup 请求导航到完整设置页。
  */
 import {createFloatingPopupHandlers} from '@/src/features/floating-ball/background/popupHandler';
@@ -21,7 +21,7 @@ export function createPopupNavigationHandlers() {
         openDefaultPage: () => browser.runtime.openOptionsPage(),
         openSection: async (section, destination, target) => {
             const params = new URLSearchParams();
-            if (destination) params.set(section === 'settings-vocabulary' ? 'learningTab' : 'service', destination);
+            if (destination) params.set('service', destination);
             if (target) params.set('target', target);
             const encoded = params.toString();
             const query = encoded ? `?${encoded}` : '';

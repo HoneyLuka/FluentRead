@@ -6,26 +6,19 @@
  * 现有中文用户在切换或升级配置后仍看到兼容文案；共享七语目录只引用可独立裁剪的中文常量。
  * 模块边界：资源只描述扩展自己的界面文本；翻译服务的源文本、目标文本和用户内容不属于这里。
  */
-import videoLearningText from './video-learning/zh-CN.json';
 import selfHelpText from './self-help/zh-CN.json';
 import {compositeTranslationChineseMessages} from './compositeTranslation';
 import {aiRequestTimeoutChineseMessages} from './aiRequestTimeout';
 import {selectionDictionaryChineseMessages} from './selectionDictionary';
 import {sectionTranslationRulesChineseMessages} from './sectionTranslationRules';
-import {pdfReadingChineseMessages} from './pdfReading';
-import {informationHighlightChineseMessages} from './informationHighlight';
-import reencounterText from './reencounter/zh-CN.json';
 import settingsCopyText from './settings-copy/zh-CN.json';
 import brandTaglines from './brand-taglines.json';
 import {onboardingChineseMessages} from './onboarding';
 import googleDriveText from './google-drive/zh-CN.json';
 import cloudBackupText from './cloud-backup/zh-CN.json';
 import type {MessageCatalog} from '../types';
-import {localTtsChineseMessages} from './localTts';
 import {translationStatsChineseMessages} from './translationStats';
-import {localTranslationChineseMessages} from './localTranslation';
 
-import {personalCorrectionChineseMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -34,16 +27,11 @@ export const zhCNMessages = {
     "feedback.serviceHint": "检查所选服务的连接或模型配置后再试。",
     "feedback.retryHint": "稍后重试，原文和当前选区会继续保留。",
     ...countForms['zh-CN'],
-    ...personalCorrectionChineseMessages,
     "document.config.loadFailed": "设置未能读取，请重新加载后再试。",
     "popup.compact.translate": "翻译",
     "popup.compact.restore": "还原",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationChineseMessages,
-    ...pdfReadingChineseMessages,
-    ...informationHighlightChineseMessages,
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "移除来源请求头",
     "settings.headers.help": "默认不移除请求头；添加域名后，对所有服务发往该域名的扩展后台请求生效，不含子域名；删除规则或取消勾选即可恢复",
@@ -409,7 +397,6 @@ export const zhCNMessages = {
     "settings.excludedLanguages.hint": "下次翻译时生效；短文本或无法确定语言的内容仍会翻译",
     "options.userscriptUnavailableTitle": "油猴脚本暂不支持此功能",
     "options.userscriptUnavailableDescription": "此功能需要浏览器扩展的运行环境。请安装流畅阅读浏览器扩展后使用。",
-    ...localTtsChineseMessages,
     ...translationStatsChineseMessages,
     "settings.services.library.freeReady": "无需 API Key，自动选择可用的免费服务",
     "settings.services.library.keepOne": "至少保留一个服务",
@@ -552,7 +539,6 @@ export const zhCNMessages = {
     "writing.demo.reviewHint": "助手参考当前讨论起草，你可以检查和修改。",
     "writing.demo.insertHint": "草稿已放回回复框，检查后由你点击发送。",
 
-    ...localTranslationChineseMessages,
     "settings.requestLimits.modelTitle": "模型请求限制",
     "settings.requestLimits.globalTitle": "请求限制",
     "settings.requestLimits.globalHelp": "未单独设置的服务和模型共用这些限制",

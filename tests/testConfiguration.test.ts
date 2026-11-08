@@ -15,7 +15,7 @@ describe('shared Vitest regression configuration', () => {
         expect(execution).toEqual(base.test);
         expect(execution.environment).toBe('node');
         expect(execution.isolate).not.toBe(false);
-        expect(execution.testTransformMode?.web).toContain('**/tests/mangaEntryComponentLifecycle.test.ts');
+        expect(execution.testTransformMode?.web).toContain('**/tests/selectionTranslatorLifecycle.test.ts');
         expect(coverage).toBeDefined();
     });
 
@@ -38,7 +38,7 @@ describe('shared Vitest regression configuration', () => {
             thresholds: {statements: 100, branches: 100, functions: 100, lines: 100},
         });
         if (!coverage || !('include' in coverage)) throw new Error('Strict coverage must declare instrumented source files');
-        expect(coverage.include).toContain('src/features/image-translation/content/mangaReader.ts');
+        expect(coverage.include).toContain('src/core/config/featureServices.ts');
         expect(coverage.include).toContain('src/services/translation/broker.ts');
     });
 });

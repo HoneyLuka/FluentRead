@@ -23,7 +23,7 @@ export function createGoogleDriveSyncRuntime(mutations: ConfigMutationCoordinato
         snapshot: prepareHydratedConfigForExport,
         async apply(value) {
             await configReady;
-            const imported = prepareConfigForImport({...value, videoServiceDefaultMigrated: true}, config, {credentialMode: 'replace'});
+            const imported = prepareConfigForImport(value, config, {credentialMode: 'replace'});
             if (!imported) throw new Error('配置导入失败');
             imported.uiLanguageSetupCompleted = config.uiLanguageSetupCompleted;
             await saveConfig(imported, {recordHistory: true, immediateHistory: true});
@@ -34,5 +34,5 @@ export function createGoogleDriveSyncRuntime(mutations: ConfigMutationCoordinato
     });
     browser.tabs.onRemoved.addListener((tabId: number) => {void service.cancelTab(tabId).catch(() => undefined);});
     browser.tabs.onUpdated.addListener((tabId: number, change: {status?: string}) => {if (change.status === 'loading') void service.cancelTab(tabId).catch(() => undefined);});
-    return createGoogleDriveSyncHandler({...service, commit: (...args) => mutations.run(() => service.commit(...args))}, sender => isTrustedSettingsSender(sender, browser.runtime.id, browser.runtime.getURL('options.html')));
+    return createGoogleDriveSyncHandler({...service, commit: (...args) => mutations.run(() => service.commit(...args))}, sender => isTrustedSettingsSender(sender, browser.runtime.id, browser.runtime.getURL('/options.html')));
 }

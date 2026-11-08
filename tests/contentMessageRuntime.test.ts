@@ -5,7 +5,6 @@ import type {BrowserCapabilities} from '@/src/platform/browser/capabilities';
 
 const mocks = vi.hoisted(() => ({
     config: {
-        harness: undefined as {enabled: boolean} | undefined,
         on: true,
         disableFloatingBall: false,
         selectionTranslatorMode: 'bilingual',
@@ -14,8 +13,6 @@ const mocks = vi.hoisted(() => ({
         selectionTranslatorHotkey: 'none',
         customSelectionTranslatorHotkey: '',
         selectionTranslatorDelay: 0,
-        selectionAreaEnabled: false,
-        disableImageTranslator: false,
         translationProgressPanelEnabled: false,
     },
     normalizeDelay: vi.fn((value: number | string) => Number(value)),
@@ -26,20 +23,14 @@ const mocks = vi.hoisted(() => ({
     getFullPageTranslationDiagnostic: vi.fn(),
     getFullPageTranslationDocumentToken: vi.fn(),
     readFullPageUnchangedCompletion: vi.fn(),
-    mountAreaTranslator: vi.fn(),
     mountFloatingBall: vi.fn(),
-    toggleContextMenuImage: vi.fn(),
-    mountImageTranslator: vi.fn(),
     mountSelectionTranslator: vi.fn(),
     mountTranslationProgressPanel: vi.fn(),
     restoreOriginalContent: vi.fn(),
-    unmountAreaTranslator: vi.fn(),
     unmountFloatingBall: vi.fn(),
-    unmountImageTranslator: vi.fn(),
     unmountSelectionTranslator: vi.fn(),
     unmountTranslationProgressPanel: vi.fn(),
     translateSelectionFromContextMenu: vi.fn(),
-    startAreaTranslationFromContextMenu: vi.fn(),
     startSectionTranslationPicker: vi.fn(),
     sendMessage: vi.fn(),
     showPageNotice: vi.fn(),
@@ -68,20 +59,14 @@ vi.mock('@/src/app/content/features', () => ({
     getFullPageTranslationDocumentToken: mocks.getFullPageTranslationDocumentToken,
     readFullPageUnchangedCompletion: mocks.readFullPageUnchangedCompletion,
     getFullPageTranslationFrameState: () => ({sessionId: 7}),
-    mountAreaTranslator: mocks.mountAreaTranslator,
     mountFloatingBall: mocks.mountFloatingBall,
-    toggleContextMenuImage: mocks.toggleContextMenuImage,
-    mountImageTranslator: mocks.mountImageTranslator,
     mountSelectionTranslator: mocks.mountSelectionTranslator,
     mountTranslationProgressPanel: mocks.mountTranslationProgressPanel,
     restoreOriginalContent: mocks.restoreOriginalContent,
-    unmountAreaTranslator: mocks.unmountAreaTranslator,
     unmountFloatingBall: mocks.unmountFloatingBall,
-    unmountImageTranslator: mocks.unmountImageTranslator,
     unmountSelectionTranslator: mocks.unmountSelectionTranslator,
     unmountTranslationProgressPanel: mocks.unmountTranslationProgressPanel,
     translateSelectionFromContextMenu: mocks.translateSelectionFromContextMenu,
-    startAreaTranslationFromContextMenu: mocks.startAreaTranslationFromContextMenu,
     startSectionTranslationPicker: mocks.startSectionTranslationPicker,
 }));
 
@@ -89,7 +74,6 @@ beforeEach(() => {
     vi.resetModules();
     vi.unstubAllGlobals();
     Object.assign(mocks.config, {
-        harness: undefined,
         on: true,
         disableFloatingBall: false,
         selectionTranslatorMode: 'bilingual',
@@ -98,8 +82,6 @@ beforeEach(() => {
         selectionTranslatorHotkey: 'none',
         customSelectionTranslatorHotkey: '',
         selectionTranslatorDelay: 0,
-        selectionAreaEnabled: false,
-        disableImageTranslator: false,
         translationProgressPanelEnabled: false,
     });
     for (const value of Object.values(mocks)) {
@@ -166,28 +148,6 @@ describe('内容脚本 runtime 消息协议', () => {
         });
         handler({type: 'contextMenuTranslate', action: 'restore'}, {}, respond);
         expect(respond).toHaveBeenLastCalledWith({status: 'success', action: 'restored', isTranslated: false, documentToken: 'fixture-document', toolbarStatus: 'idle'});
-    });
-    it('信息高亮状态在暂停或关闭时仍可读，关闭可抢占，开启和重试遵循当前页面门禁', async () => {
-        const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-        const respond = vi.fn(); let disabled = false, suspended = false, invalid = false;
-        const snapshot = {enabled: false, phase: 'idle', sessionId: '0', processedParagraphs: 0, queuedParagraphs: 0, highlightedSpans: 0, mode: 'keywords'} as const;
-        const feature = {getState: vi.fn(() => snapshot), setEnabled: vi.fn((enabled: boolean) => ({...snapshot, enabled})), retry: vi.fn(() => snapshot)};
-        const handler = createContentRuntimeMessageHandler({get isInvalid() {return invalid;}} as ContentScriptContext, {
-            isSiteDisabled: () => disabled, isPageSuspended: () => suspended, updateSiteDisabled: vi.fn(), informationHighlight: feature,
-        });
-        expect(handler({type: 'SET_INFORMATION_HIGHLIGHT_ENABLED', enabled: 'true'}, {}, respond)).toBe(false);
-        for (const restriction of ['config', 'site', 'suspend', 'context']) {
-            mocks.config.on = restriction !== 'config'; disabled = restriction === 'site'; suspended = restriction === 'suspend'; invalid = restriction === 'context';
-            handler({type: 'GET_INFORMATION_HIGHLIGHT_STATE'}, {}, respond); expect(respond).toHaveBeenLastCalledWith({success: true, state: snapshot});
-            handler({type: 'SET_INFORMATION_HIGHLIGHT_ENABLED', enabled: true}, {}, respond); expect(respond).toHaveBeenLastCalledWith({success: false, state: snapshot, error: 'INFORMATION_HIGHLIGHT_PAGE_DISABLED'});
-            handler({type: 'RETRY_INFORMATION_HIGHLIGHT'}, {}, respond); expect(feature.retry).not.toHaveBeenCalled();
-            handler({type: 'SET_INFORMATION_HIGHLIGHT_ENABLED', enabled: false}, {}, respond); expect(respond).toHaveBeenLastCalledWith({success: true, state: snapshot});
-        }
-        mocks.config.on = true; disabled = suspended = invalid = false;
-        handler({type: 'SET_INFORMATION_HIGHLIGHT_ENABLED', enabled: true}, {}, respond); expect(respond).toHaveBeenLastCalledWith({success: true, state: {...snapshot, enabled: true}});
-        handler({type: 'RETRY_INFORMATION_HIGHLIGHT'}, {}, respond); expect(feature.retry).toHaveBeenCalledOnce();
-        const unavailable = createContentRuntimeMessageHandler({} as ContentScriptContext, {isSiteDisabled: () => false, updateSiteDisabled: vi.fn()});
-        unavailable({type: 'GET_INFORMATION_HIGHLIGHT_STATE'}, {}, respond); expect(respond).toHaveBeenLastCalledWith({success: false, error: 'INFORMATION_HIGHLIGHT_PAGE_UNAVAILABLE'});
     });
     it('往返缓存暂停时拒绝迟到的功能挂载，恢复后允许新的用户操作', async () => {
         const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
@@ -326,7 +286,7 @@ describe('内容脚本 runtime 消息协议', () => {
         const handler = createContentRuntimeMessageHandler({} as never, {
             isSiteDisabled: () => false,
             updateSiteDisabled: vi.fn(async () => undefined),
-        }, {areaTranslation: true, imageTranslation: true} as never);
+        });
 
         expect(handler({type: 'toggleFloatingBall', isEnabled: true}, {}, respond)).toBe(true);
         expect(mocks.mountFloatingBall).toHaveBeenCalledOnce();
@@ -394,35 +354,6 @@ describe('内容脚本 runtime 消息协议', () => {
         expect(mocks.startSectionTranslationPicker).toHaveBeenCalledTimes(2);
     });
 
-    it('圈选右键命令等待按需挂载结果后如实回复', async () => {
-        const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-        const respond = vi.fn();
-        const handler = createContentRuntimeMessageHandler({} as never, {
-            isSiteDisabled: () => false,
-            updateSiteDisabled: vi.fn(async () => undefined),
-        }, {areaTranslation: true} as never);
-
-        mocks.startAreaTranslationFromContextMenu.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
-            .mockRejectedValueOnce(new Error('mount failed')).mockImplementationOnce(() => { throw new Error('start failed'); });
-        expect(handler({type: 'contextMenuTranslate', action: 'area'}, {}, respond)).toBe(true);
-        await vi.waitFor(() => expect(respond).toHaveBeenLastCalledWith({status: 'success'}));
-        handler({type: 'contextMenuTranslate', action: 'area'}, {}, respond);
-        await vi.waitFor(() => expect(respond).toHaveBeenLastCalledWith({status: 'disabled'}));
-        handler({type: 'contextMenuTranslate', action: 'area'}, {}, respond);
-        await vi.waitFor(() => expect(respond).toHaveBeenLastCalledWith({status: 'failed'}));
-        handler({type: 'contextMenuTranslate', action: 'area'}, {}, respond);
-        await vi.waitFor(() => expect(respond).toHaveBeenCalledTimes(4));
-        expect(respond).toHaveBeenLastCalledWith({status: 'failed'});
-
-        const unsupported = createContentRuntimeMessageHandler({} as never, {
-            isSiteDisabled: () => false,
-            updateSiteDisabled: vi.fn(async () => undefined),
-        }, {areaTranslation: false} as never);
-        unsupported({type: 'contextMenuTranslate', action: 'area'}, {}, respond);
-        expect(respond).toHaveBeenLastCalledWith({status: 'disabled'});
-        expect(mocks.startAreaTranslationFromContextMenu).toHaveBeenCalledTimes(4);
-    });
-
     it('站点停用或总开关关闭时局部翻译请求被拒绝，不进入选择模式', async () => {
         const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
         const respond = vi.fn();
@@ -450,18 +381,14 @@ describe('内容脚本 runtime 消息协议', () => {
         const handler = createContentRuntimeMessageHandler({} as never, {
             isSiteDisabled: () => false,
             updateSiteDisabled: vi.fn(async () => undefined),
-        }, {areaTranslation: true, imageTranslation: true} as never);
+        });
 
         expect(handler({type: 'toggleFloatingBall', isEnabled: true}, {}, respond)).toBe(true);
         expect(handler({type: 'updateSelectionTranslatorMode', mode: 'bilingual'}, {}, respond)).toBe(true);
-        expect(handler({type: 'toggleSelectionAreaTranslator', isEnabled: true}, {}, respond)).toBe(true);
-        expect(handler({type: 'toggleImageTranslator', isEnabled: true}, {}, respond)).toBe(true);
         expect(handler({type: 'toggleTranslationProgressPanel', isEnabled: true}, {}, respond)).toBe(true);
 
         expect(mocks.mountFloatingBall).not.toHaveBeenCalled();
         expect(mocks.mountSelectionTranslator).not.toHaveBeenCalled();
-        expect(mocks.mountAreaTranslator).not.toHaveBeenCalled();
-        expect(mocks.mountImageTranslator).not.toHaveBeenCalled();
         expect(mocks.mountTranslationProgressPanel).not.toHaveBeenCalled();
         expect(handler({type: 'getFullPageTranslationState'}, {}, respond)).toBe(true);
         expect(respond).toHaveBeenLastCalledWith({
@@ -472,8 +399,6 @@ describe('内容脚本 runtime 消息协议', () => {
         expect(mocks.config).toMatchObject({
             disableFloatingBall: false,
             disableSelectionTranslator: false,
-            selectionAreaEnabled: true,
-            disableImageTranslator: false,
             translationProgressPanelEnabled: true,
         });
     });
@@ -481,7 +406,6 @@ describe('内容脚本 runtime 消息协议', () => {
         const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
         const handler = createContentRuntimeMessageHandler({} as never, {isSiteDisabled: () => false, updateSiteDisabled: vi.fn()});
         const respond = vi.fn();
-        mocks.config.harness = {enabled: true};
         handler({type: 'updateSelectionTranslatorMode', mode: 'disabled'}, {}, respond);
         expect(mocks.mountSelectionTranslator).not.toHaveBeenCalled();
         expect(mocks.unmountSelectionTranslator).toHaveBeenCalledOnce();
@@ -489,7 +413,6 @@ describe('内容脚本 runtime 消息协议', () => {
         handler({type: 'updateSelectionTranslatorMode', mode: 'disabled'}, {}, respond);
         expect(mocks.unmountSelectionTranslator).toHaveBeenCalledTimes(2);
         mocks.config.on = true;
-        mocks.config.harness.enabled = false;
         handler({type: 'updateSelectionTranslatorMode', mode: 'disabled'}, {}, respond);
         expect(mocks.unmountSelectionTranslator).toHaveBeenCalledTimes(3);
     });
@@ -857,61 +780,6 @@ describe('read-only exact unchanged query on existing content state channel', ()
         expect(fixture.respond).toHaveBeenCalledWith();
     });
 
-    it('mounts and disables supported area, image and progress features through their own lifecycle ports', async () => {
-        const {resolveBrowserCapabilities} = await import('@/src/platform/browser/capabilities');
-        const fixture = await createQueryFixture({capabilities: resolveBrowserCapabilities({browser: 'chrome', manifestVersion: 3})});
-        for (const type of ['toggleSelectionAreaTranslator', 'toggleImageTranslator', 'toggleTranslationProgressPanel']) {
-            expect(fixture.handler({type, isEnabled: true}, {}, fixture.respond)).toBe(true);
-            expect(fixture.handler({type, isEnabled: false}, {}, fixture.respond)).toBe(true);
-        }
-        expect(mocks.mountAreaTranslator).toHaveBeenCalledOnce();
-        expect(mocks.mountAreaTranslator).toHaveBeenCalledWith(fixture.ctx);
-        expect(mocks.unmountAreaTranslator).toHaveBeenCalledOnce();
-        expect(mocks.mountImageTranslator).toHaveBeenCalledOnce();
-        expect(mocks.unmountImageTranslator).toHaveBeenCalledOnce();
-        expect(mocks.mountTranslationProgressPanel).toHaveBeenCalledOnce();
-        expect(mocks.mountTranslationProgressPanel).toHaveBeenCalledWith(fixture.ctx);
-        expect(mocks.unmountTranslationProgressPanel).toHaveBeenCalledOnce();
-        expect(mocks.config).toMatchObject({selectionAreaEnabled: false, disableImageTranslator: true, translationProgressPanelEnabled: false});
-        expect(fixture.respond).toHaveBeenCalledTimes(6);
-        expect(mocks.sendMessage).not.toHaveBeenCalled();
-    });
-
-    it('rejects unsupported area and image toggles without accepting their enabled preference', async () => {
-        const {resolveBrowserCapabilities} = await import('@/src/platform/browser/capabilities');
-        const fixture = await createQueryFixture({capabilities: resolveBrowserCapabilities({browser: 'unknown', manifestVersion: 2})});
-        expect(fixture.handler({type: 'toggleSelectionAreaTranslator', isEnabled: true}, {}, fixture.respond)).toBe(true);
-        expect(fixture.handler({type: 'toggleImageTranslator', isEnabled: true}, {}, fixture.respond)).toBe(true);
-        expect(mocks.mountAreaTranslator).not.toHaveBeenCalled();
-        expect(mocks.mountImageTranslator).not.toHaveBeenCalled();
-        expect(mocks.unmountAreaTranslator).toHaveBeenCalledOnce();
-        expect(mocks.unmountImageTranslator).toHaveBeenCalledOnce();
-        expect(mocks.config).toEqual(fixture.originalConfig);
-        expect(fixture.respond).toHaveBeenNthCalledWith(1, {status: 'unsupported', error: '当前浏览器暂不支持圈选翻译'});
-        expect(fixture.respond).toHaveBeenNthCalledWith(2, {status: 'unsupported', error: '当前浏览器暂不支持图片翻译与 OCR'});
-    });
-
-    it('reports image context-menu outcomes and skips its feature port when unsupported', async () => {
-        const {resolveBrowserCapabilities} = await import('@/src/platform/browser/capabilities');
-        const fixture = await createQueryFixture({capabilities: resolveBrowserCapabilities({browser: 'chrome', manifestVersion: 3})});
-        const message = {type: 'contextMenuTranslateImage', srcUrl: 'https://example.test/source.png'};
-        mocks.toggleContextMenuImage.mockReturnValueOnce(true).mockReturnValueOnce(false);
-        fixture.handler(message, {}, fixture.respond);
-        fixture.handler(message, {}, fixture.respond);
-        expect(mocks.toggleContextMenuImage).toHaveBeenCalledTimes(2);
-        expect(mocks.toggleContextMenuImage).toHaveBeenCalledWith(message.srcUrl);
-        expect(fixture.respond).toHaveBeenNthCalledWith(1, {status: 'success'});
-        expect(fixture.respond).toHaveBeenNthCalledWith(2, {status: 'failed'});
-        const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-        const unsupported = createContentRuntimeMessageHandler(fixture.ctx, {
-            isSiteDisabled: () => false, updateSiteDisabled: fixture.updateSiteDisabled,
-        }, resolveBrowserCapabilities({browser: 'unknown', manifestVersion: 2}));
-        expect(unsupported(message, {}, fixture.respond)).toBe(true);
-        expect(mocks.toggleContextMenuImage).toHaveBeenCalledTimes(2);
-        expect(fixture.respond).toHaveBeenLastCalledWith({status: 'disabled'});
-        expect(mocks.sendMessage).not.toHaveBeenCalled();
-    });
-
     it.each([
         {action: 'fullPage', active: false, port: 'autoTranslateEnglishPage'},
         {action: 'restore', active: true, port: 'restoreOriginalContent'},
@@ -948,20 +816,6 @@ describe('右键菜单操作反馈', () => {
         expect(mocks.showPageNotice).toHaveBeenCalledOnce();
     });
 
-    it('用户脚本没有原生菜单通知，但保留实时选区消息入口', async () => {
-        vi.stubEnv('BROWSER', 'userscript');
-        try {
-            const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-            const respond = vi.fn();
-            const handler = createContentRuntimeMessageHandler({} as never, {isSiteDisabled: () => false, updateSiteDisabled: vi.fn()});
-            expect(handler({type: 'contextMenuNotice', reason: 'failed'}, {}, respond)).toBe(false);
-            expect(mocks.showPageNotice).not.toHaveBeenCalled();
-            mocks.translateSelectionFromContextMenu.mockReturnValue(true);
-            expect(handler({type: 'contextMenuTranslate', action: 'selection'}, {}, respond)).toBe(true);
-            expect(respond).toHaveBeenCalledWith({status: 'success'});
-            expect(mocks.dismissPageNotice).not.toHaveBeenCalled();
-        } finally {vi.unstubAllEnvs();}
-    });
     it.each(['invalid', 'suspended'])('已失效或挂起的页面 %s 不创建通知', async kind => {
         const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
         const respond = vi.fn();
@@ -982,33 +836,4 @@ describe('右键菜单操作反馈', () => {
         expect(mocks.dismissPageNotice).toHaveBeenCalledWith('context-menu');
     });
 
-});
-
-
-describe('userscript 当前配置页面协调消息', () => {
-    afterEach(() => vi.unstubAllEnvs());
-    it.each(['success', 'failed', 'throws'] as const)('只传无快照消息并明确返回 %s', async result => {
-        vi.stubEnv('BROWSER', 'userscript'); vi.resetModules();
-        const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-        const reconcile = vi.fn(async () => {if (result === 'throws') throw new Error('private fixture'); return result === 'success';});
-        const respond = vi.fn();
-        const handler = createContentRuntimeMessageHandler({isInvalid: false} as never,
-            {isSiteDisabled: () => false, updateSiteDisabled: async () => {}, reconcileUserscriptPage: reconcile});
-        expect(handler({type: 'reconcileUserscriptPage'}, {}, respond)).toBe(true);
-        await vi.waitFor(() => expect(respond).toHaveBeenCalledOnce());
-        expect(reconcile).toHaveBeenCalledWith();
-        expect(respond).toHaveBeenCalledWith({status: result === 'success' ? 'success' : 'failed'});
-        expect(JSON.stringify(respond.mock.calls)).not.toContain('private fixture');
-    });
-    it.each(['invalid', 'disabled', 'suspended', 'missing'] as const)('%s 页面不重新启动功能', async reason => {
-        vi.stubEnv('BROWSER', 'userscript'); vi.resetModules();
-        const {createContentRuntimeMessageHandler} = await import('@/src/app/content/messageRuntime');
-        const reconcile = vi.fn(async () => true), respond = vi.fn();
-        const handler = createContentRuntimeMessageHandler({isInvalid: reason === 'invalid'} as never, {
-            isSiteDisabled: () => reason === 'disabled', isPageSuspended: () => reason === 'suspended',
-            updateSiteDisabled: async () => {}, ...(reason === 'missing' ? {} : {reconcileUserscriptPage: reconcile}),
-        });
-        expect(handler({type: 'reconcileUserscriptPage'}, {}, respond)).toBe(true);
-        expect(respond).toHaveBeenCalledWith({status: 'unavailable'}); expect(reconcile).not.toHaveBeenCalled();
-    });
 });

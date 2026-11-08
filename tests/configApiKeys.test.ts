@@ -9,7 +9,6 @@ import {describe, expect, it} from 'vitest';
 import {computed, effect, reactive, stop} from 'vue';
 import {apiKeysToToken, getServiceApiKeyRows, getServiceApiKeys, normalizeApiKeys} from '@/src/core/config/apiKeys';
 import {createApiKeyCheckRevision} from '@/src/core/config/apiKeyCheckIdentity';
-import {createVisionProbeIdentity} from '@/src/core/config/visionProbe';
 import {normalizeConfig} from '@/src/core/config/model';
 
 describe('多 API Key 配置', () => {
@@ -56,12 +55,11 @@ type KeySource = {apiKeys: Record<string, unknown>; token: Record<string, unknow
 
 // 身份 computed 必须由 effect 消费，不能靠每次断言直接调用函数掩盖失效的订阅。
 function observeKeys(source: KeySource, service = 'deepseek') {
-    const calls = {rows: 0, keys: 0, revision: 0, vision: 0};
+    const calls = {rows: 0, keys: 0, revision: 0};
     const rows = computed(() => {calls.rows++;return getServiceApiKeyRows(source, service);});
     const keys = computed(() => {calls.keys++;return getServiceApiKeys(source, service);});
     const revision = computed(() => {calls.revision++;return createApiKeyCheckRevision(source, service);});
-    const vision = computed(() => {calls.vision++;return createVisionProbeIdentity(source, service, 'future-vision');});
-    const view = computed(() => ({rows: rows.value, keys: keys.value, revision: revision.value, vision: vision.value}));
+    const view = computed(() => ({rows: rows.value, keys: keys.value, revision: revision.value}));
     let observed!: typeof view.value;
     const runner = effect(() => {observed = view.value;});
     return {view, calls, get value() {return observed;}, dispose: () => stop(runner)};
@@ -70,10 +68,7 @@ function observeKeys(source: KeySource, service = 'deepseek') {
 function expectObserved(observation: ReturnType<typeof observeKeys>, rows: string[], keys: string[], service = 'deepseek') {
     // 独立的新普通对象提供 oracle；生产函数计算真实摘要，测试不复制 hash/身份实现。
     const expected = {apiKeys: {[service]: rows}};
-    expect(observation.value).toEqual({rows, keys,
-        revision: createApiKeyCheckRevision(expected, service),
-        vision: createVisionProbeIdentity(expected, service, 'future-vision'),
-    });
+    expect(observation.value).toEqual({rows, keys, revision: createApiKeyCheckRevision(expected, service)});
 }
 
 describe('API Key 首次添加的真实 Vue 响应式身份', () => {
@@ -86,16 +81,13 @@ describe('API Key 首次添加的真实 Vue 响应式身份', () => {
             source[field].deepseek = field === 'apiKeys' ? [' first,key ', '', 'first,key'] : ' first,key ';
             expectObserved(observation, field === 'apiKeys' ? ['first,key', '', 'first,key'] : ['first,key'], ['first,key']);
             expect(observation.value.revision).not.toBe(missing.revision);
-            expect(observation.value.vision).not.toBe(missing.vision);
             const first = observation.value;
             source[field].deepseek = field === 'apiKeys' ? ['second-key'] : 'second-key';
             expectObserved(observation, ['second-key'], ['second-key']);
             expect(observation.value.revision).not.toBe(first.revision);
-            expect(observation.value.vision).not.toBe(first.vision);
             delete source[field].deepseek;
             expectObserved(observation, [], []);
             expect(observation.value.revision).toBe(missing.revision);
-            expect(observation.value.vision).toBe(missing.vision);
             // 换成另一个空 map 后仍需订阅它的首次服务添加。
             source[field] = {};
             source[field].deepseek = field === 'apiKeys' ? ['third-key'] : 'third-key';

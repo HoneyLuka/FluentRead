@@ -125,7 +125,7 @@ const rows = computed(() => {
   const defaultModel = servicesType.isUseModel(config.service) ? resolveConfiguredModel(config.model[config.service], config.customModel[config.service]) : '';
   return fields.map(field => {
     const value = selected(field.feature), service = value || config.service;
-    const model = field.feature?.id === 'reading' ? getFeatureModel(config, field.feature) : !servicesType.isUseModel(service) ? '' : field.feature ? getFeatureModel(config, field.feature)
+    const model = !servicesType.isUseModel(service) ? '' : field.feature ? getFeatureModel(config, field.feature)
       : resolveConfiguredModel(config.model[service], config.customModel[service]);
     const modelLabel = model ? t('featureServices.configuredModel', {model}) : '';
     const selectedLabel = field.feature?.inherit && !value ? t('featureServices.follow', {service: label(config.service)}) : label(service);

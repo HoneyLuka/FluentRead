@@ -1,8 +1,8 @@
 <!--
  @file src/app/options/OptionsApp.vue
- 文件职责：实现扩展 Options 页的顶层布局，组织设置导航、全局搜索结果和学习中心入口，并把选中分区交给对应 feature UI。
- 主要内容：页面名称由 main 辅助技术标签提供，内容直接从统一的紧凑页内导航或表单开始，不再渲染重复页面标题；侧栏展示品牌与多语言宣传语；关于页以随界面语言显示产品名的宽幅品牌介绍、项目链接卡片、开源项目下方的微信交流按钮和独立赞赏区组织内容，联系二维码与赞赏码在当前页弹窗展示；渲染默认展开的分组侧栏、窄屏分类选择和全局搜索，搜索只在同次派生内复用原始查询的小写值和语言入口判断，语言恢复查询优先展示现有软件语言入口并定位选择控件；普通设置连续展示并提供顶部滚动定位导航，统计保留任务视图切换，智能高亮锚点及搜索入口随脚本版能力隐藏，服务目录使用完整工作区，复用 settingsNavigation 的项目解析/过滤逻辑，在 SettingsSections 与 LearningCenter 之间切换并重置内容区滚动，通过当前导航 getter 向迟到学习面板提供可见性，同步 URL hash 的深链接与前进后退导航，URL 目标仅接受当前分区登记的具体设置或可用分类并复用已有滚动定位，兼容模型用量迁入翻译统计后的旧链接；界面根节点注册在卸载时只释放本页面句柄。
- 模块边界：组件负责页面壳、导航状态和主题、界面皮肤根属性同步，不定义具体配置字段、不直接写 browser.storage，也不实现词汇仓库；设置表单、收藏与阅读记录业务由各 feature 组件拥有；学习栏目加载失败的重载动作在普通设置页保留栏目参数，页内设置只重载宿主文档。
+ 文件职责：实现扩展 Options 页的顶层布局，组织设置导航与全局搜索结果，并把选中分区交给对应 feature UI。
+ 主要内容：页面名称由 main 辅助技术标签提供，内容直接从统一的紧凑页内导航或表单开始，不再渲染重复页面标题；侧栏展示品牌与多语言宣传语；关于页以随界面语言显示产品名的宽幅品牌介绍、项目链接卡片、开源项目下方的微信交流按钮和独立赞赏区组织内容，联系二维码与赞赏码在当前页弹窗展示；渲染默认展开的分组侧栏、窄屏分类选择和全局搜索，搜索只在同次派生内复用原始查询的小写值和语言入口判断，语言恢复查询优先展示现有软件语言入口并定位选择控件；普通设置连续展示并提供顶部滚动定位导航，统计保留任务视图切换，服务目录使用完整工作区，复用 settingsNavigation 的项目解析/过滤逻辑，同步 URL hash 的深链接与前进后退导航，URL 目标仅接受当前分区登记的具体设置或可用分类并复用已有滚动定位，兼容模型用量迁入翻译统计后的旧链接；界面根节点注册在卸载时只释放本页面句柄。
+ 模块边界：组件负责页面壳、导航状态和主题、界面皮肤根属性同步，不定义具体配置字段、不直接写 browser.storage，也不实现翻译或站点规则业务；设置表单由各 feature 组件拥有。
 -->
 <template>
   <div class="settings-app" :class="{'has-overlay-close': Boolean(props.onClose)}">
@@ -49,12 +49,12 @@
     </aside>
 
     <main class="workspace" :aria-label="activeItem.title">
-      <header v-show="((activePanels.length || hasSectionAnchors) && !userscriptUnavailableSection) || props.onClose" class="topbar">
-        <nav v-if="activePanels.length && !userscriptUnavailableSection" class="settings-page-tabs settings-subnavigation" :aria-label="t('options.categories')">
+      <header v-show="(activePanels.length || hasSectionAnchors) || props.onClose" class="topbar">
+        <nav v-if="activePanels.length" class="settings-page-tabs settings-subnavigation" :aria-label="t('options.categories')">
         <button v-for="panel in activePanels" :key="panel.id" type="button" :data-settings-category="panel.id" :aria-current="activePanel === panel.id ? 'true' : undefined" @click="selectPanel(panel.id)">{{ t(panel.labelKey) }}</button>
       </nav>
         <SettingsSectionNavigation
-          v-else-if="!userscriptUnavailableSection"
+          v-else
           ref="sectionNavigationElement"
           :container="settingsContentElement"
           :section-id="activeSection"
@@ -76,13 +76,9 @@
 
 
 
-      <section ref="settingsContentElement" class="settings-card" :class="{ 'services-view': activeSection === 'settings-services', 'translation-center-view': activeSection === 'settings-translation-center', 'vocabulary-view': activeSection === 'settings-vocabulary' }" :aria-label="activeItem.heading">
+      <section ref="settingsContentElement" class="settings-card" :class="{ 'services-view': activeSection === 'settings-services' }" :aria-label="activeItem.heading">
         <KeepAlive>
-        <section v-if="userscriptUnavailableSection" :id="activeSection" class="userscript-unavailable" role="status">
-          <h2>{{ t('options.userscriptUnavailableTitle') }}</h2>
-          <p>{{ t('options.userscriptUnavailableDescription') }}</p>
-        </section>
-        <section v-else-if="activeSection === 'settings-about'" id="settings-about" class="about-page" :aria-label="t('options.aboutTitle')">
+        <section v-if="activeSection === 'settings-about'" id="settings-about" class="about-page" :aria-label="t('options.aboutTitle')">
           <header class="about-hero">
             <div class="about-intro">
               <div class="about-identity">
@@ -144,10 +140,9 @@
           </div>
 
         </section>
-          <component
+          <SettingsSections
             v-else
-            :is="activeSection === 'settings-vocabulary' ? LearningCenter : SettingsSections"
-            :key="activeSection === 'settings-vocabulary' ? 'learning' : 'settings'"
+            key="settings"
             v-bind="contentComponentProps"
           />
         </KeepAlive>
@@ -186,7 +181,6 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import SettingsNavigationIcon from '@/src/features/settings/ui/SettingsNavigationIcon.vue'
 import SettingsSectionNavigation from '@/src/features/settings/ui/components/SettingsSectionNavigation.vue'
 const SettingsSections = defineAsyncComponent(() => import('@/src/features/settings/ui/SettingsSections.vue'))
-const LearningCenter = defineAsyncComponent(() => import('@/src/features/settings/ui/LearningCenter.vue'))
 import {useUiI18n} from '@/src/ui/i18n'
 import {
   navigationGroups,
@@ -200,7 +194,6 @@ import {
   subscribeConfig,
 } from '@/src/services/config/store'
 import {applyInterfaceFont, applyInterfaceSkin, applyInterfaceTheme, registerInterfaceAppearanceRoot} from '@/src/ui/interfaceAppearance'
-import {browserCapabilities} from '@/src/platform/browser/capabilities'
 
 const props = defineProps<{
   appearanceRoot?: HTMLElement | null
@@ -213,8 +206,8 @@ const props = defineProps<{
 let disposed = false
 const version = process.env.VUE_APP_VERSION
 const websiteUrl = 'https://read.thinkstu.com'
-const iconUrl = globalThis.__FLUENTREAD_ICON_DATA__ || '/icon/128.png'
-const approveUrl = globalThis.__FLUENTREAD_APPROVE_DATA__ || '/misc/approve.jpg'
+const iconUrl = '/icon/128.png'
+const approveUrl = '/misc/approve.jpg'
 const approvePreviewVisible = ref(false)
 const qrPreviewUrl = ref<string>()
 const approvePreviewTrigger = ref<HTMLButtonElement | null>(null)
@@ -262,25 +255,13 @@ function toggleGroup(index: number): void {
   expandedGroups.value = next
 }
 const selectedPanels = ref<Record<string, string>>({[activeSection.value]: resolveSettingsPanel(initialDestination)})
-const informationHighlightAvailable = import.meta.env.BROWSER !== 'userscript' && browserCapabilities.browser !== 'userscript'
-const isAvailableSettingsEntry = (entry: {id: string}) => entry.id !== 'information-highlight' || informationHighlightAvailable
 const sectionPanels = computed(() => (settingsPagePanels[activeSection.value] || [])
-  .filter(isAvailableSettingsEntry))
+  .filter(() => true))
 const activePanels = computed(() => SETTINGS_TABBED_SECTION_IDS.has(activeSection.value) ? settingsPagePanels[activeSection.value] : [])
 const activePanel = computed(() => resolveSettingsPanel(activeSection.value, selectedPanels.value[activeSection.value]))
 function selectPanel(id: string): void {
   selectSection(activeSection.value, id)
 }
-const userscriptUnavailableSections = new Set([
-  'settings-image-translation',
-  'settings-area-translation',
-  'settings-video',
-  'settings-writing',
-  'settings-translation-stats',
-  'settings-model-usage',
-])
-const userscriptUnavailableSection = computed(() => browserCapabilities.browser === 'userscript'
-  && userscriptUnavailableSections.has(activeSection.value))
 const navigationElement = ref<HTMLElement | null>(null)
 const settingsContentElement = ref<HTMLElement | null>(null)
 const hasSectionAnchors = ref(false)
@@ -300,26 +281,14 @@ let cancelPendingSearchReveal: (() => void) | null = null
 const releaseInterfaceAppearanceRoot = props.appearanceRoot ? registerInterfaceAppearanceRoot(props.appearanceRoot) : () => {}
 
 const navigation = navigationItems
-function reloadLearningPage(tab: string): void {
-  if (props.locationRouting !== 'internal') {
-    const url = new URL(window.location.href)
-    url.searchParams.set('learningTab', tab)
-    window.history.replaceState(window.history.state, '', url)
-  }
-  window.location.reload()
-}
-// getter 在旧 KeepAlive VNode 中仍读取当前导航，异步面板迟到挂载时不会使用过期的布尔快照。
-function isLearningVisible(): boolean {return activeSection.value === 'settings-vocabulary'}
-const contentComponentProps = computed(() => activeSection.value === 'settings-vocabulary'
-  ? {onNavigate: selectSection, onReload: reloadLearningPage, isVisible: isLearningVisible, initialTab: new URLSearchParams(window.location.search).get('learningTab') || 'saved'}
-  : {
-      activeSection: activeSection.value,
-      activePanel: activePanels.value.length ? activePanel.value : undefined,
-      appearanceRoot: props.appearanceRoot,
-      queryRoot: props.queryRoot,
-      settingsHashPrefix: props.settingsHashPrefix,
-      onNavigateSection: selectSection,
-    })
+const contentComponentProps = computed(() => ({
+  activeSection: activeSection.value,
+  activePanel: activePanels.value.length ? activePanel.value : undefined,
+  appearanceRoot: props.appearanceRoot,
+  queryRoot: props.queryRoot,
+  settingsHashPrefix: props.settingsHashPrefix,
+  onNavigateSection: selectSection,
+}))
 const localizedNavigationGroups = computed(() => navigationGroups.map((group) => ({
   ...group,
   label: translateLegacy(group.label),
@@ -338,9 +307,9 @@ const localizedNavigationGroups = computed(() => navigationGroups.map((group) =>
   })),
 })))
 const localizedNavigationItems = computed(() => localizedNavigationGroups.value.flatMap((group) => group.items))
-const localizedSearchTargets = computed(() => settingsSearchTargets.filter(isAvailableSettingsEntry).map((target) => ({
+const localizedSearchTargets = computed(() => settingsSearchTargets.map((target) => ({
   ...target,
-  label: target.id === 'information-highlight' ? t('informationHighlight.title') : translateLegacy(target.label),
+  label: translateLegacy(target.label),
   description: translateLegacy(target.description),
   searchTerms: `${target.label} ${target.searchTerms}`,
 })))
@@ -374,7 +343,7 @@ const filteredResults = computed<SearchResult[]>(() => {
   const languageSearch = isUiLanguageSearch(searchQuery)
   const results: SearchResult[] = [
     ...Object.entries(settingsPagePanels).flatMap(([sectionId, panels]) => panels
-      .filter(panel => isAvailableSettingsEntry(panel) && searchQuery && `${t(panel.labelKey)} ${panel.searchTerms}`.toLocaleLowerCase().includes(keyword))
+      .filter(panel => searchQuery && `${t(panel.labelKey)} ${panel.searchTerms}`.toLocaleLowerCase().includes(keyword))
       .map(panel => ({id: `${sectionId}/${panel.id}`, sectionId, panelId: panel.id, label: t(panel.labelKey), searchDescription: localizedNavigationItems.value.find(item => item.id === sectionId)?.label ?? ''}))),
     ...filterSettingsSearchTargets(searchQuery, localizedSearchTargets.value).map(target => ({
       id: target.id,
@@ -523,7 +492,7 @@ function syncSectionFromHash() {
   const targetId = new URLSearchParams(window.location.search).get('target')
   // 优先具体设置，再接受当前分区已登记且可用的分类；URL 永远不能成为任意 CSS 或跨分区目标。
   const target = localizedSearchTargets.value.find(item => item.sectionId === section && item.targetId === targetId)
-  const panel = settingsPagePanels[section]?.find(item => item.id === targetId && isAvailableSettingsEntry(item))
+  const panel = settingsPagePanels[section]?.find(item => item.id === targetId)
   selectSection(requested, target?.targetId ?? panel?.id)
 }
 

@@ -97,10 +97,7 @@ function subject(lossPoint: LossPoint, options: RecoveryOptions = {}) {
         const ownedPlayer = player;
         disposers.push(() => ownedPlayer.dispose());
         receiver = createOffscreenMessageListener({runtimeId, ttsPlayer: player,
-            translate: async () => {throw new Error('unexpected translation');},
-            fetchImage: async () => {throw new Error('unexpected fetch');},
-            translateImage: async () => {throw new Error('unexpected OCR');},
-            translateArea: async () => {throw new Error('unexpected area');}, downloadOcrLanguages: async () => undefined});
+            translate: async () => {throw new Error('unexpected translation');}});
         receivers.push(receiver);
     };
     installReceiver();

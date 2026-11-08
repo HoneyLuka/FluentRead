@@ -1,7 +1,7 @@
 <!--
  * @file src/features/settings/ui/SelectionSettings.vue
- * 文件职责：作为统一划词翻译的设置入口，说明翻译卡片与按需学习，并提供即时预览。
- * 主要内容：用共享预览布局说明卡片的单词与句子效果，以单行选择器提供默认自动与指定词典来源，组织触发、AI 学习与朗读分区及页内导航；再启用时检查保留的点选快捷键，避免静默丢失入口；预览与来源选择不发送查询请求。
+ * 文件职责：作为统一划词翻译的设置入口，说明翻译卡片与词典，并提供即时预览。
+ * 主要内容：用共享预览布局说明卡片的单词效果，以单行选择器提供默认自动与指定词典来源，组织触发与朗读分区；再启用时检查保留的点选快捷键，避免静默丢失入口；预览与来源选择不发送查询请求。
  * 模块边界：仅编辑父级配置副本，沿用 SettingsSections 的保存和快捷键校验；不建立第二份存储或调用供应商。
  -->
 <template>
@@ -15,14 +15,9 @@
           <p class="selection-mode-note">{{ t('featureServices.selectionHint') }}</p>
         </div>
         <template #preview><div class="selection-preview">
-          <div class="selection-preview-tabs" role="group" aria-label="预览内容">
-            <button type="button" :aria-pressed="!sentence" @click="sentence = false">单词</button>
-            <button type="button" :aria-pressed="sentence" @click="sentence = true">句子</button>
-          </div>
-          <div class="selection-preview-source" data-i18n-ignore>{{ sentence ? sentenceSource : 'curious' }}</div>
-          <div class="selection-preview-translation" data-i18n-ignore>{{ sentence ? sentenceTranslation : '好奇的；求知欲强的' }}</div>
-            <div v-if="!sentence" class="selection-preview-word" data-i18n-ignore><span class="selection-pos">形容词 · adj.</span><span data-i18n-ignore>/ˈkjʊəriəs/</span><p data-i18n-ignore>Eager to know or learn something.</p><small>想了解或学习某事；在这里描述读者的求知欲。</small></div>
-            <ReadingAnswer v-else :text="sentenceAnalysis" :source-text="sentenceSource" />
+          <div class="selection-preview-source" data-i18n-ignore>curious</div>
+          <div class="selection-preview-translation" data-i18n-ignore>好奇的；求知欲强的</div>
+            <div class="selection-preview-word" data-i18n-ignore><span class="selection-pos">形容词 · adj.</span><span data-i18n-ignore>/ˈkjʊəriəs/</span><p data-i18n-ignore>Eager to know or learn something.</p><small>想了解或学习某事；在这里描述读者的求知欲。</small></div>
         </div></template>
       </SettingsPreviewLayout>
       <SettingsItem :label="t('selection.dictionary.source')" :help="t('selection.dictionary.help')" data-settings-anchor="dictionary" :data-settings-anchor-label="t('selection.dictionary.source')">
@@ -32,7 +27,6 @@
       </SettingsItem>
     </SettingsGroup>
     <slot />
-    <HarnessSettings :config="config" @navigate="emit('navigate', $event)" />
     <div data-settings-anchor="speech" data-settings-anchor-label="朗读设置"><slot name="advanced" /></div>
   </div>
 </template>
@@ -50,12 +44,7 @@ import SettingsGroup from './components/SettingsGroup.vue';
 import SettingsItem from './components/SettingsItem.vue';
 import SettingsPreviewLayout from './components/SettingsPreviewLayout.vue';
 import UiSelect from '@/src/ui/components/UiSelect.vue';
-import HarnessSettings from './HarnessSettings.vue';
-import {sentenceAnalysis, sentenceSource, sentenceTranslation} from '@/src/core/config/selectionPreview';
-import {ReadingAnswer} from '@/src/features/reading-assistant/ui/answer/public';
 const props = defineProps<{config: Config}>();
-const emit = defineEmits<{navigate: [section: string]}>();
-const sentence = ref(false);
 const dictionarySourceOptions = computed(() => WORD_DICTIONARY_SOURCE_OPTIONS.map(option => ({
   value: option.value,
   label: option.value === 'auto' ? t('selection.dictionary.auto')

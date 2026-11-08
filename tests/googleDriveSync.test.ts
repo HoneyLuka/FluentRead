@@ -17,7 +17,7 @@ function fixture() {
     let account = owner;
     let clock = 1000;
     const session = () => ({account, request: async <T>(operation: (token: string) => Promise<T>) => operation('fixture-auth-token')});
-    const ports: DriveSyncPorts = {
+    const ports: Omit<DriveSyncPorts, 'accountChangedError'> = {
         auth: {availability: vi.fn(() => ({available: true, reason: ''})), open: vi.fn(async () => session()), disconnect: vi.fn(async () => undefined)},
         api: {
             read: vi.fn(async () => remote),
@@ -38,6 +38,16 @@ async function synced() {
     return f;
 }
 describe('Google Drive 同步事务', () => {
+    it('取消标签页会中止该页等待中的同步准备，不影响其他页面', async () => {
+        const f = fixture();
+        f.ports.auth.open = vi.fn(() => new Promise<never>(() => undefined));
+        const first = f.service.prepare(password, 7, 'a');
+        f.service.cancel(undefined, 7, 'a');
+        await expect(first).rejects.toThrow();
+        const second = f.service.prepare(password, 8, 'b');
+        f.service.cancel(undefined, undefined, 'b');
+        await expect(second).rejects.toThrow();
+    });
     it('恢复缺失网站规则的旧普通备份时保留本机规则，云端文件不被重写', async () => {
         const f = fixture();
         f.local = config({...f.local, siteAdaptation: {...new Config().siteAdaptation, disabledRuleIds: ['reddit']}});
@@ -422,7 +432,7 @@ describe('Google Drive 同步事务', () => {
         const preview = await f.service.prepare(password, undefined, undefined, true);
         const state = f.state as DriveSyncState;
         const saved = await decryptDriveConfig(state.prepared!.content, password) as {local: Record<string, unknown>};
-        saved.local = {...saved.local, documentService: 'custom:missing'};
+        saved.local = {...saved.local, hoverTranslationService: 'custom:missing'};
         state.prepared!.content = await encryptDriveConfig(saved, password);
         await expect(createGoogleDriveSync(f.ports).commit(preview.id, password, 'upload', {})).rejects.toThrow('不存在');
         expect(f.ports.api.write).not.toHaveBeenCalled();

@@ -7,7 +7,6 @@ import {UI_LANGUAGE_OPTIONS} from '@/src/core/i18n/language';
 import {createExtensionMetadataLocaleFiles} from '@/src/core/i18n/bundles';
 import productDescriptions from '@/src/core/i18n/messages/product-descriptions.json';
 import brandTaglines from '@/src/core/i18n/messages/brand-taglines.json';
-import {createUserscriptMetadata} from '@/userscript/metadata';
 
 const root = resolve(__dirname, '..');
 const read = (file: string) => readFileSync(resolve(root, file), 'utf8');
@@ -39,20 +38,6 @@ describe('localized installation and publication descriptions', () => {
             expect(description).not.toMatch(/[\r\n]|__MSG_|\{\w+\}/u);
             expect(description).not.toBe(brandTaglines[language as keyof typeof brandTaglines]);
         }
-    });
-
-    it('keeps userscript installation identity while providing localized functional descriptions', () => {
-        const metadata = createUserscriptMetadata({version: '2.0.2'});
-        expect(metadata).toContain('// @name         FluentRead-流畅阅读\n');
-        expect(metadata).toContain('// @namespace    https://fr.unmeta.cn/\n');
-        expect(metadata).toContain(`// @description  ${productDescriptions['en-US']}\n`);
-        expect(metadata).toContain(`// @description:zh ${productDescriptions['zh-CN']}\n`);
-        for (const [language, description] of Object.entries(productDescriptions)) {
-            const locale = language === 'zh-CN' ? language : language.split('-')[0];
-            expect(metadata).toContain(`// @description:${locale} ${description}\n`);
-        }
-        const directives = metadata.match(/^\/\/ @description(?::[^ ]+)? /gmu);
-        expect(directives).toHaveLength(UI_LANGUAGE_OPTIONS.length + 2);
     });
 
     it('keeps English and Chinese store short descriptions in the listing language', () => {

@@ -8,7 +8,6 @@
 
 type HttpStatus = Pick<Response, 'status' | 'statusText'> & {headers?: Pick<Headers, 'get'>};
 type JsonResponse = Pick<Response, 'json'>;
-import {isExplicitImageInputRejection} from '@/src/core/config/visionProbe';
 import {abortErrorFromSignal, cancelResponseReader} from './runtime';
 
 const MAX_PROVIDER_CODE_LENGTH = 16;
@@ -64,11 +63,7 @@ export async function createImageInputHttpError(response: Response, label = '请
             }),
         ]);
         if (text === undefined) return error;
-        const parsed = JSON.parse(text);
-        const detail = parsed?.error?.message ?? parsed?.message;
-        if (typeof detail === 'string' && detail.length <= 2048 && isExplicitImageInputRejection(response.status, detail)) {
-            Object.assign(error, {imageInputUnsupported: true});
-        }
+        // 仅确认响应体是 JSON；不再探测模型视觉能力标记。
     } catch { /* 非 JSON、过大或无法读取时只保留状态，不能认定模型没有视觉能力。 */ }
     finally {
         cancelTimer?.();

@@ -1,8 +1,8 @@
 /**
  * @file tests/selectionTranslatorLifecycle.test.ts
  * 文件职责：执行划词组件的实际挂载与卸载回调，验证两点选取入口可用性、开放 Shadow DOM 编辑边界及完成首帧与延迟滚动的竞态、扩展消息端口撤销、Safari 自有追问焦点的有限键盘/旋转平移窗口与主动滚动收卡边界。
- * 主要内容：覆盖注销清理、原生右键菜单选区恢复与重复翻译复用、免费讲解明确启用及保存确认、用户 AI 偏好保护、关闭/换区/卸载后的迟到保存隔离、朗读生成与降级、取消、迟到响应、进度隔离和富文本 trim 后的 UTF-16 跟读偏移、顶栏菜单外点/焦点关闭边界、导航空白拖动、按配置与显式反向请求确定翻译语言和窗口尺寸变化清理、鉴权配置动作归属；可选真实 SFC 模板模式验证两处错误入口与极矮视口下同一卡片的滚动退化及关闭，并组合实际 selection runtime 验证 Safari 已消费选区的 host 恢复、正文失效及离开清理。
- * 模块边界：默认从正常 Vite 管线导入真实 SFC setup 并使用原有空渲染；材料捕获使用真实代次冻结与完成逻辑，只替换来源提取和后台客户端；入口可选原始客户端模板和独立 Linkedom 节点树；不再运行匿名编译的组件副本；组合模式将真实组件交给原始 runtime 的平台挂载端口，浏览器、子组件与语言是受控 ports，不声称 CSS、原生焦点或真实浏览器验证。
+ * 主要内容：覆盖注销清理、原生右键菜单选区恢复与重复翻译复用、关闭/换区/卸载后的迟到响应隔离、朗读生成与降级、取消、进度隔离和富文本 trim 后的 UTF-16 跟读偏移、顶栏菜单外点/焦点关闭边界、导航空白拖动、按配置与显式反向请求确定翻译语言和窗口尺寸变化清理、鉴权配置动作归属；可选真实 SFC 模板模式验证两处错误入口与极矮视口下同一卡片的滚动退化及关闭，并组合实际 selection runtime 验证 Safari 已消费选区的 host 恢复、正文失效及离开清理。
+ * 模块边界：默认从正常 Vite 管线导入真实 SFC setup 并使用原有空渲染；入口可选原始客户端模板和独立 Linkedom 节点树，不再运行匿名编译的组件副本；组合模式将真实组件交给原始 runtime 的平台挂载端口，浏览器、子组件与语言是受控 ports，不声称 CSS、原生焦点或真实浏览器验证。
  */
 import {readFileSync} from 'node:fs';
 import {afterEach, describe, expect, it, vi, type MockInstance} from 'vitest';
@@ -13,18 +13,13 @@ import SelectionTranslator from '@/src/features/selection-translation/ui/Selecti
 import {Config} from '@/src/core/config/model';
 import * as selectionCore from '@/src/features/selection-translation/core';
 import * as translationErrors from '@/src/services/translation/errors';
-import * as harness from '@/src/core/config/harness';
 import * as clickSelectionConfig from '@/src/core/config/clickSelection';
 import * as clickSelectionRuntime from '@/src/features/selection-translation/content/clickSelection';
-import {services} from '@/src/core/config/catalog';
-import * as vocabularyProtocol from '@/src/features/vocabulary/protocol';
 import * as visualViewport from '@/src/platform/dom/visualViewport';
 import * as selectionZoom from '@/src/features/selection-translation/pageZoom';
 import * as modalDialogHost from '@/src/features/selection-translation/content/modalDialogHost';
-import {beginMaterialCapture as beginCapture, completeMaterialCapture as completeCapture, type MaterialSelection} from '@/src/features/vocabulary/materialCapture';
-import {observeNativePdfSelectionCard} from '@/src/app/selection/cardVisibility';
 
-const selectionPorts = vi.hoisted(() => ({modules: {} as Record<string, any>, readingControls:false, evidence:undefined as any, shareMounted:false, share:vi.fn()}));
+const selectionPorts = vi.hoisted(() => ({modules: {} as Record<string, any>}));
 vi.mock('webextension-polyfill', () => ({default: {
     get runtime() {return selectionPorts.modules['webextension-polyfill']?.runtime;},
     get extension() {return selectionPorts.modules['webextension-polyfill']?.extension;},
@@ -40,31 +35,11 @@ vi.mock('@/src/services/translation/client', () => ({
     translateText: (...args: unknown[]) => selectionPorts.modules['@/src/services/translation/client'].translateText(...args),
     translateTextBatch: (...args: unknown[]) => selectionPorts.modules['@/src/services/translation/client'].translateTextBatch(...args),
 }));
-vi.mock('@/src/features/reading-assistant/public', () => ({createReadingEvidenceAnchor: (_range:unknown,_selection:unknown,options:any) => {const anchor={locate:vi.fn(()=>'located'),check:vi.fn(()=>'available'),suspend:vi.fn(),clear:vi.fn(),dispose:vi.fn(),invalidate:options.onInvalidate};selectionPorts.evidence=anchor;return anchor}, captureReadingSelection: () => undefined}));
-vi.mock('@/src/features/reading-assistant/ui/panel/public', () => ({ReadingPanel: {
-    props:['initialAction','historyOnly','sourceTranslation','clearEvidence','checkEvidence','locateEvidence','sourceRevision'],emits:['view-change','play-source','source-change'],
-    setup:(props:any,{emit}:any)=>()=>selectionPorts.readingControls?Vue.h('div',{'data-reading-port':'','data-history':String(props.historyOnly),'data-revision':props.sourceRevision},[
-        Vue.h('button',{'data-reading-check':'',onClick:()=>props.checkEvidence()},'Check source'),
-        Vue.h('button',{'data-reading-locate':'',onClick:()=>props.locateEvidence('source quote')},'Locate source'),
-        Vue.h('button',{'data-reading-clear':'',onClick:()=>props.clearEvidence()},'Clear source'),
-        Vue.h('button',{'data-reading-view':'',onClick:()=>emit('view-change',{action:'grammar',history:false})},'Grammar view'),
-        Vue.h('button',{'data-reading-play':'',onClick:()=>emit('play-source',props.sourceTranslation.source)},'Play source'),
-        Vue.h('button',{'data-reading-change':'',onClick:()=>emit('source-change')},'Source changed'),
-    ]):null,
-}}));
 vi.mock('@/src/features/selection-translation/ui/SpeechFollowText.vue', () => ({default: {props: ['text'], setup: (props: {text: string}) => () => Vue.h('span', props.text)}}));
-vi.mock('@/src/features/vocabulary/material/public', () => ({
-    captureMaterialSelection: (...args: unknown[]) => selectionPorts.modules['@/src/features/vocabulary/material/public'].captureMaterialSelection(...args),
-    beginMaterialCapture: (...args: unknown[]) => selectionPorts.modules['@/src/features/vocabulary/material/public'].beginMaterialCapture(...args),
-    completeMaterialCapture: (...args: unknown[]) => selectionPorts.modules['@/src/features/vocabulary/material/public'].completeMaterialCapture(...args),
-}));
-vi.mock('@/src/features/share-card/public', () => ({isShareCardMounted: () => selectionPorts.shareMounted, openShareCard:selectionPorts.share}));
 vi.mock('@/src/features/selection-translation/content/selectionTtsContentController', () => ({createSelectionTtsContentController: (...args: unknown[]) => selectionPorts.modules['@/src/features/selection-translation/content/selectionTtsContentController'].createSelectionTtsContentController(...args)}));
 vi.mock('@/src/features/selection-translation/content/contextMenuBridge', () => ({setSelectionContextMenuHandler: (...args: unknown[]) => selectionPorts.modules['@/src/features/selection-translation/content/contextMenuBridge'].setSelectionContextMenuHandler(...args)}));
 vi.mock('@/src/features/selection-translation/pageZoom', async original => ({...await original<typeof import('@/src/features/selection-translation/pageZoom')>(), normalizeSelectionPageZoom: () => 1}));
 vi.mock('@/src/ui/i18n', () => ({useUiI18n: () => ({t: (key: string) => key, translateLegacy: (text: string) => text})}));
-const materialPorts = vi.hoisted(() => ({generation: vi.fn(), capture: vi.fn()}));
-vi.mock('@/src/features/vocabulary/materialClient', () => ({materialGeneration: materialPorts.generation, materialCapture: materialPorts.capture}));
 const {createSelectionTtsContentController} = await vi.importActual<typeof import('@/src/features/selection-translation/content/selectionTtsContentController')>('@/src/features/selection-translation/content/selectionTtsContentController');
 const {setSelectionContextMenuHandler, translateSelectionFromContextMenu: translateSelectionThroughBridge} = await vi.importActual<typeof import('@/src/features/selection-translation/content/contextMenuBridge')>('@/src/features/selection-translation/content/contextMenuBridge');
 type SelectionBuildTarget = 'chrome' | 'userscript' | 'safari' | 'firefox';
@@ -128,7 +103,7 @@ function createSelectionTemplatePort() {
 }
 
 let app: Vue.App | undefined;
-afterEach(() => { app?.unmount(); app = undefined; selectionPorts.readingControls=false;selectionPorts.shareMounted=false;selectionPorts.share.mockClear();vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+afterEach(() => { app?.unmount(); app = undefined; vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 function mountSelection(privateContext = false, selectionAdapter?: Record<string, unknown>,
     targetOrProps: SelectionBuildTarget | Record<string, unknown> = 'chrome', readyOrTemplate: Promise<void> | boolean = Promise.resolve(),
@@ -190,21 +165,12 @@ function mountSelection(privateContext = false, selectionAdapter?: Record<string
         return releaseContextMenu;
     });
     const translateText = vi.fn().mockResolvedValue('这是译文'), translateTextBatch = vi.fn();
-    // 来源提取用受控 Range 端口；冻结代次及完成关联运行真实公共逻辑。
-    materialPorts.generation.mockReset().mockResolvedValue(17);
-    materialPorts.capture.mockReset().mockResolvedValue({id: 'material-fixture'});
-    const captureMaterialSelection = vi.fn((_range: Range, quote: string): MaterialSelection => ({
-        source: {kind: 'article', url: 'https://example.test/article', title: 'Selected article'}, locator: {kind: 'text', quote},
-    }));
-    const beginMaterialCapture = vi.fn(beginCapture), completeMaterialCapture = vi.fn(completeCapture);
-    const material = {captureMaterialSelection, beginMaterialCapture, completeMaterialCapture};
     let stopTts: MockInstance<(notifyRemote?: boolean) => void>;
     let ttsRequestId = 0;
     const modules: Record<string, unknown> = {
         'webextension-polyfill': browser,
         '@/src/services/config/store': {config, configReady, requestConfigPatch, subscribeConfig: (listener: () => void) => { configListener = listener; return unsubscribeConfig; }},
         '@/src/services/translation/client': {translateText, translateTextBatch},
-        '@/src/features/vocabulary/material/public': material,
         '@/src/features/selection-translation/content/selectionTtsContentController': {
             createSelectionTtsContentController: (dependencies: Parameters<typeof createSelectionTtsContentController>[0]) => {
                 const controller = createSelectionTtsContentController({
@@ -257,10 +223,9 @@ function mountSelection(privateContext = false, selectionAdapter?: Record<string
         if (!result) throw new Error('Test source must create a real selection snapshot');
         return result;
     };
-    return {get state() {return state;}, event, browser, config, listeners, window, document, material, unsubscribeConfig, requestConfigPatch, notifyConfig, releaseContextMenu, translateText, translateTextBatch, stopTts: stopTts!, selectedSnapshot,
+    return {get state() {return state;}, event, browser, config, listeners, window, document, unsubscribeConfig, requestConfigPatch, notifyConfig, releaseContextMenu, translateText, translateTextBatch, stopTts: stopTts!, selectedSnapshot,
         component, mountActual,
         registerContextMenu, get contextMenuHandler() {return contextMenuHandler;},
-        captureMaterialSelection, beginMaterialCapture, completeMaterialCapture, materialGeneration: materialPorts.generation, materialCapture: materialPorts.capture,
         lifecycleErrors, renderPort, unmount: () => { currentApp?.unmount(); app = undefined; }};
 }
 
@@ -497,380 +462,6 @@ describe('completed two-click selection first-frame scroll ordering', () => {
     });
 });
 
-describe('native PDF result window follows shared card dismissal', () => {
-    it.each(['Control', 'contextMenu'])('closes the result owner when the real shared card hides after switching to %s', async trigger => {
-        const focusedDismiss = vi.fn();
-        const fixture = mountSelection(false, {acceptsRange: () => true}, {onFocusedCardDismiss: focusedDismiss}, true);
-        const port = fixture.renderPort!;
-        vi.stubGlobal('MutationObserver', port.domWindow.MutationObserver);
-        const root = port.root.querySelector<HTMLElement>('.fr-selection-translator-root')!;
-        let stop = () => {};
-        const dismiss = vi.fn(() => {stop(); fixture.unmount();});
-        stop = observeNativePdfSelectionCard(root, dismiss);
-        const text = 'Selected native PDF passage.';
-        fixture.state.snapshot = {text, parts: [{kind: 'text', text}], range: {}};
-        fixture.state.selectedText = text;
-        fixture.state.manuallyRequestedSelection = true;
-        fixture.state.translationResult = 'A completed translation';
-        fixture.state.showTooltip = true;
-        await Vue.nextTick(); await Promise.resolve();
-        expect(root.querySelector('.fr-translation-tooltip')).not.toBeNull();
-        expect(dismiss).not.toHaveBeenCalled();
-        fixture.config.selectionTranslatorTrigger = trigger;
-        fixture.notifyConfig();
-        await Vue.nextTick(); await Promise.resolve();
-        expect(dismiss).toHaveBeenCalledOnce();
-        expect(focusedDismiss).not.toHaveBeenCalled();
-        expect(port.root.querySelector('.fr-translation-tooltip')).toBeNull();
-        expect(fixture.unsubscribeConfig).toHaveBeenCalledOnce();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-});
-
-describe('explicit free selection explanation', () => {
-    function prepare(configReady?: Promise<void>, browserTarget: SelectionBuildTarget = 'chrome') {
-        const text = 'Practice makes progress.';
-        const captureReading = vi.fn(() => ({text, context: text, sentence: text}));
-        const fixture = mountSelection(false, {acceptsRange: () => true, captureReading}, browserTarget, configReady);
-        const select = () => {
-            fixture.state.snapshot = fixture.selectedSnapshot(text);
-            fixture.state.selectedText = text;
-            fixture.state.showTooltip = true;
-            fixture.state.translationResult = '练习带来进步。';
-            fixture.state.activeContentRequest = {text, generation: 1, sourceLanguage: 'auto', targetLanguage: 'zh-Hans'};
-        };
-        select();
-        return {...fixture, text, captureReading, select};
-    }
-
-    it.each([
-        ['chrome', services.microsoft], ['chrome', services.bilibili],
-        ['userscript', services.microsoft], ['userscript', services.bilibili],
-    ] as const)('offers free enablement only with an extension stream port (%s, %s)', async (target, service) => {
-        const fixture = prepare(undefined, target);
-        fixture.config.service = service;
-        fixture.notifyConfig();
-        expect(fixture.state.canEnableFreeReading).toBe(target === 'chrome');
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).toHaveBeenCalledTimes(target === 'chrome' ? 1 : 0);
-        expect(fixture.captureReading).toHaveBeenCalledTimes(target === 'chrome' ? 1 : 0);
-        expect(fixture.config.harness.enabled).toBe(target === 'chrome');
-        expect(fixture.state.readingMode).toBe(target === 'chrome');
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.config.service).toBe(service);
-    });
-
-    it.each([services.deepseek, services.bilibili])('keeps existing enabled userscript reading preferences and UI (%s)', async service => {
-        const fixture = prepare(undefined, 'userscript');
-        fixture.config.harness = {...fixture.config.harness, enabled: true, service, defaultAction: 'grammar'};
-        const stored = JSON.stringify(fixture.config.harness);
-        fixture.notifyConfig();
-        expect(fixture.state.canEnableFreeReading).toBe(false);
-        expect(fixture.state.readingEnabled).toBe(true);
-        expect(fixture.state.readingActions.map((action: any) => action.id)).toEqual(service === services.bilibili
-            ? ['meaning', 'usage'] : ['meaning', 'grammar', 'usage', 'practice']);
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        expect(JSON.stringify(fixture.config.harness)).toBe(stored);
-        // 外部配置更新仍关闭旧选区；下一次选区继续使用已有阅读界面与偏好。
-        fixture.select();
-        fixture.state.openReading();
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.captureReading).toHaveBeenCalledOnce();
-        expect(fixture.state.readingInitialAction).toBe(service === services.bilibili ? 'meaning' : 'grammar');
-    });
-
-    it('leaves explanation disabled until clicked, preserves selection on its own config echo, and opens meaning after confirmed save', async () => {
-        const fixture = prepare();
-        let confirm!: () => void;
-        fixture.requestConfigPatch.mockImplementation(patch => {
-            Object.assign(fixture.config, patch);
-            fixture.notifyConfig();
-            return new Promise<void>(resolve => { confirm = resolve; });
-        });
-        const selection = fixture.state.snapshot;
-        expect(fixture.state.canEnableFreeReading).toBe(true);
-        expect(fixture.config.harness.enabled).toBe(false);
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        expect(fixture.state.snapshot).toBe(selection);
-        expect(fixture.state.showTooltip).toBe(true);
-        expect(fixture.state.freeReadingPending).toBe(true);
-        expect(fixture.state.readingEnabled).toBe(false);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).toHaveBeenCalledTimes(1);
-        expect(fixture.requestConfigPatch.mock.calls[0][0].harness).toMatchObject({enabled: true, service: services.bilibili, model: ''});
-        confirm();
-        await pending;
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.state.readingInitialAction).toBe('meaning');
-        expect(fixture.captureReading).toHaveBeenCalledTimes(1);
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['service', 'model', 'inherited', 'enabled', 'disabled-selection'] as const)('protects existing choice: %s', async kind => {
-        const fixture = prepare();
-        if (kind === 'service') fixture.config.harness.service = services.deepseek;
-        if (kind === 'model') fixture.config.harness.model = 'chosen-model';
-        if (kind === 'inherited') fixture.config.service = services.deepseek;
-        if (kind === 'enabled') fixture.config.harness.enabled = true;
-        if (kind === 'disabled-selection') fixture.config.selectionTranslatorMode = 'disabled';
-        fixture.notifyConfig();
-        expect(fixture.state.canEnableFreeReading).toBe(false);
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-    });
-
-    it('allows one-click explanation when translation already defaults to Bilibili without changing translation preferences', async () => {
-        const fixture = prepare();
-        fixture.config.service = services.bilibili;
-        const selectionService = fixture.config.selectionTranslationService;
-        const translationModel = fixture.config.model[services.bilibili];
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        expect(fixture.state.canEnableFreeReading).toBe(true);
-        expect(fixture.config.harness.enabled).toBe(false);
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).toHaveBeenCalledTimes(1);
-        expect(Object.keys(fixture.requestConfigPatch.mock.calls[0][0])).toEqual(['harness']);
-        expect(fixture.config.harness).toMatchObject({enabled: true, service: services.bilibili, model: ''});
-        expect(fixture.config.service).toBe(services.bilibili);
-        expect(fixture.config.selectionTranslationService).toBe(selectionService);
-        expect(fixture.config.model[services.bilibili]).toBe(translationModel);
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.state.readingInitialAction).toBe('meaning');
-        expect(fixture.captureReading).toHaveBeenCalledTimes(1);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('does not open or request an explanation after a failed save', async () => {
-        const fixture = prepare();
-        fixture.requestConfigPatch.mockRejectedValue(new Error('storage failed'));
-        await fixture.state.enableFreeReading();
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        expect(fixture.state.noticeMessage).toContain('失败');
-        expect(fixture.translateText).not.toHaveBeenCalled();
-    });
-
-    it('opens usage from usage-only preferences and preserves the normalized user action choices', async () => {
-        const fixture = prepare();
-        fixture.config.harness.actions = ['usage'];
-        fixture.config.harness.defaultAction = 'usage';
-        const {actions, defaultAction} = harness.normalizeHarnessPreferences(fixture.config.harness);
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        fixture.state.snapshot = {text: fixture.text, range: {}, parts: [{kind: 'text', text: fixture.text}]};
-        fixture.state.selectedText = fixture.text;
-        fixture.state.showTooltip = true;
-        fixture.state.translationResult = '练习带来进步。';
-        fixture.state.activeContentRequest = {text: fixture.text, generation: 1, sourceLanguage: 'auto', targetLanguage: 'zh-Hans'};
-        await fixture.state.enableFreeReading();
-        expect(fixture.requestConfigPatch).toHaveBeenCalledTimes(1);
-        expect(fixture.requestConfigPatch.mock.calls[0][0].harness).toMatchObject({actions, defaultAction});
-        expect(fixture.config.harness.actions).toEqual(actions);
-        expect(fixture.config.harness.defaultAction).toBe(defaultAction);
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.state.readingInitialAction).toBe('usage');
-        expect(fixture.captureReading).toHaveBeenCalledTimes(1);
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('temporarily falls back from grammar when free explanation is enabled without changing saved actions or default', async () => {
-        const fixture = prepare();
-        fixture.config.harness.defaultAction = 'grammar';
-        const storedActions = [...fixture.config.harness.actions];
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        fixture.state.snapshot = {text: fixture.text, range: {}, parts: [{kind: 'text', text: fixture.text}]};
-        fixture.state.selectedText = fixture.text;
-        fixture.state.showTooltip = true;
-        fixture.state.translationResult = '练习带来进步。';
-        fixture.state.activeContentRequest = {text: fixture.text, generation: 1, sourceLanguage: 'auto', targetLanguage: 'zh-Hans'};
-        await fixture.state.enableFreeReading();
-        expect(fixture.config.harness.defaultAction).toBe('grammar');
-        expect(fixture.config.harness.actions).toEqual(storedActions);
-        expect(fixture.state.readingActions.map((action: {id: string}) => action.id)).toEqual(['meaning', 'usage']);
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.state.readingInitialAction).toBe('meaning');
-        expect(fixture.captureReading).toHaveBeenCalledTimes(1);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('filters an inherited Bilibili service and restores all saved actions and default after switching to a general AI', async () => {
-        const fixture = prepare();
-        fixture.config.service = services.bilibili;
-        fixture.config.harness.enabled = true;
-        fixture.config.harness.defaultAction = 'grammar';
-        const storedActions = [...fixture.config.harness.actions];
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        expect(fixture.state.readingService).toBe(services.bilibili);
-        expect(fixture.state.readingActions.map((action: {id: string}) => action.id)).toEqual(['meaning', 'usage']);
-        expect(fixture.state.readingDefaultAction).toBe('meaning');
-        fixture.state.snapshot = {text: fixture.text, range: {}, parts: [{kind: 'text', text: fixture.text}]};
-        fixture.state.selectedText = fixture.text;
-        fixture.state.showTooltip = true;
-        fixture.state.openReading('grammar');
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        fixture.config.service = services.deepseek;
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        expect(fixture.state.readingActions.map((action: {id: string}) => action.id)).toEqual(['meaning', 'grammar', 'usage', 'practice']);
-        expect(fixture.state.readingDefaultAction).toBe('grammar');
-        expect(fixture.config.harness.defaultAction).toBe('grammar');
-        expect(fixture.config.harness.actions).toEqual(storedActions);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('preserves the selected card and reports failure after its optimistic config is rolled back before rejection', async () => {
-        const fixture = prepare();
-        const originalPreferences = fixture.config.harness;
-        const selection = fixture.state.snapshot;
-        let reject!: (error: Error) => void;
-        fixture.requestConfigPatch.mockImplementation(patch => {
-            Object.assign(fixture.config, patch);
-            fixture.notifyConfig();
-            return new Promise<void>((_resolve, fail) => { reject = fail; });
-        });
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        expect(fixture.config.harness.enabled).toBe(true);
-        expect(fixture.state.freeReadingPending).toBe(true);
-        fixture.config.harness = originalPreferences;
-        fixture.notifyConfig();
-        await Vue.nextTick();
-        expect(fixture.state.snapshot).toBe(selection);
-        expect(fixture.state.showTooltip).toBe(true);
-        expect(fixture.state.readingMode).toBe(false);
-        reject(new Error('storage failed'));
-        await pending;
-        expect(fixture.config.harness.enabled).toBe(false);
-        expect(fixture.state.snapshot).toBe(selection);
-        expect(fixture.state.showTooltip).toBe(true);
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.state.noticeMessage).toContain('失败');
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('waits for initial config hydration and keeps the restored inherited AI service', async () => {
-        let hydrate!: () => void;
-        const fixture = prepare(new Promise<void>(resolve => { hydrate = resolve; }));
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        fixture.config.service = services.deepseek;
-        fixture.notifyConfig();
-        hydrate();
-        await pending;
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        expect(fixture.config.service).toBe(services.deepseek);
-        expect(fixture.config.harness.enabled).toBe(false);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        expect(fixture.state.freeReadingPending).toBe(false);
-    });
-
-    it.each([false, true])('builds the patch from restored preferences and keeps selection whether the hydration echo flushes first (%s)', async echoBeforeReady => {
-        let hydrate!: () => void;
-        const fixture = prepare(new Promise<void>(resolve => { hydrate = resolve; }));
-        const selection = fixture.state.snapshot;
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        const restored = harness.normalizeHarnessPreferences({...fixture.config.harness,
-            actions: ['meaning', 'usage'], defaultAction: 'usage', contextMode: 'selection', learningLevel: 'advanced',
-            explanationDepth: 'detailed', systemPrompt: 'Restored system prompt', actionPrompts: {...fixture.config.harness.actionPrompts, usage: 'Restored usage prompt'},
-        });
-        fixture.config.harness = restored;
-        fixture.notifyConfig();
-        if (echoBeforeReady) await Vue.nextTick();
-        expect(fixture.state.snapshot).toBe(selection);
-        expect(fixture.state.showTooltip).toBe(true);
-        expect(fixture.state.freeReadingPending).toBe(true);
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        hydrate();
-        await pending;
-        expect(fixture.requestConfigPatch).toHaveBeenCalledTimes(1);
-        expect(fixture.requestConfigPatch.mock.calls[0][0].harness).toEqual({...restored, enabled: true, service: services.bilibili, model: ''});
-        expect(fixture.config.harness).toEqual({...restored, enabled: true, service: services.bilibili, model: ''});
-        expect(fixture.state.snapshot).toBe(selection);
-        expect(fixture.state.readingMode).toBe(true);
-        expect(fixture.state.readingInitialAction).toBe('usage');
-        expect(fixture.captureReading).toHaveBeenCalledTimes(1);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['service', 'model', 'enabled'] as const)('does not overwrite a protected %s choice restored during hydration', async kind => {
-        let hydrate!: () => void;
-        const fixture = prepare(new Promise<void>(resolve => { hydrate = resolve; }));
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        if (kind === 'service') fixture.config.harness.service = services.deepseek;
-        if (kind === 'model') fixture.config.harness.model = 'Restored paid model';
-        if (kind === 'enabled') fixture.config.harness.enabled = true;
-        fixture.notifyConfig();
-        const restored = JSON.stringify(fixture.config.harness);
-        await Vue.nextTick();
-        hydrate();
-        await pending;
-        expect(fixture.requestConfigPatch).not.toHaveBeenCalled();
-        expect(JSON.stringify(fixture.config.harness)).toBe(restored);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['close', 'selection', 'unmount', 'external-preference'] as const)('rejects a delayed save after %s', async reason => {
-        const fixture = prepare();
-        let confirm!: () => void;
-        fixture.requestConfigPatch.mockImplementation(patch => {
-            Object.assign(fixture.config, patch);
-            fixture.notifyConfig();
-            return new Promise<void>(resolve => { confirm = resolve; });
-        });
-        const pending = fixture.state.enableFreeReading();
-        await Vue.nextTick();
-        if (reason === 'close') fixture.state.hideAll();
-        if (reason === 'selection') {
-            fixture.state.snapshot = {...fixture.state.snapshot, text: 'A new selected sentence.'};
-            fixture.state.selectedText = 'A new selected sentence.';
-        }
-        if (reason === 'unmount') fixture.unmount();
-        if (reason === 'external-preference') {
-            fixture.config.harness.explanationDepth = 'detailed';
-            fixture.notifyConfig();
-            await Vue.nextTick();
-        }
-        expect(fixture.state.freeReadingPending).toBe(true);
-        if (reason === 'selection') {
-            fixture.state.openReading('meaning');
-            expect(fixture.state.readingMode).toBe(false);
-            expect(fixture.captureReading).not.toHaveBeenCalled();
-        }
-        confirm();
-        await pending;
-        expect(fixture.state.freeReadingPending).toBe(false);
-        expect(fixture.state.readingMode).toBe(false);
-        expect(fixture.captureReading).not.toHaveBeenCalled();
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-});
-
 describe('selection card language configuration without header switches', () => {
     it.each([
         ['Ceci est une phrase française complète.', 'fr', 'de', false, false, 'fr', 'de'],
@@ -919,262 +510,6 @@ describe('selection card language configuration without header switches', () => 
     });
 });
 
-describe('explicit selection sentence collection', () => {
-    function prepare(text: string, sourceLanguage = 'en', privateContext = false) {
-        const fixture = mountSelection(privateContext);
-        fixture.config.vocabularyBookEnabled = true;
-        const request = {text, generation: 1, sourceLanguage, targetLanguage: 'zh-Hans'};
-        fixture.state.snapshot = {text};
-        fixture.state.selectedText = text;
-        fixture.state.activeContentRequest = request;
-        fixture.state.translationAnswer = {...request, answer: '这是一句译文。'};
-        fixture.browser.runtime.sendMessage.mockResolvedValue({success: true, data: {id: 'saved-sentence'}});
-        return {...fixture, request};
-    }
-
-    it('saves a complete selected sentence through the existing card without requiring an English word selection', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        expect(fixture.state.isWordSelection).toBe(false);
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-            action: 'upsert', input: expect.objectContaining({
-                term: fixture.request.text, sourceLanguage: 'en', translation: '这是一句译文。',
-            }),
-        }));
-        expect(fixture.state.isVocabularySaved).toBe(true);
-        expect(fixture.completeMaterialCapture).toHaveBeenCalledWith(expect.objectContaining({generation: 17}),
-            {kind: 'vocabulary', id: 'saved-sentence', excerpt: fixture.request.text}, expect.any(Function));
-        expect(fixture.materialCapture).toHaveBeenCalledWith(expect.objectContaining({
-            source: {kind: 'article', url: 'https://example.test/article', title: 'Selected article'},
-            locator: {kind: 'text', quote: fixture.request.text}, generation: 17,
-            reference: {kind: 'vocabulary', id: 'saved-sentence', excerpt: fixture.request.text},
-        }));
-    });
-    it('J1 saves only original DOM context while retaining privacy-stripped wordbook URLs and independent material identity', async () => {
-        const text = 'Use getUserID to load the original passage.';
-        const fixture = prepare(text);
-        const parsed = parseHTML('<html><body><p>Before. <span>Use <code>getUserID</code> to load the original passage.</span><span class="fluent-read-bilingual-content">受控译文不应保存</span> After.</p></body></html>');
-        const node = parsed.document.querySelector('span')!;
-        const range = {startContainer:node.firstChild!,startOffset:0,endContainer:node.lastChild!,endOffset:node.lastChild!.textContent!.length} as unknown as Range;
-        vi.stubGlobal('Node',parsed.window.Node);vi.stubGlobal('location',new URL('https://example.test/read?id=7&token=private#part'));
-        fixture.state.snapshot = {text,range};
-        fixture.material.captureMaterialSelection.mockReturnValue({source:{kind:'article',url:'https://example.test/read?id=7'},locator:{kind:'text',quote:text}});
-        await fixture.state.saveVocabularyEntry({isTrusted:true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({action:'upsert',input:expect.objectContaining({context:expect.objectContaining({text:'Before. Use getUserID to load the original passage. After.',sourceUrl:'https://example.test/read'})})}));
-        expect(fixture.materialCapture).toHaveBeenCalledWith(expect.objectContaining({source:{kind:'article',url:'https://example.test/read?id=7'},locator:{kind:'text',quote:text}}));
-    });
-    it.each(['over-budget','detached'] as const)('J1 retains only selected text when original context is %s', async condition => {
-        const text='Selected original sentence.';const fixture=prepare(text);
-        const parsed=parseHTML(`<html><body><p><span>${text}</span>${'b'.repeat(13000)}<span class="fluent-read-bilingual-content">译文不应保存</span></p></body></html>`);
-        const node=parsed.document.querySelector('span')!.firstChild!;
-        fixture.state.snapshot={text,range:{startContainer:node,startOffset:0,endContainer:node,endOffset:text.length}};
-        vi.stubGlobal('Node',parsed.window.Node);
-        if(condition==='detached')parsed.document.querySelector('p')!.remove();
-        await fixture.state.saveVocabularyEntry({isTrusted:true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({action:'upsert',input:expect.objectContaining({context:expect.objectContaining({text})})}));
-    });
-    it('J1 freezes original context before asynchronous material generation rather than rereading a mutated page', async () => {
-        const text='Selected original sentence.';const fixture=prepare(text);
-        const parsed=parseHTML(`<html><body><p>Before. <span>${text}</span> After.</p></body></html>`),node=parsed.document.querySelector('span')!.firstChild!;
-        fixture.state.snapshot={text,range:{startContainer:node,startOffset:0,endContainer:node,endOffset:text.length}};
-        vi.stubGlobal('Node',parsed.window.Node);vi.stubGlobal('location',new URL('https://example.test/first?private=1'));
-        let release!: (value:number)=>void;fixture.materialGeneration.mockReturnValueOnce(new Promise(resolve=>{release=resolve;}));
-        const pending=fixture.state.saveVocabularyEntry({isTrusted:true});
-        parsed.document.querySelector('p')!.textContent='Replacement page context';vi.stubGlobal('location',new URL('https://other.test/replaced'));
-        release(17);await pending;
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({action:'upsert',input:expect.objectContaining({context:expect.objectContaining({text:`Before. ${text} After.`,sourceUrl:'https://example.test/first'})})}));
-    });
-
-    it('uses the captured language for other-language sentences and retrieves saved state after explicit card requests', async () => {
-        const fixture = prepare('Les idées méritent notre attention.', 'fr');
-        await fixture.state.refreshVocabularySaved(fixture.request);
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-            action: 'getByTerm', sourceLanguage: 'fr', term: fixture.request.text,
-        }));
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-            action: 'upsert', input: expect.objectContaining({sourceLanguage: 'fr'}),
-        }));
-    });
-
-    it('does not query or save a selected sentence in a private context', async () => {
-        const fixture = prepare('Good ideas deserve attention.', 'en', true);
-        fixture.browser.runtime.sendMessage.mockClear();
-        await fixture.state.refreshVocabularySaved(fixture.request);
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.browser.runtime.sendMessage.mock.calls.some(([message]) => message.type === vocabularyProtocol.VOCABULARY_BOOK_MESSAGE)).toBe(false);
-        expect(fixture.material.captureMaterialSelection).not.toHaveBeenCalled();
-        expect(fixture.material.beginMaterialCapture).not.toHaveBeenCalled();
-        expect(fixture.materialCapture).not.toHaveBeenCalled();
-    });
-
-    it('still saves the vocabulary record when optional material DOM capture throws', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        fixture.material.captureMaterialSelection.mockImplementation(() => {throw new Error('Source DOM detached');});
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({action: 'upsert'}));
-        expect(fixture.state.isVocabularySaved).toBe(true);
-        expect(fixture.state.vocabularyBusy).toBe(false);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('does not save a stale selection while the material generation read is pending', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        fixture.browser.runtime.sendMessage.mockClear();
-        const selection: MaterialSelection = {source: {kind: 'article', url: 'https://example.com/article'}, locator: {kind: 'text', quote: fixture.request.text}};
-        fixture.material.captureMaterialSelection.mockReturnValue(selection);
-        let finish!: (value: Awaited<ReturnType<typeof beginCapture>>) => void;
-        fixture.material.beginMaterialCapture.mockImplementation(() => new Promise<Awaited<ReturnType<typeof beginCapture>>>(resolve => {finish = resolve;}));
-        const pending = fixture.state.saveVocabularyEntry({isTrusted: true});
-        fixture.state.closeTooltip();
-        finish({selection, generation: 1, capturedAt: Date.now()});await pending;
-        expect(fixture.browser.runtime.sendMessage.mock.calls.some(([message]) => message.action === 'upsert')).toBe(false);
-        expect(fixture.material.completeMaterialCapture).not.toHaveBeenCalled();
-        expect(fixture.state.vocabularyBusy).toBe(false);
-    });
-
-    it('does not mark a new selection saved when the previous sentence save finishes late', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        let finish!: (response: unknown) => void;
-        fixture.browser.runtime.sendMessage.mockImplementation(message => message.action === 'upsert'
-            ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({success: true}));
-        const pending = fixture.state.saveVocabularyEntry({isTrusted: true});
-        // 材料代次读取先完成，才进入已有词书的异步保存；确认实际请求已开始后测试迟到响应。
-        await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-        const text = 'Practice makes progress.';
-        fixture.state.snapshot = {text};
-        fixture.state.selectedText = text;
-        fixture.state.beginSelectionContentRequest(text);
-        finish({success: true, data: {id: 'old-sentence'}});
-        await pending;
-        expect(fixture.state.isVocabularySaved).toBe(false);
-        expect(fixture.state.noticeMessage).toBe('');
-        expect(fixture.completeMaterialCapture).not.toHaveBeenCalled();
-        expect(fixture.materialCapture).not.toHaveBeenCalled();
-    });
-
-    it('freezes source and generation before awaiting save, then links only the actual successful entry id', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        const selected: MaterialSelection = {source: {kind: 'article', url: 'https://example.test/original'},
-            locator: {kind: 'text', quote: fixture.request.text}};
-        fixture.captureMaterialSelection.mockReturnValueOnce(selected);
-        let generation!: (value: number) => void, finish!: (value: unknown) => void;
-        fixture.materialGeneration.mockReturnValueOnce(new Promise<number>(resolve => {generation = resolve;}));
-        fixture.browser.runtime.sendMessage.mockImplementation(message => message.action === 'upsert'
-            ? new Promise(resolve => {finish = resolve;}) : Promise.resolve({success: true}));
-        const capturedAt = Date.now(), pending = fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.beginMaterialCapture).toHaveBeenCalledWith(selected, false);
-        expect(fixture.materialGeneration).toHaveBeenCalledOnce();
-        expect(fixture.browser.runtime.sendMessage.mock.calls.some(([message]) => message.action === 'upsert')).toBe(false);
-        selected.source.url = 'https://example.test/replacement'; selected.locator!.quote = 'Changed source';
-        generation(29); await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-        expect(fixture.completeMaterialCapture).not.toHaveBeenCalled();
-        expect(fixture.materialCapture).not.toHaveBeenCalled();
-        finish({success: true, data: {id: 'real-entry-29'}}); await pending;
-        expect(fixture.materialCapture).toHaveBeenCalledOnce();
-        expect(fixture.materialCapture).toHaveBeenCalledWith({
-            source: {kind: 'article', url: 'https://example.test/original'}, locator: {kind: 'text', quote: fixture.request.text},
-            generation: 29, capturedAt, reference: {kind: 'vocabulary', id: 'real-entry-29', excerpt: fixture.request.text},
-        });
-        expect(fixture.state.isVocabularySaved).toBe(true); expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('does not upsert or link an obsolete selection while its material generation is pending', async () => {
-        const fixture = prepare('Good ideas deserve attention.');
-        let generation!: (value: number) => void;
-        fixture.materialGeneration.mockReturnValueOnce(new Promise<number>(resolve => {generation = resolve;}));
-        const pending = fixture.state.saveVocabularyEntry({isTrusted: true});
-        const text = 'Practice makes progress.';
-        fixture.state.snapshot = {text}; fixture.state.selectedText = text; fixture.state.beginSelectionContentRequest(text);
-        generation(31); await pending;
-        expect(fixture.browser.runtime.sendMessage.mock.calls.some(([message]) => message.action === 'upsert')).toBe(false);
-        expect(fixture.completeMaterialCapture).not.toHaveBeenCalled(); expect(fixture.materialCapture).not.toHaveBeenCalled();
-        expect(fixture.state.isVocabularySaved).toBe(false);
-    });
-
-    it.each([
-        ['failed save', {success: false, error: {message: 'Controlled save failure'}}],
-        ['missing saved data', {success: true}], ['missing entry id', {success: true, data: {}}],
-    ] as const)('does not associate a material after %s', async (_label, response) => {
-        const fixture = prepare('Good ideas deserve attention.');
-        fixture.browser.runtime.sendMessage.mockResolvedValue(response);
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.completeMaterialCapture).not.toHaveBeenCalled(); expect(fixture.materialCapture).not.toHaveBeenCalled();
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['untrusted', 'disabled', 'missing-answer'] as const)('does not save when %s', async condition => {
-        const fixture = prepare('Good ideas deserve attention.');
-        if (condition === 'disabled') fixture.config.vocabularyBookEnabled = false;
-        if (condition === 'missing-answer') fixture.state.translationAnswer = null;
-        fixture.browser.runtime.sendMessage.mockClear();
-        await fixture.state.saveVocabularyEntry({isTrusted: condition !== 'untrusted'});
-        expect(fixture.browser.runtime.sendMessage.mock.calls.some(([message]) => message.action === 'upsert')).toBe(false);
-    });
-});
-
-describe('selection action notice viewport ownership', () => {
-    it.each([
-        ['open-vocabulary', '查看', 'settings-vocabulary'],
-        ['open-local-tts', '设置', 'settings-selection'],
-    ] as const)('reserves the %s action in short visible viewports and dispatches only its existing action', async (action, label, section) => {
-        const fixture = mountSelection(false, undefined, 'safari', true);
-        const port = fixture.renderPort!;
-        const notice = 'A long notice that may wrap in the narrow visible viewport. '.repeat(100);
-        fixture.state.showNotice(notice, action);
-        await Vue.nextTick();
-        let toast = port.root.querySelector('.fr-action-toast') as HTMLElement;
-        expect(toast.style.getPropertyValue('left')).toBe('982px');
-        expect(toast.style.getPropertyValue('top')).toBe('782px');
-        const viewport = {width: 296, height: 200, offsetLeft: 80, offsetTop: 240};
-        // innerHeight may already shrink while VisualViewport retains a nonzero layout offset.
-        Object.assign(fixture.window, {innerWidth: 390, innerHeight: 200, visualViewport: viewport});
-        fixture.state.touchInteraction = true;
-        const resize = [...fixture.listeners.get('window:resize')!];
-        expect(resize).toHaveLength(1); // reuse the component's existing viewport observer
-        resize.forEach(listener => listener({}));
-        await vi.advanceTimersByTimeAsync(16); await Vue.nextTick();
-        toast = port.root.querySelector('.fr-action-toast') as HTMLElement;
-        expect(toast.style.getPropertyValue('left')).toBe('364px');
-        expect(toast.style.getPropertyValue('top')).toBe('428px');
-        expect(toast.style.getPropertyValue('max-width')).toBe('272px');
-        expect(toast.style.getPropertyValue('max-height')).toBe('176px');
-        expect(toast.style.getPropertyValue('padding-block')).toBe('9px');
-        expect(toast.style.getPropertyValue('--fr-notice-content-height')).toBe('158px');
-        for (const [height, padding, contentHeight, alignment] of [
-            [32, 0, 32, 'flex-start'], [44, 0, 44, 'center'], [58, 7, 44, 'center'],
-        ] as const) {
-            Object.assign(viewport, {height, offsetTop: 320});
-            resize.forEach(listener => listener({}));
-            await vi.advanceTimersByTimeAsync(16); await Vue.nextTick();
-            expect(toast.style.getPropertyValue('top')).toBe(`${320 + height}px`);
-            expect(toast.style.getPropertyValue('max-height')).toBe(`${height}px`);
-            expect(toast.style.getPropertyValue('padding-block')).toBe(`${padding}px`);
-            expect(toast.style.getPropertyValue('--fr-notice-content-height')).toBe(`${contentHeight}px`);
-            expect(toast.style.getPropertyValue('align-items')).toBe(alignment);
-            expect(toast.querySelector('span')!.textContent).toBe(notice);
-        }
-        expect(fixture.browser.runtime.sendMessage.mock.calls.filter(([message]) => message.type === 'openOptionsPage')).toHaveLength(0);
-        const button = toast.querySelector('button')!;
-        expect(button.textContent).toBe(label);
-        await port.click(button); await Vue.nextTick();
-        expect(fixture.browser.runtime.sendMessage.mock.calls.filter(([message]) => message.type === 'openOptionsPage'))
-            .toEqual([[{type: 'openOptionsPage', section}]]);
-        expect(port.root.querySelector('.fr-action-toast')).toBeNull();
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        fixture.state.showNotice('Another notice.', action); await Vue.nextTick();
-        const lastViewport = fixture.state.viewportSize;
-        fixture.unmount();
-        expect([...fixture.listeners.values()].every(listeners => listeners.size === 0)).toBe(true);
-        Object.assign(viewport, {height: 100, offsetTop: 300});
-        resize.forEach(listener => listener({}));
-        await vi.advanceTimersByTimeAsync(2601);
-        expect(fixture.state.viewportSize).toBe(lastViewport);
-        expect(vi.getTimerCount()).toBe(0);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-});
-
 describe('SelectionTranslator lifecycle after extension reload', () => {
     it.each(['normal', 'runtime removed', 'event removed', 'removeListener throws'] as const)(
         'cleans up all selection resources when %s', async failure => {
@@ -1184,9 +519,9 @@ describe('SelectionTranslator lifecycle after extension reload', () => {
             expect(fixture.config.disableSelectionTranslator).toBe(false);
             expect(fixture.config.selectionTranslatorMode).toBe('bilingual');
             const registered = event.addListener.mock.calls.map(([listener]) => listener);
-            expect(registered).toHaveLength(4);
+            expect(registered).toHaveLength(3);
             const onTimer = vi.fn();
-            for (const timer of ['readingHoverTimer', 'selectionLossTimer', 'selectionPresentationTimer', 'copyTimer', 'noticeTimer']) {
+            for (const timer of ['selectionLossTimer', 'selectionPresentationTimer', 'copyTimer', 'noticeTimer']) {
                 state[timer] = setTimeout(onTimer, 50);
             }
             state.selectionFrame = window.requestAnimationFrame(onTimer);
@@ -1326,7 +661,6 @@ function ttsMessages(fixture: ReturnType<typeof mountSelection>, type: string) {
 }
 
 function prepareTts(fixture: ReturnType<typeof mountSelection>, responses: Promise<Record<string, unknown>>[]) {
-    fixture.config.selectionTtsMode = 'local-only';
     fixture.browser.runtime.sendMessage.mockImplementation((message: any) => {
         if (message.type === 'selectionTts') {
             const response = responses.shift();
@@ -1414,23 +748,6 @@ describe('SelectionTranslator TTS generation and progress ownership', () => {
         expect(fixture.state.currentAudioKey).toBe('Practice helps.');
         expect(fixture.state.noticeMessage).toBe('');
         expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['response', 'rejection'] as const)('resets preparation and displays an error after synthesis %s', async failure => {
-        const fixture = mountSelection();
-        const response = deferredTts();
-        prepareTts(fixture, [response.promise]);
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const pending = fixture.state.toggleAudio('Practice helps.', 'source');
-        expect(fixture.state.isPreparingAudio).toBe(true);
-        if (failure === 'response') response.resolve({success: false, error: '模型推理失败'});
-        else response.reject(new Error('worker disconnected'));
-        await pending;
-        expectAudioReset(fixture.state);
-        expect(fixture.state.noticeMessage).toBe(failure === 'response' ? '模型推理失败' : '本地语音生成失败，请重试');
-        expect(fixture.stopTts).toHaveBeenLastCalledWith(false);
-        expect(ttsMessages(fixture, 'selectionTtsStop')).toEqual([]);
-        if (failure === 'rejection') expect(warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({message: 'worker disconnected'}));
     });
 
     it.each(['stop button', 'same text toggle', 'unmount'] as const)('cancels pending synthesis via %s and discards late success', async action => {
@@ -1533,7 +850,7 @@ describe('SelectionTranslator TTS generation and progress ownership', () => {
         expectAudioReset(fixture.state);
     });
 
-    it.each(['ended', 'stopped', 'error'] as const)('resets playback on matching %s without stopping the remote again', async terminal => {
+    it.each(['ended', 'stopped'] as const)('resets playback on matching %s without stopping the remote again', async terminal => {
         const fixture = mountSelection();
         prepareTts(fixture, [Promise.resolve({success: true, transport: 'offscreen'})]);
         await fixture.state.toggleAudio('Practice helps.', 'source');
@@ -1546,45 +863,12 @@ describe('SelectionTranslator TTS generation and progress ownership', () => {
         expect(fixture.stopTts).toHaveBeenLastCalledWith(false);
         await Vue.nextTick();
         expect(ttsMessages(fixture, 'selectionTtsStop')).toEqual([]);
-        expect(fixture.state.noticeMessage).toBe(terminal === 'error' ? '音频解码失败' : '');
+        expect(fixture.state.noticeMessage).toBe('');
     });
 });
 
 describe('SelectionTranslator word TTS generation and fallback', () => {
     const pronunciation = {text: 'American pronunciation', label: '美式'};
-
-    it.each([
-        ['local-only', 'ready'], ['local-only', 'missing-model'], ['local-first', 'ready'], ['online-only', 'ready'],
-    ] as const)('[word-audio-policy] the actual pronunciation button respects %s with %s', async (mode, outcome) => {
-        const fixture = mountSelection(false, undefined, 'chrome', true), port = fixture.renderPort!;
-        const urls: string[] = [], pause = vi.fn();
-        vi.stubGlobal('Audio', class {
-            currentTime = 0;duration = 1;preload = '';play = vi.fn(async () => undefined);pause = pause;removeAttribute = vi.fn();
-            constructor(src: string) {urls.push(src);}
-        });
-        const response = deferredTts();prepareTts(fixture, [response.promise]);fixture.config.selectionTtsMode = mode;
-        fixture.state.selectedText = 'hello';fixture.state.showTooltip = true;
-        fixture.state.wordCard = {word: 'hello', normalizedWord: 'hello', phonetics: [{text: '/həˈləʊ/', label: '美式', audio: 'https://dictionary.test/hello.mp3'}], meanings: [], sources: []};
-        await Vue.nextTick();
-        const trigger = port.root.querySelector('button[aria-label="播放美式"]');expect(trigger).not.toBeNull();
-        const pending = port.click(trigger!);
-        response.resolve(outcome === 'missing-model' ? {success: false, errorCode: 'local-tts-model-not-downloaded'} : {success: true, transport: 'offscreen'});
-        await pending;await Vue.nextTick();
-        if (mode === 'local-only') {
-            expect.soft(urls).toEqual([]);
-            expect.soft(ttsMessages(fixture, 'selectionTts')).toEqual([expect.objectContaining({text: 'hello', language: 'en-US'})]);
-            expect(ttsMessages(fixture, 'selectionTtsGoogle')).toEqual([]);
-            if (outcome === 'missing-model') expect(port.root.textContent).toContain('selectionTts.localModelNotDownloaded');
-        } else {
-            expect(urls).toEqual(['https://dictionary.test/hello.mp3']);expect(ttsMessages(fixture, 'selectionTts')).toEqual([]);
-        }
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-        if (outcome === 'ready') {
-            expect(trigger!.getAttribute('aria-label')).toBe('停止播放美式');await port.click(trigger!);await Vue.nextTick();
-            expect(trigger!.getAttribute('aria-label')).toBe('播放美式');
-            if (mode === 'local-only') expect(ttsMessages(fixture, 'selectionTtsStop')).toHaveLength(1);else expect(pause).toHaveBeenCalledOnce();
-        }
-    });
 
     function beginWordTts(fixture: ReturnType<typeof mountSelection>, response: ReturnType<typeof deferredTts>) {
         fixture.state.wordCard = {word: 'hello'};
@@ -1658,34 +942,12 @@ describe('SelectionTranslator word TTS generation and fallback', () => {
         ]);
     });
 
-    it.each([
-        ['inference failure', {success: false, error: '单词推理失败'}, '单词推理失败', null],
-        ['model missing', {success: false, errorCode: 'local-tts-model-not-downloaded'}, 'selectionTts.localModelNotDownloaded', 'open-local-tts'],
-        ['language unsupported', {success: false, errorCode: 'local-tts-language-unsupported'}, 'selectionTts.languageUnsupported', null],
-    ])('clears local-only word ownership and displays the notice for %s', async (_kind, failure, notice, action) => {
-        const fixture = mountSelection();
-        const response = deferredTts();
-        const speak = browserSpeech(fixture);
-        const pending = beginWordTts(fixture, response);
-        const generation = fixture.state.ttsContentController.currentGeneration();
-        response.resolve(failure as Record<string, unknown>);
-        await pending;
-        expectAudioReset(fixture.state);
-        expect(fixture.state.ttsContentController.currentGeneration()).toBeGreaterThan(generation);
-        expect(fixture.state.noticeMessage).toBe(notice);
-        expect(fixture.state.noticeAction).toBe(action);
-        expect(fixture.stopTts).toHaveBeenLastCalledWith(false);
-        expect(speak).not.toHaveBeenCalled();
-        expect(ttsMessages(fixture, 'selectionTtsGoogle')).toEqual([]);
-    });
-
     it('continues to browser speech when the EdgeSpeechResult object has handled=false', async () => {
         const fixture = mountSelection();
         const response = deferredTts();
         const speak = browserSpeech(fixture);
         fixture.state.wordCard = {word: 'hello'};
         prepareTts(fixture, [response.promise]);
-        fixture.config.selectionTtsMode = 'online-only';
         const pending = fixture.state.toggleWordAudio({text: 'hello'});
         response.resolve({success: false, error: 'Edge offline'});
         await pending;
@@ -1703,7 +965,6 @@ describe('SelectionTranslator word TTS generation and fallback', () => {
         const response = deferredTts();
         const speak = browserSpeech(fixture);
         const pending = beginWordTts(fixture, response);
-        fixture.config.selectionTtsMode = 'online-only';
         response.resolve({success: false, error: 'Edge offline'});
         await pending;
         expect(speak).toHaveBeenCalledOnce();
@@ -1718,7 +979,6 @@ describe('SelectionTranslator word TTS generation and fallback', () => {
         const fixture = mountSelection();
         const response = deferredTts();
         fixture.state.wordCard = {word: 'hello'};
-        fixture.config.selectionTtsMode = 'online-only';
         fixture.browser.runtime.sendMessage.mockImplementation((message: any) => message.type === 'selectionTts'
             ? response.promise : Promise.resolve({success: true, transport: 'offscreen'}));
         const pending = fixture.state.toggleWordAudio(pronunciation);
@@ -1836,7 +1096,6 @@ describe('SelectionTranslator trimmed speech offsets in rich text', () => {
         Object.assign(fixture.window.speechSynthesis, {getVoices: () => [], speak});
         vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
         prepareTts(fixture, [Promise.resolve({success: true, transport: 'offscreen'})]);
-        fixture.config.selectionTtsMode = 'online-only';
         await fixture.state.toggleAudio(text, kind);
         expect(fixture.state.audioTextOffset).toBe(2);
         expect(emitTtsState(fixture, 'tts-client-1', 'error', {error: 'decode failed'})).toContain(true);
@@ -1854,61 +1113,6 @@ describe('SelectionTranslator trimmed speech offsets in rich text', () => {
         expectAudioReset(fixture.state);
     });
 });
-
-it('preserves the reading card during its evidence scroll, then resumes ordinary auto dismissal and clears frames on close', async () => {
-    const fixture = mountSelection();
-    vi.stubGlobal('Element', class {});
-    vi.stubGlobal('Node', class {});
-    const {state} = fixture;
-    fixture.config.selectionTranslatorAutoDismiss = true;
-    state.snapshot = {text: 'Practice helps.', range: {getClientRects: () => []}, parts: [{kind: 'text', text: 'Practice helps.'}]};
-    state.readingSelection = {text: 'Practice helps.', context: '', sentence: 'Practice helps.'};
-    state.readingMode = true;
-    state.showTooltip = true;
-    const disposeAnchor = vi.fn();
-    state.readingEvidenceAnchor = {locate: () => 'located', check: () => 'located', dispose: disposeAnchor, suspend: vi.fn()};
-    const citation = {quote: 'Practice helps.', sourceText: 'Practice helps.'};
-    expect(state.locateReadingEvidence(citation)).toBe('located');
-    state.handleScroll({target: null});
-    expect(state.showTooltip).toBe(true);
-    expect(disposeAnchor).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(40);
-    state.handleScroll({target: null});
-    expect(state.showTooltip).toBe(false);
-    expect(disposeAnchor).toHaveBeenCalledOnce();
-    expect(state.readingEvidenceScrollFrame).toBeUndefined();
-
-    state.showTooltip = true;
-    state.readingMode = true;
-    state.readingEvidenceAnchor = {locate: () => 'unavailable'};
-    expect(state.locateReadingEvidence(citation)).toBe('unavailable');
-    expect(state.readingEvidenceScrollFrame).toBeUndefined();
-    state.readingEvidenceAnchor = {locate: () => 'located', dispose: disposeAnchor};
-    state.readingSelection = {text: 'Practice helps.', context: '', sentence: 'Practice helps.'};
-    expect(state.locateReadingEvidence(citation)).toBe('located');
-    fixture.unmount();
-    expect(state.readingEvidenceScrollFrame).toBeUndefined();
-    expect(vi.getTimerCount()).toBe(0);
-});
-
-it('keeps an existing ordinary translation running when opening the learning view', async () => {
-    const fixture = mountSelection();
-    fixture.config.harness.enabled = true;
-    fixture.state.selectionConfigVersion += 1;
-    await Vue.nextTick();
-    const pending = new AbortController();
-    fixture.state.snapshot = {text: 'Practice helps.', range: {}, parts: [{kind: 'text', text: 'Practice helps.'}]};
-    fixture.state.readingSelection = {text: 'Practice helps.', context: '', sentence: 'Practice helps.'};
-    fixture.state.activeContentRequest = {text: 'Practice helps.', generation: 1, sourceLanguage: 'auto', targetLanguage: 'zh-Hans'};
-    fixture.state.translationAbortController = pending;
-    fixture.state.isLoading = true;
-    fixture.state.openReadingCard();
-    expect(fixture.state.readingMode).toBe(true);
-    expect(pending.signal.aborted).toBe(false);
-    fixture.unmount();
-    expect(pending.signal.aborted).toBe(true);
-});
-
 
 describe('selection card geometry across content changes', () => {
     it('keeps the same card scrollable and its close action owned in a 58px visible viewport', async () => {
@@ -2114,22 +1318,6 @@ describe('selection card geometry across content changes', () => {
         state.snapshot = {text: 'Desktop selection.', anchor: {left: 100, right: 230, top: 100, bottom: 124}, isForward};
         state.updatePosition(false);
         expect(state.indicatorStyle).toEqual({left: isForward ? '244px' : '86px', top: '138px'});
-    });
-    it('preserves the opening position across learning tabs and expanding content', async () => {
-        const {state} = mountSelection();
-        state.tooltipRef = {getBoundingClientRect: () => ({width: 388, height: 180})};
-        state.manualPopupPosition = {left: 220, top: 410};
-        state.applyManualPopupGeometry();
-        expect(state.tooltipStyle).toMatchObject({left: '220px', top: '410px', maxHeight: '378px'});
-        state.readingMode = true;
-        await Vue.nextTick();
-        state.tooltipRef = {getBoundingClientRect: () => ({width: 388, height: 520})};
-        state.applyManualPopupGeometry();
-        expect(state.tooltipStyle).toMatchObject({left: '220px', top: '410px', maxHeight: '378px'});
-        state.readingMode = false;
-        await Vue.nextTick();
-        state.applyManualPopupGeometry();
-        expect(state.tooltipStyle).toMatchObject({left: '220px', top: '410px'});
     });
     it('preserves a resized card and clamps it only when the viewport shrinks', () => {
         const {state, window} = mountSelection();
@@ -2705,7 +1893,7 @@ describe('automatic card audio layout', () => {
         expect(fixture.cardRect).not.toHaveBeenCalled();
     });
 
-    it.each(['stop', 'hide', 'unmount', 'failure'] as const)('does not fix automatic card height after %s or its late response', async reason => {
+    it.each(['stop', 'hide', 'unmount'] as const)('does not fix automatic card height after %s or its late response', async reason => {
         const fixture = await audioCard(), response = deferredTts();
         prepareTts(fixture, [response.promise]);
         const pending = fixture.state.toggleAudio('Practice helps.', 'source');
@@ -2713,8 +1901,7 @@ describe('automatic card audio layout', () => {
         if (reason === 'stop') fixture.state.stopAudio();
         else if (reason === 'hide') fixture.state.hideAll();
         else if (reason === 'unmount') fixture.unmount();
-        response.resolve(reason === 'failure' ? {success: false, error: 'Controlled synthesis failure', errorCode: 'local-only-error'}
-            : {success: true, transport: 'offscreen'});
+        response.resolve({success: true, transport: 'offscreen'});
         await pending; await Vue.nextTick();
         expect(fixture.state.tooltipStyle.height).toBeUndefined();
         expect(fixture.state.manualPopupSize).toBeNull();
@@ -3140,157 +2327,6 @@ describe('context menu selection ownership', () => {
     });
 });
 
-describe('selection card on an extension PDF page', () => {
-    it.each([
-        ['native', false], ['native', true], ['document', false], ['document', true],
-    ] as const)('validates %s PDF source on result delivery when changed=%s', async (kind, changed) => {
-        const {createNativePdfSelectionAdapter} = await vi.importActual<typeof import('@/src/app/selection/page')>('@/src/app/selection/page');
-        const {createPdfSelectionAdapter} = await vi.importActual<typeof import('@/src/app/document-translation/selectionRuntime')>('@/src/app/document-translation/selectionRuntime');
-        let adapter: {acceptsRange(range: Range): boolean};
-        const fixture = mountSelection(false, {acceptsRange: (range: Range) => adapter.acceptsRange(range)}, 'chrome', true);
-        const text = 'A selected PDF source passage.';
-        const selected = fixture.selectedSnapshot(text, (parent, source) => {
-            if (kind === 'native') adapter = createNativePdfSelectionAdapter(source,
-                {text, sourceUrl: 'https://example.test/file.pdf', title: 'Fixture'}, () => true);
-            else {
-                parent.setAttribute('data-fluentread-pdf-text', '');
-                adapter = createPdfSelectionAdapter((fixture.document as unknown as Document).body);
-            }
-        });
-        fixture.state.snapshot = selected;
-        fixture.state.selectedText = text;
-        fixture.state.showTooltip = true;
-        let resolve!: (value: string) => void;
-        fixture.translateText.mockImplementationOnce(() => new Promise<string>(done => {resolve = done;}));
-        fixture.state.requestSelectionContent(text);
-        Object.assign(fixture.window, {getSelection: () => null});
-        if (changed) selected.range.startContainer.nodeValue = 'The PDF source changed.';
-        resolve('PDF translation.');
-        await Promise.resolve(); await Vue.nextTick();
-        expect(fixture.state.translationResult).toBe(changed ? '' : 'PDF translation.');
-        expect(fixture.state.showTooltip).toBe(!changed);
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    function preparePdf() {
-        const acceptsRange = vi.fn(() => true);
-        const context = vi.fn(() => ({text: 'The Transformer uses attention.', title: 'Attention Is All You Need', sourceUrl: 'https://arxiv.org/pdf/1706.03762'}));
-        const captureReading = vi.fn(() => ({text: 'Transformer models', context: 'The Transformer uses attention.', sentence: 'The Transformer uses attention.'}));
-        const captureMaterial = vi.fn((_range: Range, _quote: string): MaterialSelection | undefined => undefined);
-        let invalidate = () => {};
-        const unsubscribeSource = vi.fn();
-        const extractText = vi.fn((_range: Range, text: string) => text);
-        const fixture = mountSelection(false, {acceptsRange, extractText, normalizeText: (text: string) => text.replace(/\s+/g, ' ').trim(), context, captureReading, captureMaterial,
-            subscribeInvalidation: (listener: () => void) => {invalidate = listener; return unsubscribeSource;}});
-        class FakeElement {}
-        class FakeNode {}
-        vi.stubGlobal('Element', FakeElement);
-        vi.stubGlobal('Node', FakeNode);
-        const start = {isConnected: true, ownerDocument: fixture.document}, end = {isConnected: true, ownerDocument: fixture.document};
-        const range = {startContainer: start, endContainer: end, startOffset: 0, endOffset: 18,
-            getClientRects: () => [{left: 200, right: 380, top: 250, bottom: 270, width: 180, height: 20}],
-            cloneRange: () => range};
-        Vue.markRaw(range); // 原生 Range 不被 Vue 代理，测试对象也保持相同身份规则。
-        Object.assign(fixture.window, {getSelection: () => ({rangeCount: 1, isCollapsed: false,
-            anchorNode: start, anchorOffset: 0, getRangeAt: () => range, toString: () => 'Transformer\nmodels'})});
-        fixture.config.selectionTranslatorTrigger = 'direct';
-        fixture.config.selectionTranslatorDelay = 0;
-        fixture.state.selectionConfigVersion += 1;
-        return {...fixture, acceptsRange, extractText, context, captureReading, captureMaterialSelection: captureMaterial, range, unsubscribeSource, invalidate: () => invalidate()};
-    }
-
-    it('only captures an adapter-approved source range and normalizes PDF wraps in the snapshot', () => {
-        const fixture = preparePdf();
-        fixture.acceptsRange.mockReturnValue(false);
-        expect(fixture.state.readSelectionSnapshot()).toBeNull();
-        expect(fixture.extractText).not.toHaveBeenCalled();
-        fixture.acceptsRange.mockReturnValue(true);
-        expect(fixture.state.readSelectionSnapshot()).toMatchObject({text: 'Transformer models', parts: [{kind: 'text', text: 'Transformer models'}]});
-        expect(fixture.extractText).toHaveBeenCalledWith(fixture.range, 'Transformer\nmodels');
-        fixture.extractText.mockReturnValue('First page footer.\nSecond page title.');
-        expect(fixture.state.readSelectionSnapshot()).toMatchObject({text: 'First page footer. Second page title.'});
-    });
-
-    it('waits for pointer release and sends PDF context through the existing translation client', async () => {
-        const fixture = preparePdf();
-        const getSelection = (fixture.window as any).getSelection;
-        (fixture.window as any).getSelection = () => null;
-        fixture.state.handlePointerDown({isTrusted: true, button: 0, target: null});
-        (fixture.window as any).getSelection = getSelection;
-        fixture.state.handleSelectionChange({isTrusted: true});
-        await vi.advanceTimersByTimeAsync(100);
-        expect(fixture.translateText).not.toHaveBeenCalled();
-        fixture.state.handlePointerUp({isTrusted: true, button: 0, target: null});
-        await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(fixture.translateText).toHaveBeenCalledWith('Transformer models', 'Attention Is All You Need', expect.objectContaining({
-            pageContext: 'The Transformer uses attention.', signal: expect.any(AbortSignal),
-        }));
-        expect(fixture.state.translationResult).toBe('这是译文');
-    });
-
-    it('aborts source requests and ignores late translations after the source owner invalidates', async () => {
-        const fixture = preparePdf();
-        let finish!: (text: string) => void;
-        fixture.translateText.mockImplementation(() => new Promise(resolve => {finish = resolve;}));
-        fixture.state.snapshot = fixture.state.readSelectionSnapshot();
-        fixture.state.selectedText = 'Transformer models';
-        const request = fixture.state.beginSelectionContentRequest('Transformer models');
-        const pending = fixture.state.requestTranslation(request);
-        const controller = fixture.state.translationAbortController;
-        fixture.acceptsRange.mockReturnValue(false);
-        fixture.invalidate();
-        expect(controller.signal.aborted).toBe(true);
-        expect(fixture.state.snapshot).toBeNull();
-        finish('旧文件的迟到译文'); await pending;
-        expect(fixture.state.translationResult).toBe('');
-        fixture.unmount();
-        expect(fixture.unsubscribeSource).toHaveBeenCalledOnce();
-    });
-
-    it('uses the adapter for PDF reading and vocabulary source metadata', async () => {
-        const fixture = preparePdf();
-        const selection: MaterialSelection = {source: {kind: 'document', fingerprint: 'raw-file-fingerprint', title: 'Attention Is All You Need'},
-            locator: {kind: 'document', page: 3, quote: 'The Transformer uses attention.'}};
-        fixture.captureMaterialSelection.mockReturnValue(selection);
-        fixture.config.harness.enabled = true;
-        fixture.config.vocabularyBookEnabled = true;
-        fixture.state.selectionConfigVersion += 1;
-        // 浏览器用户操作发生在配置通知和首次挂载更新之后，先等这一轮配置归属稳定。
-        await Vue.nextTick();
-        fixture.state.snapshot = fixture.state.readSelectionSnapshot();
-        fixture.state.selectedText = 'Transformer models';
-        const request = fixture.state.beginSelectionContentRequest('Transformer models');
-        fixture.state.translationAnswer = {...request, answer: '模型'};
-        fixture.state.translationResult = '模型';
-        fixture.state.openReadingCard();
-        expect(fixture.captureReading).toHaveBeenCalled();
-        expect(fixture.state.readingSelection.context).toBe('The Transformer uses attention.');
-        expect(fixture.captureMaterialSelection).toHaveBeenCalledWith(fixture.range, 'The Transformer uses attention.');
-        expect(fixture.material.captureMaterialSelection).not.toHaveBeenCalled();
-        expect(fixture.state.readingSelection.material).toEqual(selection);
-        expect(fixture.materialCapture).not.toHaveBeenCalled();
-        fixture.browser.runtime.sendMessage.mockResolvedValue({success: true, data: {id: 'saved'}});
-        await fixture.state.saveVocabularyEntry({isTrusted: true});
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({action: 'upsert', input: expect.objectContaining({context: expect.objectContaining({
-            text: 'The Transformer uses attention.', sourceUrl: 'https://arxiv.org/pdf/1706.03762', pageTitle: 'Attention Is All You Need',
-        })})}));
-        expect(fixture.materialCapture).toHaveBeenCalledWith(expect.objectContaining({...selection, generation: 17,
-            reference: {kind: 'vocabulary', id: 'saved', excerpt: 'Transformer models'}}));
-    });
-});
-
-it('相同译文隐藏后，切换选区与不同结果仍恢复显示', async () => {
-    const {state, lifecycleErrors} = mountSelection();
-    state.selectedText = 'Café'; state.translationResult = 'Cafe\u0301'; await Vue.nextTick();
-    expect(state.hasDistinctTranslationResult).toBe(false);
-    state.translationResult = '咖啡馆'; await Vue.nextTick();
-    expect(state.hasDistinctTranslationResult).toBe(true);
-    state.selectedText = '咖啡馆'; await Vue.nextTick();
-    expect(state.hasDistinctTranslationResult).toBe(false);
-    expect(lifecycleErrors).not.toHaveBeenCalled();
-});
-
-
 describe('selection card bounded layout work', () => {
     async function automaticCard(viewportHeight = 500, anchorTop = 230, anchorBottom = 250) {
         const fixture = mountSelection();
@@ -3505,8 +2541,6 @@ describe('selection card bounded layout work', () => {
 
     it.each([
         ['horizontal tab scrollbar', 'fr-study-toolbar', 300, 132],
-        ['learning menu blank space', 'fr-reading-tool-list', 250, 145],
-        ['vertical learning menu scrollbar', 'fr-reading-tool-list', 380, 175],
     ] as const)('keeps native %s pointer handling without dragging the card', async (_label, className, x, y) => {
         const {state, element, frames, pointer} = await gestureFixture();
         state.stopPopupGesture();
@@ -3685,24 +2719,6 @@ describe('selection card bounded layout work', () => {
         expect(state.manualPopupPosition).toEqual({left: 12, top: 100});
     });
 
-    it('dismisses the teleported tools on outside focus and viewport changes without stealing focus inside the card', () => {
-        const {state} = mountSelection();
-        const inside={}, outside={};
-        const root={contains:(node:unknown)=>node===inside};
-        const closeTools=vi.fn(), dismissToolsOutside=vi.fn();
-        state.readingPanelRef={closeTools,dismissToolsOutside};
-        const pointer={target:inside};
-        state.dismissReadingToolsOutside(pointer);
-        expect(dismissToolsOutside).toHaveBeenCalledWith(pointer);
-        state.dismissReadingToolsOnFocusOut({currentTarget:root,relatedTarget:inside});
-        expect(closeTools).not.toHaveBeenCalled();
-        state.dismissReadingToolsOnFocusOut({currentTarget:root,relatedTarget:outside});
-        state.dismissReadingToolsOnFocusOut({currentTarget:root,relatedTarget:null});
-        expect(closeTools).toHaveBeenCalledTimes(2);
-        state.handleViewportResize();
-        expect(closeTools).toHaveBeenCalledTimes(3);
-    });
-
     it('leaves the native more summary gesture available without starting a card drag', async () => {
         const {state,element,pointer}=await gestureFixture();
         state.stopPopupGesture();
@@ -3830,21 +2846,18 @@ describe('selection card Escape ownership', () => {
         vi.stubGlobal('Element', KeyboardElement);
         const host = new KeyboardElement('fluent-read-selection-translator-container');
         const outside = new KeyboardElement('host-page-control');
-        const shareCard = new KeyboardElement('fluent-read-share-card-container');
         Object.assign(fixture.document, {
             getElementById: vi.fn((id: string) => id === host.id ? host : null),
         });
         const selected = Vue.markRaw({text: 'Keep the native dialog open.', parts: [], range: {} as Range});
         const request = Vue.markRaw({text: selected.text, generation: 1, sourceLanguage: 'en', targetLanguage: 'zh-Hans'});
         const controller = new AbortController();
-        const dismissTools = vi.fn(() => false);
         fixture.state.snapshot = selected;
         fixture.state.selectedText = selected.text;
         fixture.state.showTooltip = true;
         fixture.state.isLoading = true;
         fixture.state.activeContentRequest = request;
         fixture.state.translationAbortController = controller;
-        fixture.state.readingPanelRef = Vue.markRaw({dismissTools});
         const handlers = [...(fixture.listeners.get('document:keydown') ?? [])];
         expect(handlers).toHaveLength(1);
         const handler = handlers[0];
@@ -3856,7 +2869,7 @@ describe('selection card Escape ownership', () => {
             handler(event);
             return event;
         };
-        return {...fixture, host, outside, shareCard, selected, request, controller, dismissTools, dispatch};
+        return {...fixture, host, outside, selected, request, controller, dispatch};
     }
 
     it.each(['ordinary', 'repeat', 'isComposing'] as const)('consumes an owning card Escape with the existing %s ordering', mode => {
@@ -3871,25 +2884,9 @@ describe('selection card Escape ownership', () => {
         expect(fixture.state.dismissedSelection).toBe(fixture.selected);
         expect(event.preventDefault).toHaveBeenCalledOnce();
         expect(event.stopPropagation).toHaveBeenCalledOnce();
-        expect(fixture.dismissTools).toHaveBeenCalledOnce();
     });
 
-    it('consumes the tools Escape tier without closing the owning card or aborting its request', () => {
-        const fixture = keyboardFixture();
-        fixture.dismissTools.mockReturnValue(true);
-        const event = fixture.dispatch();
-
-        expect(fixture.state.snapshot).toBe(fixture.selected);
-        expect(fixture.state.showTooltip).toBe(true);
-        expect(fixture.state.activeContentRequest).toBe(fixture.request);
-        expect(fixture.controller.signal.aborted).toBe(false);
-        expect(fixture.state.isLoading).toBe(true);
-        expect(event.preventDefault).toHaveBeenCalledOnce();
-        expect(event.stopPropagation).toHaveBeenCalledOnce();
-        expect(fixture.dismissTools).toHaveBeenCalledOnce();
-    });
-
-    it.each(['outside with snapshot', 'own without snapshot', 'untrusted', 'share card', 'own non-Escape'] as const)(
+    it.each(['outside with snapshot', 'own without snapshot', 'untrusted', 'own non-Escape'] as const)(
         'retains host event ownership for %s', condition => {
             const fixture = keyboardFixture();
             const noSnapshot = condition === 'own without snapshot';
@@ -3900,8 +2897,7 @@ describe('selection card Escape ownership', () => {
                 fixture.state.translationAbortController = null;
                 fixture.state.isLoading = false;
             }
-            const target = condition === 'outside with snapshot' ? fixture.outside
-                : condition === 'share card' ? fixture.shareCard : fixture.host;
+            const target = condition === 'outside with snapshot' ? fixture.outside : fixture.host;
             const event = fixture.dispatch(target, {isTrusted: condition !== 'untrusted',
                 key: condition === 'own non-Escape' ? 'ArrowLeft' : 'Escape'});
             const closed = condition === 'outside with snapshot';
@@ -3946,13 +2942,11 @@ describe('focused selection card dismissal requests', () => {
             getElementById: vi.fn((id: string) => id === host.id ? host : null)});
         const selected = Vue.markRaw({text: 'Keep the native dialog open.', parts: [], range: {} as Range});
         const controller = new AbortController();
-        const dismissTools = vi.fn(() => false);
         fixture.state.snapshot = selected;
         fixture.state.selectedText = selected.text;
         fixture.state.showTooltip = true;
         fixture.state.tooltipRef = card;
         fixture.state.translationAbortController = controller;
-        fixture.state.readingPanelRef = Vue.markRaw({dismissTools});
         const keydown = [...(fixture.listeners.get('document:keydown') ?? [])][0]!;
         expect(keydown).toBeTypeOf('function');
         const escape = (target: unknown = host, isTrusted = true) => {
@@ -3961,7 +2955,7 @@ describe('focused selection card dismissal requests', () => {
             keydown(event);
             return event;
         };
-        return {...fixture, dismiss, host, card, button, outside, root, selected, controller, dismissTools, escape};
+        return {...fixture, dismiss, host, card, button, outside, root, selected, controller, escape};
     }
 
     it.each(['owned Escape', 'close button handler'] as const)('requests synchronous restoration before hiding for %s', trigger => {
@@ -3989,7 +2983,7 @@ describe('focused selection card dismissal requests', () => {
         expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
     });
 
-    it.each(['outside Escape', 'untrusted Escape', 'no snapshot', 'tools tier', 'plain hideAll',
+    it.each(['outside Escape', 'untrusted Escape', 'no snapshot', 'plain hideAll',
         'configuration notification', 'unmount', 'focus outside card', 'hidden card', 'missing tooltip'] as const)(
         'does not request focus restoration for %s', async condition => {
             const fixture = focusedFixture();
@@ -3998,15 +2992,9 @@ describe('focused selection card dismissal requests', () => {
             else if (condition === 'no snapshot') {
                 fixture.state.snapshot = null;
                 fixture.escape();
-            } else if (condition === 'tools tier') {
-                fixture.dismissTools.mockReturnValue(true);
-                const event = fixture.escape();
-                expect(event.preventDefault).toHaveBeenCalledOnce();
-                expect(fixture.state.showTooltip).toBe(true);
-                expect(fixture.controller.signal.aborted).toBe(false);
             } else if (condition === 'plain hideAll') fixture.state.hideAll();
             else if (condition === 'configuration notification') {
-                fixture.config.harness.enabled = !fixture.config.harness.enabled;
+                fixture.config.to = fixture.config.to === 'zh-Hans' ? 'en' : 'zh-Hans';
                 fixture.state.selectionConfigVersion += 1;
                 await Vue.nextTick();
                 expect(fixture.state.snapshot).toBeNull();
@@ -4229,7 +3217,6 @@ describe('selection translation authentication copy and request ownership', () =
         expect(fixture.state.error).toBe(authenticationCopy);
         expect(fixture.state.wordCard).toBe(completedCard);
         expect(fixture.state.dictionaryAnswer).toBe(completedAnswer);
-        expect(fixture.state.vocabularyAnswer).toBe('阅读并理解文字');
         expect(fixture.state.wordCardError).toBe('');
         expect(fixture.state.isWordCardLoading).toBe(false);
         expect(fixture.state.isWordCardSupportLoading).toBe(false);
@@ -4503,7 +3490,7 @@ describe('selection authentication settings action ownership and rendered entry'
     });
 
     it.each(['close', 'unmount', 'new selection', 'manual retry', 'provider change', 'target change',
-        'adapter invalidation', 'reading then return', 'hidden then return'] as const)('suppresses a late settings rejection after %s', async boundary => {
+        'adapter invalidation', 'hidden then return'] as const)('suppresses a late settings rejection after %s', async boundary => {
         const acceptsRange = vi.fn(() => true);
         const fixture = await failedSelection({adapter: {acceptsRange}});
         const response = deferred<unknown>();
@@ -4524,11 +3511,7 @@ describe('selection authentication settings action ownership and rendered entry'
             expect(fixture.state.authenticationError.request.targetLanguage).toBe('zh-Hans');
         }
         else if (boundary === 'adapter invalidation') acceptsRange.mockReturnValue(false);
-        else if (boundary === 'reading then return') {
-            fixture.state.readingMode = true;
-            expect(fixture.state.openingAuthenticationSettings).toBeNull();
-            fixture.state.readingMode = false;
-        } else {
+        else {
             fixture.state.showTooltip = false;
             expect(fixture.state.openingAuthenticationSettings).toBeNull();
             fixture.state.showTooltip = true;
@@ -4536,11 +3519,11 @@ describe('selection authentication settings action ownership and rendered entry'
         await Vue.nextTick();
         const current = {authentication: fixture.state.authenticationError, request: fixture.state.activeContentRequest,
             error: fixture.state.error, translation: fixture.state.translationResult, dictionary: fixture.state.dictionaryAnswer};
-        if (boundary !== 'reading then return' && boundary !== 'hidden then return') {
+        if (boundary !== 'hidden then return') {
             await fixture.state.openAuthenticationSettings();
             expect(settingsCalls(fixture)).toHaveLength(1);
         }
-        // Transient reading/hidden revokes the original action even after return.
+        // Transient hidden revokes the original action even after return.
         // Do not start a second unresolved action in this late-response table.
         response.reject(new Error(privateDetail));
         await pending;
@@ -4553,7 +3536,7 @@ describe('selection authentication settings action ownership and rendered entry'
         expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
     });
 
-    it.each(['provider', 'target', 'adapter', 'reading', 'hidden'] as const)('rejects a new settings action when the original authentication loses its %s boundary', async boundary => {
+    it.each(['provider', 'target', 'adapter', 'hidden'] as const)('rejects a new settings action when the original authentication loses its %s boundary', async boundary => {
         const acceptsRange = vi.fn(() => true);
         const fixture = await failedSelection({adapter: {acceptsRange}});
         if (boundary === 'provider') fixture.config.service = 'microsoft';
@@ -4564,40 +3547,11 @@ describe('selection authentication settings action ownership and rendered entry'
             expect(fixture.state.authenticationError.request.targetLanguage).toBe('zh-Hans');
         }
         else if (boundary === 'adapter') acceptsRange.mockReturnValue(false);
-        else if (boundary === 'reading') fixture.state.readingMode = true;
         else fixture.state.showTooltip = false;
         expect(fixture.state.openingAuthenticationSettings).toBeNull();
         expect(fixture.state.isAuthenticationErrorCurrent(fixture.state.authenticationError)).toBe(false);
         await fixture.state.openAuthenticationSettings();
         expect(settingsCalls(fixture)).toHaveLength(0);
-        expect(fixture.state.openingAuthenticationSettings).toBeNull();
-        expect(fixture.state.noticeMessage).toBe('');
-        expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('keeps a newer action pending when an older action finishes after reading returns', async () => {
-        const fixture = await failedSelection();
-        const old = deferred<unknown>(), current = deferred<unknown>();
-        fixture.browser.runtime.sendMessage.mockImplementation((message: any) => {
-            if (message.type !== 'openOptionsPage') return Promise.resolve({success: true, zoom: 1});
-            return settingsCalls(fixture).length === 1 ? old.promise : current.promise;
-        });
-        const oldPending = fixture.state.openAuthenticationSettings();
-        const oldAction = fixture.state.openingAuthenticationSettings;
-        fixture.state.readingMode = true;
-        expect(fixture.state.openingAuthenticationSettings).toBeNull();
-        fixture.state.readingMode = false;
-        const currentPending = fixture.state.openAuthenticationSettings();
-        const currentAction = fixture.state.openingAuthenticationSettings;
-        expect(currentAction).not.toBe(oldAction);
-        expect(currentAction.authentication).toBe(oldAction.authentication);
-        old.reject(new Error(privateDetail));
-        await oldPending;
-        expect(fixture.state.openingAuthenticationSettings).toBe(currentAction);
-        expect(fixture.state.noticeMessage).toBe('');
-        expect(settingsCalls(fixture).map(([message]) => message)).toEqual([settingsMessage, settingsMessage]);
-        current.resolve({success: true});
-        await currentPending;
         expect(fixture.state.openingAuthenticationSettings).toBeNull();
         expect(fixture.state.noticeMessage).toBe('');
         expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
@@ -4625,632 +3579,9 @@ describe('selection authentication settings action ownership and rendered entry'
     });
 });
 
-it('captures document materials through the owner adapter and keeps safe optional failure isolated', () => {
-    const saved = {source: {kind: 'document', fingerprint: 'a'.repeat(32)}, locator: {kind: 'document', page: 2}};
-    const captureMaterial = vi.fn(() => saved);
-    const fixture = mountSelection(false, {acceptsRange: () => true, captureMaterial});
-    const range = {} as Range;
-    expect(fixture.state.captureMaterialSafely(range, 'selected translation')).toBe(saved);
-    expect(captureMaterial).toHaveBeenCalledWith(range, 'selected translation');
-    expect(fixture.material.captureMaterialSelection).not.toHaveBeenCalled();
-    captureMaterial.mockImplementation(() => {throw new Error('document unmounted');});
-    expect(fixture.state.captureMaterialSafely(range, 'selected translation')).toBeUndefined();
-    expect(fixture.material.captureMaterialSelection).not.toHaveBeenCalled();
-});
-
-
-describe('Safari reading input keyboard transition', () => {
-    // Render the actual parent SFC and deliver focus/input through its DOM listeners.
-    // A minimal child input and closed-root focus/viewport ports model the native boundary;
-    // they do not synthesize a Safari keyboard or claim browser acceptance.
-    async function keyboardTransitionFixture(target: SelectionBuildTarget = 'safari') {
-        const fixture = mountSelection(false, {acceptsRange: () => true}, target, true);
-        const port = fixture.renderPort!;
-        vi.stubGlobal('Node', port.domWindow.Node);
-        vi.stubGlobal('Element', port.domWindow.Element);
-        vi.stubGlobal('HTMLElement', port.domWindow.HTMLElement);
-        const host = port.document.createElement('div');
-        host.id = 'fluent-read-selection-translator-container';
-        const shadow = host.attachShadow({mode: 'closed'});
-        const ui = port.root.firstElementChild!;
-        shadow.append(ui); port.root.append(host);
-        const viewport = {width: 402, height: 754, scale: 1, offsetLeft: 0, offsetTop: 0};
-        Object.assign(fixture.window, {innerWidth: 402, innerHeight: 874, visualViewport: viewport});
-        let active: Element | null = null;
-        Object.defineProperty(shadow, 'activeElement', {get: () => active});
-        Object.assign(fixture.document, {activeElement: host,
-            getElementById: (id: string) => id === host.id ? host : null});
-        const source = {isConnected: true, ownerDocument: fixture.document};
-        const range = {startContainer: source, endContainer: source, collapsed: false,
-            toString: () => 'Keep the original source.', getClientRects: () => []};
-        const selected = Vue.markRaw({text: 'Keep the original source.', rangeText: 'Keep the original source.', range,
-            parts: [], anchor: {left: 20, right: 250, top: 400, bottom: 424, width: 230, height: 24}});
-        Object.assign(fixture.state, {snapshot: selected, selectedText: selected.text, readingMode: true, showTooltip: true});
-        fixture.config.selectionTranslatorAutoDismiss = true;
-        await Vue.nextTick();
-        const card = shadow.querySelector('.fr-translation-tooltip') as HTMLElement;
-        expect(card).not.toBeNull();
-        card.getBoundingClientRect = () => ({left: 12, top: 320, right: 390, bottom: 537, width: 378, height: 217}) as DOMRect;
-        fixture.state.tooltipRef = Vue.markRaw(card);
-        const form = port.document.createElement('form'); form.className = 'fr-reading-followup';
-        const input = port.document.createElement('input'); input.setAttribute('aria-label', '继续追问');
-        form.append(input); card.append(form);
-        const controller = new AbortController(); fixture.state.translationAbortController = controller;
-        const send = (where: 'window' | 'document', type: string, fields: Record<string, unknown> = {}) => {
-            const event = {type, isTrusted: true, target: fixture.document, ...fields};
-            for (const fn of [...(fixture.listeners.get(`${where}:${type}`) ?? [])]) fn(event);
-        };
-        const domEvent = (type: string, trusted = true) => {
-            const event = new port.domWindow.Event(type, {bubbles: true});
-            Object.defineProperty(event, 'isTrusted', {value: trusted}); input.dispatchEvent(event);
-        };
-        const focus = (trusted = true, interaction = true) => {
-            if (interaction) send('document', 'pointerdown', {target: host, pointerType: 'touch', button: 0});
-            active = input; domEvent('focusin', trusted);
-            if (interaction) send('document', 'pointerup', {target: host, pointerType: 'touch', button: 0});
-        };
-        const keyboardScroll = () => {
-            Object.assign(viewport, {height: 376, offsetTop: 284});
-            send('window', 'scroll');
-        };
-        return {...fixture, host, shadow, card, input, viewport, selected, source, controller, focus, domEvent, send,
-            keyboardScroll, setActive: (element: Element | null) => {active = element;}};
-    }
-
-    async function shortReadingCardFixture() {
-        const f = await keyboardTransitionFixture();
-        f.focus(); f.keyboardScroll(); await vi.advanceTimersByTimeAsync(801);
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402, scrollY: 557,
-            screen: {orientation: {type: 'landscape-primary'}}});
-        Object.assign(f.viewport, {width: 874, height: 98, offsetTop: 304});
-        f.send('window', 'resize'); await vi.advanceTimersByTimeAsync(832); await Vue.nextTick();
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(0);
-        expect(f.card.classList.contains('fr-short-viewport')).toBe(true);
-        Object.defineProperties(f.card, {clientHeight: {value: 78, configurable: true},
-            scrollHeight: {value: 392, configurable: true}});
-        f.card.getBoundingClientRect = () => ({left: 12, top: 304, right: 390, bottom: 382, width: 378, height: 78}) as DOMRect;
-        f.card.setPointerCapture = vi.fn();
-        const events: Event[] = [];
-        const touch = (type: string, fields: Record<string, unknown> = {}, deliverToCard = true) => {
-            const values = {isTrusted: true, pointerType: 'touch', isPrimary: true, button: 0,
-                pointerId: 7, clientX: 120, clientY: 360, ...fields};
-            // Model document capture's closed-shadow retarget, then deliver the real card's SFC listener.
-            f.send('document', type, {target: f.host, ...values});
-            if (deliverToCard) {
-                const event = new f.renderPort!.domWindow.Event(type, {bubbles: true, cancelable: true});
-                for (const [key, value] of Object.entries(values)) Object.defineProperty(event, key, {value});
-                f.card.dispatchEvent(event); events.push(event);
-            }
-        };
-        const scrollHost = (y: number) => { Object.assign(f.window, {scrollY: y}); f.send('window', 'scroll'); };
-        return {...f, touch, scrollHost, events};
-    }
-
-    async function readingRevealFixture(scale = 1) {
-        const f = await keyboardTransitionFixture();
-        f.focus(); f.keyboardScroll(); await vi.advanceTimersByTimeAsync(801);
-        f.state.pageZoom = 1 / scale;
-        f.browser.runtime.sendMessage.mockResolvedValue(undefined);
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402, scrollY: 557,
-            screen: {orientation: {type: 'landscape-primary'}}, scroll: vi.fn(), scrollTo: vi.fn(), scrollBy: vi.fn()});
-        // This DOM port has no safe-area CSS probe: model the actual78px safe port directly.
-        Object.assign(f.viewport, {width: 874, height: 78, offsetTop: 304});
-        Object.defineProperties(f.card, {clientTop: {value: 0, configurable: true},
-            clientHeight: {value: 78 / scale, configurable: true}, scrollHeight: {value: 392 / scale, configurable: true}});
-        f.card.scrollTop = 252 / scale;
-        // Actual Safari uses visual-origin BCR here even though VV.offsetTop is304.
-        f.card.getBoundingClientRect = () => ({left: 74, top: 0, right: 462, bottom: 78, width: 388, height: 78}) as DOMRect;
-        const inputRect = vi.fn(() => {
-            const top = 334 - f.card.scrollTop * scale;
-            return {left: 100, right: 393, top, bottom: top + 44 * scale, width: 293, height: 44 * scale} as DOMRect;
-        });
-        f.input.getBoundingClientRect = inputRect;
-        f.input.focus = vi.fn(); f.input.scrollIntoView = vi.fn();
-        f.input.value = 'draft remains in the original input';
-        return {...f, inputRect};
-    }
-
-    it.each([1, 0.5])('reveals only the same focused input in its own short-card client port at popup scale%s and nonzero VV offset', async scale => {
-        const f = await readingRevealFixture(scale);
-        f.send('window', 'orientationchange'); await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(f.card.classList.contains('fr-short-viewport')).toBe(true);
-        expect(f.card.scrollTop).toBeCloseTo(260 / scale + 44);
-        expect(f.inputRect).toHaveBeenCalledTimes(1);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.input.value).toBe('draft remains in the original input');
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        expect((f.window as typeof f.window & {scrollY: number}).scrollY).toBe(557);
-        expect(f.input.focus).not.toHaveBeenCalled(); expect(f.input.scrollIntoView).not.toHaveBeenCalled();
-        const win = f.window as typeof f.window & {scroll: ReturnType<typeof vi.fn>; scrollTo: ReturnType<typeof vi.fn>; scrollBy: ReturnType<typeof vi.fn>};
-        expect(win.scroll).not.toHaveBeenCalled(); expect(win.scrollTo).not.toHaveBeenCalled(); expect(win.scrollBy).not.toHaveBeenCalled();
-        // A later own scroll/content positioning/unchanged viewport must not pull the reader back.
-        f.card.scrollTop = 252 / scale; f.send('window', 'scroll', {target: f.host});
-        f.state.schedulePositionUpdate(); f.send('window', 'resize');
-        await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(f.card.scrollTop).toBe(252 / scale);
-        expect(f.inputRect).toHaveBeenCalledTimes(1);
-        expect(f.shadow.activeElement).toBe(f.input);
-    });
-
-    it.each(['owned pointer', 'wheel', 'editing key', 'source replaced', 'expired', 'unmount'] as const)(
-        'does not execute a cancelled or stale focused reveal: %s', async reason => {
-            const f = await readingRevealFixture();
-            f.send('window', 'orientationchange'); await vi.advanceTimersByTimeAsync(16);
-            expect(f.state.readingKeyboardFocus.reveal).toBe(true);
-            if (reason === 'owned pointer') f.send('document', 'pointerdown', {target: f.host, pointerType: 'touch', button: 0});
-            if (reason === 'wheel') f.send('window', 'wheel');
-            if (reason === 'editing key') f.send('document', 'keydown', {target: f.host, key: ' ', composedPath: () => [f.host], preventDefault: vi.fn(), stopPropagation: vi.fn()});
-            if (reason === 'source replaced') f.state.snapshot = {...f.selected, text: 'new source'};
-            if (reason === 'expired') vi.setSystemTime(Date.now() + 801);
-            if (reason === 'unmount') f.unmount();
-            await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-            expect(f.inputRect).not.toHaveBeenCalled();
-            expect(f.card.scrollTop).toBe(252);
-            expect((f.window as typeof f.window & {scrollY: number}).scrollY).toBe(557);
-            expect(f.lifecycleErrors).not.toHaveBeenCalled();
-        },
-    );
-
-    it.each(['insufficient port', 'source disconnected'] as const)('does not claim or force complete input visibility for %s', async reason => {
-        const f = await readingRevealFixture();
-        if (reason === 'insufficient port') Object.defineProperty(f.card, 'clientHeight', {value: 32});
-        else f.source.isConnected = false;
-        f.send('window', 'orientationchange'); await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(f.card.scrollTop).toBe(252);
-        expect((f.window as typeof f.window & {scrollY: number}).scrollY).toBe(557);
-        expect(f.input.focus).not.toHaveBeenCalled(); expect(f.input.scrollIntoView).not.toHaveBeenCalled();
-        if (reason === 'source disconnected') expect(f.state.showTooltip).toBe(false);
-        else {
-            expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-            expect(f.shadow.activeElement).toBe(f.input);
-            expect(f.controller.signal.aborted).toBe(false);
-        }
-    });
-
-    it.each(['pointerup', 'pointercancel'] as const)('keeps an internal short-card pan and its tiny host tail until its fixed deadline after %s', async end => {
-        const f = await shortReadingCardFixture();
-        f.input.value = '未提交的追问';
-        f.touch('pointerdown'); f.touch('pointermove', {clientY: 340});
-        const deadline = f.state.readingCardPan.expiresAt;
-        expect(deadline).toBe(Date.now() + 400);
-        await vi.advanceTimersByTimeAsync(85);
-        f.touch('pointermove', {clientY: 320}); f.touch(end, {clientY: 320});
-        await vi.advanceTimersByTimeAsync(15);
-        f.scrollHost(558); await Vue.nextTick();
-        // The unit port models real card scroll progress; native/browser proof must observe it independently.
-        f.card.scrollTop = 72; f.send('window', 'scroll', {target: f.host});
-        expect(f.card.scrollTop).toBe(72);
-        expect(f.state.readingCardPan.expiresAt).toBe(deadline);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.input.value).toBe('未提交的追问');
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        expect(f.events.every(event => !event.defaultPrevented)).toBe(true);
-        expect(f.card.setPointerCapture).not.toHaveBeenCalled();
-        await vi.advanceTimersByTimeAsync(deadline - Date.now() + 1);
-        expect(f.state.readingCardPan).toBeUndefined();
-        // A later reverse gesture needs a new local trusted down and movement, never the expired allowance.
-        f.touch('pointerdown', {clientY: 320}); f.touch('pointermove', {clientY: 350}); f.touch(end, {clientY: 350});
-        const reverseDeadline = f.state.readingCardPan.expiresAt;
-        expect(reverseDeadline).toBeGreaterThan(deadline);
-        f.card.scrollTop = 0; f.send('window', 'scroll', {target: f.host}); f.scrollHost(557);
-        expect(f.card.scrollTop).toBe(0);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.controller.signal.aborted).toBe(false);
-        await vi.advanceTimersByTimeAsync(reverseDeadline - Date.now() + 1);
-        f.scrollHost(557); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-    });
-
-    it.each(['no local card event', 'no vertical move', 'normal height', 'not overflow', 'mouse', 'untrusted', 'foreign pointer', 'outside card'] as const)(
-        'does not exempt host scrolling without a proven short-card touch pan: %s', async reason => {
-            const f = await shortReadingCardFixture();
-            if (reason === 'normal height') {
-                f.viewport.height = 376; f.send('window', 'resize'); await vi.advanceTimersByTimeAsync(32);
-            }
-            if (reason === 'not overflow') Object.defineProperty(f.card, 'scrollHeight', {value: 78});
-            const fields = reason === 'mouse' ? {pointerType: 'mouse'} : reason === 'untrusted' ? {isTrusted: false} : {};
-            f.touch('pointerdown', fields, reason !== 'no local card event');
-            if (reason !== 'no vertical move') f.touch('pointermove', {...fields,
-                clientY: reason === 'outside card' ? 250 : 340, ...(reason === 'foreign pointer' ? {pointerId: 9} : {})});
-            f.scrollHost(558); await Vue.nextTick();
-            expect(f.state.showTooltip).toBe(false);
-            expect(f.controller.signal.aborted).toBe(true);
-            expect(f.listeners.get('window:wheel')?.size).toBe(0);
-        },
-    );
-
-    it.each(['outside touch', 'wheel', 'page key', 'input edit', 'focusout', 'window blur', 'pagehide', 'source changed', 'scale changed', 'width changed', 'nested scroll', 'large host pan', 'cumulative host travel', 'unmount'] as const)(
-        'revokes the internal pan for intent, identity loss, excessive host motion or teardown: %s', async reason => {
-            const f = await shortReadingCardFixture();
-            f.touch('pointerdown'); f.touch('pointermove', {clientY: 340}); f.touch('pointercancel', {clientY: 340});
-            expect(f.state.readingCardPan.expiresAt).toBeGreaterThan(Date.now());
-            if (reason === 'outside touch') f.send('document', 'pointerdown', {target: f.renderPort!.document.createElement('p'), pointerType: 'touch', button: 0});
-            if (reason === 'wheel') f.send('window', 'wheel');
-            if (reason === 'page key') f.send('document', 'keydown', {target: f.host, key: 'PageDown'});
-            if (reason === 'input edit') f.domEvent('input');
-            if (reason === 'focusout') f.domEvent('focusout');
-            if (reason === 'window blur') f.send('window', 'blur');
-            if (reason === 'pagehide') f.send('window', 'pagehide');
-            if (reason === 'source changed') f.source.isConnected = false;
-            if (reason === 'scale changed') f.viewport.scale = 1.2;
-            if (reason === 'width changed') f.viewport.width = 402;
-            if (reason === 'nested scroll') f.send('window', 'scroll', {target: f.renderPort!.document.createElement('div')});
-            if (reason === 'large host pan') Object.assign(f.window, {scrollY: 560});
-            if (reason === 'cumulative host travel') { f.scrollHost(558); f.scrollHost(557); Object.assign(f.window, {scrollY: 558}); }
-            if (reason === 'unmount') f.unmount();
-            f.send('window', 'scroll'); await Vue.nextTick();
-            expect(f.state.readingCardPan).toBeUndefined();
-            if (reason !== 'unmount') expect(f.state.showTooltip).toBe(false);
-            else expect(f.shadow.querySelector('.fr-translation-tooltip')).toBeNull();
-            expect(f.controller.signal.aborted).toBe(true);
-            expect(f.listeners.get('window:wheel')?.size).toBe(0);
-            expect(f.lifecycleErrors).not.toHaveBeenCalled();
-        },
-    );
-
-    it('keeps the rendered owned card and request during the actual stable-scale keyboard document pan', async () => {
-        const f = await keyboardTransitionFixture();
-        f.focus(); await vi.advanceTimersByTimeAsync(231); f.keyboardScroll(); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(true);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        await vi.advanceTimersByTimeAsync(20);
-        expect(f.state.viewportSize).toMatchObject({width: 402, height: 376, top: 284});
-        expect(f.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it('keeps the same focused reading input and request through short-card fallback and viewport recovery', async () => {
-        const f = await keyboardTransitionFixture();
-        f.focus();
-        Object.assign(f.viewport, {height: 58, offsetTop: 320});
-        f.send('window', 'resize');
-        await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(f.card.classList.contains('fr-short-viewport')).toBe(true);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.state.readingKeyboardFocus.input).toBe(f.input);
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        Object.assign(f.viewport, {height: 754, offsetTop: 0});
-        f.send('window', 'resize');
-        await vi.advanceTimersByTimeAsync(32); await Vue.nextTick();
-        expect(f.card.classList.contains('fr-short-viewport')).toBe(false);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.controller.signal.aborted).toBe(false);
-        f.unmount();
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-        expect(vi.getTimerCount()).toBe(0);
-        expect(f.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-
-    it('expires the initial pan window without renewing on scroll and retains only the owned focus identity', async () => {
-        const f = await keyboardTransitionFixture(); f.focus();
-        expect(f.listeners.get('window:wheel')?.size).toBe(1);
-        await vi.advanceTimersByTimeAsync(700); f.keyboardScroll();
-        expect(f.state.showTooltip).toBe(true);
-        await vi.advanceTimersByTimeAsync(101);
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(0);
-        expect(f.listeners.get('window:wheel')?.size).toBe(1);
-        f.keyboardScroll(); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBeNull();
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-    });
-
-    it.each(['viewport first', 'scroll first'] as const)('preserves the same edited input during one later rotation pan (%s) without renewing its deadline', async order => {
-        const f = await keyboardTransitionFixture(); f.focus();
-        await vi.advanceTimersByTimeAsync(231); f.keyboardScroll();
-        await vi.advanceTimersByTimeAsync(1000);
-        f.input.value = '未提交的追问'; f.domEvent('input');
-        expect(f.state.readingKeyboardFocus.input).toBe(f.input);
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(0);
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402});
-        Object.assign(f.viewport, {width: 874, height: 58, offsetTop: 338});
-        f.send('window', 'orientationchange');
-        if (order === 'viewport first') await vi.advanceTimersByTimeAsync(16);
-        f.send('window', 'scroll'); await Vue.nextTick();
-        const deadline = f.state.readingKeyboardFocus.expiresAt;
-        expect(deadline).toBeGreaterThan(Date.now());
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.input.value).toBe('未提交的追问');
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        await vi.advanceTimersByTimeAsync(700);
-        f.send('window', 'resize'); f.send('window', 'scroll');
-        await vi.advanceTimersByTimeAsync(16);
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(deadline);
-        expect(f.state.showTooltip).toBe(true);
-        await vi.advanceTimersByTimeAsync(101);
-        f.send('window', 'scroll'); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-    });
-
-    it.each(['screen', 'legacy'] as const)('preserves the same focused input when explicit %s rotation precedes visual viewport width without extending the deadline', async api => {
-        const f = await keyboardTransitionFixture();
-        const orient = (landscape: boolean) => Object.assign(f.window, api === 'screen'
-            ? {screen: {orientation: {type: landscape ? 'landscape-primary' : 'portrait-primary'}}}
-            : {orientation: landscape ? 90 : 0});
-        orient(false);
-        Object.assign(f.window, {innerWidth: 402, innerHeight: 714});
-        f.viewport.height = 714;
-        f.focus();
-        await vi.advanceTimersByTimeAsync(311);
-        Object.assign(f.viewport, {height: 376, offsetTop: 338});
-        f.send('window', 'scroll');
-        await vi.advanceTimersByTimeAsync(2106);
-        f.input.value = '未提交的追问'; f.domEvent('input');
-        // Actual Safari order: orientation changes first; VV is still the portrait keyboard viewport.
-        orient(true); f.send('window', 'orientationchange');
-        await vi.advanceTimersByTimeAsync(66);
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402});
-        f.viewport.offsetTop = 0;
-        f.send('window', 'resize'); f.send('window', 'scroll'); await Vue.nextTick();
-        const deadline = f.state.readingKeyboardFocus.expiresAt;
-        expect(deadline).toBeGreaterThan(Date.now());
-        expect(f.viewport.width).toBe(402);
-        expect(f.shadow.querySelector('.fr-translation-tooltip')).toBe(f.card);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.input.value).toBe('未提交的追问');
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-        // Later VV catch-up and repeated resize/scroll refresh geometry, never the 800ms deadline.
-        await vi.advanceTimersByTimeAsync(100);
-        Object.assign(f.viewport, {width: 874, height: 58});
-        f.send('window', 'resize'); f.send('window', 'scroll');
-        await vi.advanceTimersByTimeAsync(16); await Vue.nextTick();
-        expect(f.state.readingKeyboardFocus).toMatchObject({width: 874, height: 58, expiresAt: deadline});
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.controller.signal.aborted).toBe(false);
-        await vi.advanceTimersByTimeAsync(deadline - Date.now() - 1);
-        f.send('window', 'resize'); f.send('window', 'scroll');
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(deadline);
-        expect(f.state.showTooltip).toBe(true);
-        await vi.advanceTimersByTimeAsync(2);
-        f.send('window', 'scroll'); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-    });
-
-    it.each(['screen', 'legacy'] as const)('uses explicit %s orientation for a return to portrait while the keyboard keeps layout height short', async api => {
-        const f = await keyboardTransitionFixture();
-        const orient = (landscape: boolean) => Object.assign(f.window, api === 'screen'
-            ? {screen: {orientation: {type: landscape ? 'landscape-primary' : 'portrait-primary'}}}
-            : {orientation: landscape ? 90 : 0});
-        orient(false); f.focus(); f.keyboardScroll();
-        await vi.advanceTimersByTimeAsync(801);
-        orient(true); Object.assign(f.window, {innerWidth: 874, innerHeight: 58});
-        Object.assign(f.viewport, {width: 874, height: 58});
-        f.send('window', 'scroll');
-        expect(f.state.showTooltip).toBe(true);
-        await vi.advanceTimersByTimeAsync(801);
-        orient(false); Object.assign(f.window, {innerWidth: 402, innerHeight: 376});
-        Object.assign(f.viewport, {width: 402, height: 376});
-        f.send('window', 'scroll'); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(true);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.controller.signal.aborted).toBe(false);
-        f.unmount();
-        expect(f.listeners.get('window:wheel')?.size).toBe(0);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('ends the current keyboard pan on input without exempting a later ordinary document scroll', async () => {
-        const f = await keyboardTransitionFixture(); f.focus(); f.keyboardScroll();
-        expect(f.state.showTooltip).toBe(true);
-        f.domEvent('input');
-        expect(f.state.readingKeyboardFocus.input).toBe(f.input);
-        expect(f.state.readingKeyboardFocus.expiresAt).toBe(0);
-        f.keyboardScroll(); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.controller.signal.aborted).toBe(true);
-    });
-
-    it.each(['direct input', 'closed-shadow retarget'] as const)('keeps edited input rotation eligibility after captured editing keys (%s)', async targetMode => {
-        const f = await keyboardTransitionFixture(); f.focus(); f.keyboardScroll();
-        expect(f.document.addEventListener).toHaveBeenCalledWith('keydown', expect.any(Function), true);
-        const preventDefault = vi.fn(), stopPropagation = vi.fn();
-        const inputStop = vi.fn((event: Event) => {
-            // The registered document capture port has already ended this pan before the input's bubble stop.
-            expect(f.state.readingKeyboardFocus.expiresAt).toBe(0); event.stopPropagation();
-        });
-        f.input.addEventListener('keydown', inputStop);
-        for (const key of [' ', 'Home', 'ArrowDown']) {
-            const target = targetMode === 'direct input' ? f.input : f.host;
-            const path = targetMode === 'direct input' ? [f.input, f.card, f.shadow, f.host] : [f.host];
-            f.send('document', 'keydown', {target, key, composedPath: () => path, preventDefault, stopPropagation});
-            f.domEvent('keydown');
-            expect(f.state.readingKeyboardFocus.input).toBe(f.input);
-        }
-        f.input.value = 'draft with spaces'; f.domEvent('input');
-        expect(inputStop).toHaveBeenCalledTimes(3);
-        expect(preventDefault).not.toHaveBeenCalled(); expect(stopPropagation).not.toHaveBeenCalled();
-        await vi.advanceTimersByTimeAsync(801);
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402});
-        Object.assign(f.viewport, {width: 874, height: 58});
-        f.send('window', 'scroll'); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(true);
-        expect(f.shadow.activeElement).toBe(f.input);
-        expect(f.card.querySelector('.fr-reading-followup input')).toBe(f.input);
-        expect(f.input.value).toBe('draft with spaces');
-        expect(f.state.snapshot).toBe(f.selected);
-        expect(f.controller.signal.aborted).toBe(false);
-    });
-
-    it.each(['outside target', 'foreign focus'] as const)('does not retain editing-key eligibility for %s', async reason => {
-        const f = await keyboardTransitionFixture(); f.focus();
-        const foreign = f.renderPort!.document.createElement('input');
-        if (reason === 'foreign focus') f.setActive(foreign);
-        const target = reason === 'outside target' ? foreign : f.input;
-        f.send('document', 'keydown', {target, key: ' ', composedPath: () => [target]});
-        expect(f.state.readingKeyboardFocus).toBeUndefined();
-        Object.assign(f.window, {innerWidth: 874, innerHeight: 402});
-        Object.assign(f.viewport, {width: 874, height: 58});
-        f.send('window', 'scroll'); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-        expect(f.controller.signal.aborted).toBe(true);
-    });
-
-    it.each(['untrusted focus', 'no owned gesture', 'stale gesture', 'readonly', 'no viewport', 'no auto-dismiss'] as const)(
-        'does not arm keyboard protection for %s', async reason => {
-            const f = await keyboardTransitionFixture();
-            if (reason === 'readonly') f.input.setAttribute('readonly', '');
-            if (reason === 'no viewport') Object.assign(f.window, {visualViewport: undefined});
-            if (reason === 'no auto-dismiss') { f.config.selectionTranslatorAutoDismiss = false; f.notifyConfig(); }
-            if (reason === 'no owned gesture') vi.setSystemTime(0);
-            if (reason === 'stale gesture') {
-                f.send('document', 'pointerdown', {target: f.host, pointerType: 'touch', button: 0});
-                await vi.advanceTimersByTimeAsync(501);
-            }
-            f.focus(reason !== 'untrusted focus', reason !== 'no owned gesture' && reason !== 'stale gesture');
-            expect(f.listeners.get('window:wheel')?.size ?? 0).toBe(0);
-            f.keyboardScroll(); await Vue.nextTick();
-            expect(f.state.showTooltip).toBe(reason === 'no auto-dismiss');
-        },
-    );
-
-    it.each(['ordinary document scroll', 'nested scroll', 'pinch zoom', 'width change', 'layout rotation without viewport width change', 'focus lost', 'readonly after focus', 'detached input', 'changed source', 'disconnected source'] as const)(
-        'keeps normal dismissal for %s during the short focus window', async reason => {
-            const f = await keyboardTransitionFixture(); f.focus();
-            Object.assign(f.viewport, {height: 376, offsetTop: 284});
-            let target: unknown = f.document;
-            if (reason === 'ordinary document scroll') f.viewport.height = 754;
-            if (reason === 'nested scroll') target = f.renderPort!.document.createElement('div');
-            if (reason === 'pinch zoom') f.viewport.scale = 1.2;
-            if (reason === 'width change') f.viewport.width = 300;
-            if (reason === 'layout rotation without viewport width change') { Object.assign(f.window, {innerWidth: 874, innerHeight: 402}); f.viewport.height = 754; }
-            if (reason === 'focus lost') f.setActive(null);
-            if (reason === 'readonly after focus') f.input.setAttribute('readonly', '');
-            if (reason === 'detached input') f.input.remove();
-            if (reason === 'changed source') f.state.snapshot = {...f.selected, text: 'A different source.'};
-            if (reason === 'disconnected source') f.source.isConnected = false;
-            f.send('window', 'scroll', {target}); await Vue.nextTick();
-            expect(f.state.showTooltip).toBe(false);
-            expect(f.controller.signal.aborted).toBe(true);
-            expect(f.listeners.get('window:wheel')?.size).toBe(0);
-        },
-    );
-
-    it.each(['wheel', 'touch move', 'outside pointer', 'scroll key', 'focusout', 'window blur', 'pagehide'] as const)(
-        'revokes the owned rotation identity and temporary window for deliberate intent or teardown: %s', async reason => {
-            const f = await keyboardTransitionFixture(); f.focus();
-            await vi.advanceTimersByTimeAsync(801);
-            Object.assign(f.window, {innerWidth: 874, innerHeight: 402});
-            Object.assign(f.viewport, {width: 874, height: 58});
-            f.send('window', 'resize'); await vi.advanceTimersByTimeAsync(16);
-            expect(f.state.readingKeyboardFocus.rotating).toBe(true);
-            const preventDefault = vi.fn(), stopPropagation = vi.fn();
-            if (reason === 'wheel') f.send('window', 'wheel', {preventDefault, stopPropagation});
-            if (reason === 'touch move') f.send('document', 'pointermove', {pointerType: 'touch'});
-            if (reason === 'outside pointer') f.send('document', 'pointerdown', {target: f.renderPort!.document.createElement('p'), pointerType: 'touch', button: 0});
-            if (reason === 'scroll key') f.send('document', 'keydown', {target: f.host, key: 'PageDown', preventDefault, stopPropagation});
-            if (reason === 'focusout') f.domEvent(reason);
-            if (reason === 'window blur') f.send('window', 'blur');
-            if (reason === 'pagehide') f.send('window', 'pagehide');
-            expect(preventDefault).not.toHaveBeenCalled(); expect(stopPropagation).not.toHaveBeenCalled();
-            expect(f.listeners.get('window:wheel')?.size).toBe(0);
-            f.keyboardScroll(); await Vue.nextTick();
-            expect(f.state.showTooltip).toBe(false);
-            expect(f.controller.signal.aborted).toBe(true);
-        },
-    );
-
-    it('ignores an untrusted wheel, then unregisters the one observer and timer on unmount', async () => {
-        const f = await keyboardTransitionFixture(); f.focus();
-        f.send('window', 'wheel', {isTrusted: false}); f.keyboardScroll();
-        expect(f.state.showTooltip).toBe(true);
-        f.unmount(); expect(f.listeners.get('window:wheel')?.size).toBe(0);
-        await vi.advanceTimersByTimeAsync(1000);
-        expect(f.controller.signal.aborted).toBe(true);
-        expect(f.lifecycleErrors).not.toHaveBeenCalled();
-    });
-
-    it.each(['chrome', 'firefox', 'userscript'] as const)('does not register a page wheel listener or change %s dismissal', async target => {
-        const f = await keyboardTransitionFixture(target); f.focus();
-        expect(f.listeners.get('window:wheel')?.size ?? 0).toBe(0);
-        expect(f.listeners.get('document:wheel')?.size ?? 0).toBe(0);
-        f.keyboardScroll(); await Vue.nextTick();
-        expect(f.state.showTooltip).toBe(false);
-    });
-});
-
-
-it.each(['close', 'unmount'] as const)('does not recreate copy feedback after %s while the clipboard is pending', async boundary => {
-    const fixture = mountSelection();
-    let resolve!: () => void;
-    const writeText = vi.fn(() => new Promise<void>(done => {resolve = done;}));
-    vi.stubGlobal('navigator', {clipboard: {writeText}});
-    const copying = fixture.state.copyText('Original source', 'source');
-    if (boundary === 'close') fixture.state.hideAll();
-    else fixture.unmount();
-    const remainingTimers = vi.getTimerCount();
-    resolve(); await copying;
-    expect(fixture.state.copySuccess).toBe(false);
-    expect(fixture.state.copiedTextKind).toBeNull();
-    expect(vi.getTimerCount()).toBe(remainingTimers);
-});
-
-describe('selection settings link response ownership through the rendered toolbar', () => {
-    async function settingsFixture() {
-        const fixture = mountSelection(false, {acceptsRange: () => true}, {}, true);
-        fixture.config.harness.service = services.openai;
-        fixture.config.harness.enabled = false;
-        fixture.state.selectionConfigVersion += 1;
-        fixture.notifyConfig();
-        await Vue.nextTick(); await Promise.resolve(); await Vue.nextTick();
-        const text = 'Read this complete source.';
-        Object.assign(fixture.state, {snapshot: {text, parts: [{kind: 'text', text}], range: {}}, selectedText: text, translationResult: '完整译文', showTooltip: true});
-        await Vue.nextTick();
-        const entry = [...fixture.renderPort!.root.querySelectorAll('button')].find(button => button.textContent === '配置 AI 讲解')!;
-        expect(entry, fixture.renderPort!.root.innerHTML).toBeDefined();
-        return {...fixture, entry};
-    }
-    it.each(['response', 'rejection'] as const)('shows current %s failures without leaving the source card', async kind => {
-        const fixture = await settingsFixture();
-        fixture.browser.runtime.sendMessage.mockImplementation(message => message.type !== 'openOptionsPage' ? Promise.resolve({success: true})
-            : kind === 'response' ? Promise.resolve({success: false}) : Promise.reject(new Error('extension disconnected')));
-        await fixture.renderPort!.click(fixture.entry); await Vue.nextTick();
-        expect(fixture.browser.runtime.sendMessage).toHaveBeenCalledWith({type:'openOptionsPage',section:'settings-selection'});
-        expect(fixture.renderPort!.root.textContent).toContain('请从扩展设置进入划词翻译');
-        expect(fixture.state.showTooltip).toBe(true);
-    });
-    it.each(['close', 'unmount', 'replacement'] as const)('ignores a late settings failure after %s', async boundary => {
-        const fixture = await settingsFixture(), response = deferredTts();
-        fixture.browser.runtime.sendMessage.mockImplementation(message => message.type === 'openOptionsPage' ? response.promise : Promise.resolve({success: true}));
-        const opening = fixture.renderPort!.click(fixture.entry);
-        if (boundary === 'close') await fixture.renderPort!.click(fixture.renderPort!.root.querySelector('.fr-close-btn')!);
-        else if (boundary === 'unmount') fixture.unmount();
-        else {fixture.state.snapshot = {...fixture.state.snapshot,text:'Replacement source'};fixture.state.selectedText='Replacement source';await Vue.nextTick();}
-        const timers = vi.getTimerCount();response.resolve({success:false});await opening;await Vue.nextTick();
-        expect(fixture.state.noticeMessage).toBe('');expect(vi.getTimerCount()).toBe(timers);
-    });
-});
-
 describe('rendered speech controls consume native completion events', () => {
     it.each(['edge-page', 'google-page', 'dictionary', 'browser'] as const)('releases %s playback on completion and ignores callbacks from an older audio owner', async route => {
         const fixture = mountSelection(false, {acceptsRange: () => true}, {}, true);
-        fixture.config.selectionTtsMode = 'online-only';
         fixture.notifyConfig();await Vue.nextTick();await Promise.resolve();await Vue.nextTick();
         const audios: Array<any> = [], utterances: Array<any> = [];
         class AudioPort {
@@ -5288,7 +3619,7 @@ describe('rendered speech controls consume native completion events', () => {
         expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
     });
     it.each(['edge-page', 'google-page', 'dictionary', 'browser'] as const)('makes %s media errors retryable through the same rendered button and releases progress resources', async route => {
-        const fixture=mountSelection(false,{acceptsRange:()=>true},{},true);fixture.config.selectionTtsMode='online-only';await Vue.nextTick();
+        const fixture=mountSelection(false,{acceptsRange:()=>true},{},true);await Vue.nextTick();
         const objects:Array<any>=[];
         vi.stubGlobal('Audio',class {currentTime=1;duration=3;play=vi.fn(async()=>undefined);pause=vi.fn();removeAttribute=vi.fn();constructor(public src:string){objects.push(this)}});
         vi.stubGlobal('SpeechSynthesisUtterance',route==='browser'?class {constructor(public text:string){objects.push(this)}}:undefined);
@@ -5309,34 +3640,6 @@ describe('rendered speech controls consume native completion events', () => {
     });
 });
 
-
-it('connects rendered reading navigation, evidence and source playback to the current selection', async () => {
-    selectionPorts.readingControls=true;
-    const text='Read this complete source.',captureReading=vi.fn(()=>({text,context:text,sentence:text}));
-    const fixture=mountSelection(false,{acceptsRange:()=>true,captureReading},{},true);
-    fixture.config.harness={...fixture.config.harness,enabled:true,service:services.openai,actions:['meaning','grammar'],defaultAction:'meaning'};
-    fixture.state.selectionConfigVersion+=1;fixture.notifyConfig();await Vue.nextTick();await Promise.resolve();await Vue.nextTick();
-    Object.assign(fixture.state,{snapshot:fixture.selectedSnapshot(text),selectedText:text,translationResult:'完整译文',showTooltip:true});await Vue.nextTick();
-    const port=fixture.renderPort!;const history=[...port.root.querySelectorAll('button')].find(button=>button.textContent==='记录')!;
-    await port.click(history);await Vue.nextTick();expect(captureReading).toHaveBeenCalledOnce();expect(port.root.querySelector('[data-reading-port]')!.getAttribute('data-history')).toBe('true');
-    const anchor=selectionPorts.evidence;
-    await port.click(port.root.querySelector('[data-reading-check]')!);await port.click(port.root.querySelector('[data-reading-locate]')!);await port.click(port.root.querySelector('[data-reading-clear]')!);
-    expect(anchor.check).toHaveBeenCalledOnce();expect(anchor.locate).toHaveBeenCalledWith('source quote');expect(anchor.suspend).toHaveBeenCalledOnce();
-    await port.click(port.root.querySelector('[data-reading-view]')!);await Vue.nextTick();expect(port.root.querySelector('[data-reading-port]')!.getAttribute('data-history')).toBe('false');expect([...port.root.querySelectorAll('.fr-study-toolbar button')].find(button=>button.textContent==='词性与句法')!.getAttribute('aria-pressed')).toBe('');
-    anchor.invalidate();await Vue.nextTick();expect(anchor.suspend).toHaveBeenCalledTimes(2);expect(port.root.querySelector('[data-reading-port]')!.getAttribute('data-revision')).toBe('1');
-    prepareTts(fixture,[Promise.resolve({success:true,transport:'offscreen'})]);await port.click(port.root.querySelector('[data-reading-play]')!);await Promise.resolve();await Vue.nextTick();expect(fixture.state.isPlaying).toBe(true);
-    await port.click(port.root.querySelector('[data-reading-change]')!);expectAudioReset(fixture.state);
-    await port.click([...port.root.querySelectorAll('.fr-study-toolbar button')].find(button=>button.textContent==='翻译')!);await Vue.nextTick();expect(fixture.state.readingMode).toBe(false);expect(port.root.querySelector('.fr-original-text')).not.toBeNull();
-    await port.click([...port.root.querySelectorAll('.fr-study-toolbar button')].find(button=>button.textContent==='词性与句法')!);await Vue.nextTick();expect(fixture.state.readingInitialAction).toBe('grammar');expect(fixture.state.readingMode).toBe(true);
-    await port.click(port.root.querySelector('.fr-close-btn')!);expect(anchor.dispose).toHaveBeenCalledOnce();expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-});
-
-it('shares only the currently displayed completed translation from the actual toolbar',async()=>{
-    selectionPorts.shareMounted=true;const fixture=mountSelection(false,{acceptsRange:()=>true},{},true);await Vue.nextTick();
-    const text='Share this selected source.';Object.assign(fixture.state,{snapshot:{text,parts:[{kind:'text',text}],range:{}},selectedText:text,translationResult:'当前已完成的译文',showTooltip:true});await Vue.nextTick();
-    const port=fixture.renderPort!;await port.click(port.root.querySelector('.fr-share-card-entry')!);expect(selectionPorts.share).toHaveBeenCalledWith({original:text,translation:'当前已完成的译文'});
-    fixture.state.isLoading=true;await Vue.nextTick();expect(port.root.querySelector('.fr-share-card-entry')).toBeNull();
-});
 
 it('retries the dictionary from its rendered error, copies the selected word and translation, and toggles Chinese support',async()=>{
     const fixture=mountSelection(false,{acceptsRange:()=>true},{},true);await Vue.nextTick();
@@ -5363,46 +3666,16 @@ it('copies both sentence fields and plays the translated text through the real s
     await port.click(port.root.querySelector('.fr-translation-result .fr-text-audio-btn')!);await Vue.nextTick();expect(fixture.state.currentAudioKind).toBe('translation');expect(ttsMessages(fixture,'selectionTts')[0].text).toBe('阅读完整句子。');
 });
 
-describe('rendered notice settings response ownership', () => {
-    it.each(['open-vocabulary','open-local-tts'] as const)('keeps %s retryable when opening settings is refused',async action=>{
-        const fixture=mountSelection(false,undefined,'chrome',true);await Vue.nextTick();fixture.state.showNotice('Current notice',action);await Vue.nextTick();
-        fixture.browser.runtime.sendMessage.mockResolvedValue({success:false});const port=fixture.renderPort!;
-        await port.click(port.root.querySelector('.fr-action-toast button')!);await Vue.nextTick();
-        expect(port.root.querySelector('.fr-action-toast')!.textContent).toContain('无法打开设置');
-        fixture.browser.runtime.sendMessage.mockResolvedValue({success:true});await port.click(port.root.querySelector('.fr-action-toast button')!);await Vue.nextTick();
-        expect(port.root.querySelector('.fr-action-toast')).toBeNull();expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-    it.each(['reject','throw'] as const)('contains a %s from its settings transport and retains the action',async failure=>{
-        const fixture=mountSelection(false,undefined,'chrome',true);await Vue.nextTick();fixture.state.showNotice('Current notice','open-vocabulary');await Vue.nextTick();
-        fixture.browser.runtime.sendMessage.mockImplementation(()=>{if(failure==='throw')throw new Error('Disconnected extension');return Promise.reject(new Error('Disconnected extension'))});
-        const port=fixture.renderPort!;await expect(port.click(port.root.querySelector('.fr-action-toast button')!)).resolves.toBeUndefined();await Vue.nextTick();
-        expect(port.root.querySelector('.fr-action-toast')!.textContent).toContain('无法打开设置');expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-    it.each(['success','refused','rejected'] as const)('does not overwrite a newer notice after old %s',async outcome=>{
-        const fixture=mountSelection(false,undefined,'chrome',true);await Vue.nextTick();fixture.state.showNotice('Old notice','open-vocabulary');await Vue.nextTick();
-        const deferred=deferredTts();fixture.browser.runtime.sendMessage.mockReturnValue(deferred.promise);const port=fixture.renderPort!,pending=port.click(port.root.querySelector('.fr-action-toast button')!);
-        fixture.state.showNotice('New notice','open-local-tts');await Vue.nextTick();
-        if(outcome==='rejected')deferred.reject(new Error('Disconnected extension'));else deferred.resolve({success:outcome==='success'});
-        await pending;await Vue.nextTick();expect(port.root.querySelector('.fr-action-toast')!.textContent).toContain('New notice');expect(fixture.state.noticeAction).toBe('open-local-tts');expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-    it.each(['unmount','expiry'] as const)('does not revive a notice after %s while opening settings',async disposal=>{
-        const fixture=mountSelection(false,undefined,'chrome',true);await Vue.nextTick();fixture.state.showNotice('Old notice','open-local-tts');await Vue.nextTick();
-        const deferred=deferredTts();fixture.browser.runtime.sendMessage.mockReturnValue(deferred.promise);const port=fixture.renderPort!,pending=port.click(port.root.querySelector('.fr-action-toast button')!);
-        if(disposal==='unmount')fixture.unmount();else await vi.advanceTimersByTimeAsync(2601);
-        deferred.resolve({success:false});await pending;await Vue.nextTick();expect(port.root.querySelector('.fr-action-toast')).toBeNull();expect(vi.getTimerCount()).toBe(0);expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
-    });
-});
-
 describe('rendered hover entry and native copy events',()=>{
     async function entry(){
-        const fixture=mountSelection(false,{acceptsRange:()=>true},'chrome',true);fixture.config.selectionTranslatorTrigger='hover';fixture.config.harness={...fixture.config.harness,hoverDelay:200};fixture.state.selectionConfigVersion+=1;fixture.notifyConfig();await Vue.nextTick();await Promise.resolve();await Vue.nextTick();
+        const fixture=mountSelection(false,{acceptsRange:()=>true},'chrome',true);fixture.config.selectionTranslatorTrigger='hover';fixture.state.selectionConfigVersion+=1;fixture.notifyConfig();await Vue.nextTick();await Promise.resolve();await Vue.nextTick();
         const text='Read a complete source sentence.';
         Object.assign(fixture.state,{snapshot:fixture.selectedSnapshot(text),selectedText:text,showIndicator:true});await Vue.nextTick();
         const port=fixture.renderPort!;const pointer=(type:string,properties:Record<string,unknown>={})=>{const event=new port.domWindow.Event(type);Object.defineProperties(event,Object.fromEntries(Object.entries({isTrusted:true,pointerType:'mouse',...properties}).map(([key,value])=>[key,{value}])));port.root.querySelector('.fr-selection-indicator')!.dispatchEvent(event)};
         return {...fixture,port,pointer};
     }
     it('opens once after a trusted mouse dwell, with the saved current selection',async()=>{
-        const fixture=await entry();fixture.pointer('pointerenter');await vi.advanceTimersByTimeAsync(199);expect(fixture.port.root.querySelector('[role="dialog"]')).toBeNull();expect(fixture.translateText).not.toHaveBeenCalled();
+        const fixture=await entry();fixture.pointer('pointerenter');await vi.advanceTimersByTimeAsync(599);expect(fixture.port.root.querySelector('[role="dialog"]')).toBeNull();expect(fixture.translateText).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);await Vue.nextTick();expect(fixture.port.root.querySelector('[role="dialog"]')).not.toBeNull();expect(fixture.translateText).toHaveBeenCalledOnce();
         await vi.advanceTimersByTimeAsync(250);expect(fixture.translateText).toHaveBeenCalledOnce();expect(fixture.lifecycleErrors).not.toHaveBeenCalled();
     });

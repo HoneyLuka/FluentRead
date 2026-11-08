@@ -4,14 +4,18 @@
  * 主要内容：校验内部访客头和精确翻译端点；扩展使用单请求的内存会话规则设置匿名 Cookie 与官网来源头，串行安装、请求和清理，取消或安装失败不发送请求。
  * 模块边界：不获取访客凭据、不读取用户 Cookie 或配置；平台仅消费 provider 给出的临时 ttwid，其他网络请求保持原有传输。
  */
-import type {DeclarativeNetRequest} from 'webextension-polyfill';
+import type {Browser} from 'wxt/browser';
 import {abortErrorFromSignal, cancelUnreadResponseBody, type RuntimeFetch} from './runtime';
 
 export const DOUBAO_GUEST_HEADER = 'X-FluentRead-Doubao-Ttwid';
 export const DOUBAO_GUEST_RULE_ID = 2_764_000;
 const DOUBAO_ORIGIN = 'https://www.doubao.com';
 const DOUBAO_PATH = '/samantha/plugin/stream_article_translate';
-type GuestRulesPort = Pick<DeclarativeNetRequest.Static, 'updateSessionRules'>;
+/** 规则类型取自 WXT 注入的 browser 宿主声明，避免与 polyfill 命名空间声明混用。 */
+type GuestRule = Browser.declarativeNetRequest.Rule;
+type GuestRulesPort = {
+    updateSessionRules(options: {removeRuleIds?: number[]; addRules?: GuestRule[]}): Promise<unknown>;
+};
 
 function unavailable(): Error {
     return Object.assign(new Error('当前运行环境无法发送豆包匿名访客请求。'), {freeFailure: 'unavailable'});
@@ -52,7 +56,7 @@ export function createDoubaoGuestFetch(api: GuestRulesPort | undefined, extensio
             started = true;
             checkAbort();
             if (!api?.updateSessionRules) throw unavailable();
-            const rule: DeclarativeNetRequest.Rule = {
+            const rule: GuestRule = {
                 id: DOUBAO_GUEST_RULE_ID,
                 priority: 1,
                 action: {type: 'modifyHeaders', requestHeaders: [

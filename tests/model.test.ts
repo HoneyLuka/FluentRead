@@ -28,10 +28,6 @@ import {
     CUSTOM_OPENAI_RESERVED_MODEL_ID,
     MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER,
 } from '@/src/core/config/customOpenAI';
-import {
-    MAX_QUICK_TRANSLATION_MODEL_LENGTH,
-    MAX_QUICK_TRANSLATION_PROFILES,
-} from '@/src/core/config/quickTranslation';
 import {createApiKeyRequirementKey} from '@/src/core/config/validation';
 
 describe('中英双向划词配置', () => {
@@ -236,14 +232,9 @@ describe('AI 模型编号列表', () => {
     it('退役服务回退到可用默认值并清除遗留连接配置', () => {
         const normalized = normalizeConfig({
             service: 'cozecom',
-            documentService: 'cozecn',
-            videoService: 'cozecom',
-            translationCenterServices: ['google', 'cozecom', 'cozecn'],
             token: {openai: 'keep-token', cozecom: 'retired-token'},
             model: {cozecom: 'retired-model'},
-            documentModel: {cozecn: 'retired-model'},
             customModel: {cozecom: 'retired-custom-model'},
-            documentCustomModel: {cozecn: 'retired-custom-model'},
             proxy: {cozecom: 'https://retired.example'},
             customBody: {cozecn: '{"retired":true}'},
             system_role: {cozecom: 'retired system'},
@@ -256,17 +247,12 @@ describe('AI 模型编号列表', () => {
         });
 
         expect(normalized.service).toBe(services.freeTranslation);
-        expect(normalized.documentService).toBe('');
-        expect(normalized.videoService).toBe('');
-        expect(normalized.translationCenterServices).toEqual([services.google]);
         expect(normalized.token).toMatchObject({openai: 'keep-token'});
         expect(normalized.requireApiKey).toEqual({'openai:gpt-5.6-luna': false});
         for (const mapping of [
             normalized.token,
             normalized.model,
-            normalized.documentModel,
             normalized.customModel,
-            normalized.documentCustomModel,
             normalized.proxy,
             normalized.customBody,
             normalized.system_role,
@@ -309,7 +295,7 @@ describe('AI 模型编号列表', () => {
         }
     });
 
-    it('刷新后的网页和文档默认使用轻量模型，目录没有重复编号', () => {
+    it('刷新后的网页默认使用轻量模型，目录没有重复编号', () => {
         const expected = {
             [services.openai]: 'gpt-5.4-mini',
             [services.azureOpenai]: 'gpt-5.4-mini',
@@ -321,9 +307,8 @@ describe('AI 模型编号列表', () => {
             [services.jieyue]: 'step-2-mini',
             [services.openrouter]: 'google/gemini-3.5-flash-lite',
         };
-        for (const config of [new Config(), normalizeConfig({}), normalizeConfig({model: {}, documentModel: {}})]) {
+        for (const config of [new Config(), normalizeConfig({}), normalizeConfig({model: {}})]) {
             expect(config.model).toMatchObject(expected);
-            expect(config.documentModel).toMatchObject(expected);
             expect(config.deepseekThinkingMode).toBe('disabled');
         }
         for (const [service, choices] of models) {
@@ -334,14 +319,12 @@ describe('AI 模型编号列表', () => {
         expect(models.get(services.openrouter)).not.toContain('deepseek-flash');
     });
 
-    it('已下线的混元预览版迁移到正式版，保留网页和文档的思考偏好', () => {
+    it('已下线的混元预览版迁移到正式版，保留网页的思考偏好', () => {
         const normalized = normalizeConfig({
             model: {[services.huanYuan]: 'hy3-preview'},
-            documentModel: {[services.huanYuan]: 'hy3-preview'},
             modelThinking: {[services.huanYuan]: {'hy3-preview': false}},
         });
         expect(normalized.model[services.huanYuan]).toBe('hy3');
-        expect(normalized.documentModel[services.huanYuan]).toBe('hy3');
         expect(normalized.modelThinking[services.huanYuan]).toEqual({hy3: false});
         expect(models.get(services.huanYuan)).not.toContain('hy3-preview');
     });
@@ -355,19 +338,12 @@ describe('AI 模型编号列表', () => {
                 [services.tongyi]: 'qwen3.6-flash',
                 [services.deepseek]: 'deepseek-v4-flash',
             },
-            documentModel: {
-                [services.deepseek]: 'deepseek-v4-pro',
-                [services.openai]: customModelString,
-            },
-            documentCustomModel: {[services.openai]: 'private-document-model'},
             customModels: {[services.openai]: ['private-document-model']},
             modelThinking: {[services.deepseek]: {'deepseek-v4-flash': true, 'deepseek-v4-pro': false}},
             requireApiKey: {'deepseek:deepseek-v4-flash': false},
         };
         const normalized = normalizeConfig(saved);
         expect(normalized.model).toMatchObject(saved.model);
-        expect(normalized.documentModel).toMatchObject(saved.documentModel);
-        expect(normalized.documentCustomModel).toEqual(saved.documentCustomModel);
         expect(normalized.customModels).toEqual(saved.customModels);
         expect(normalized.modelThinking).toEqual(saved.modelThinking);
         expect(normalized.requireApiKey).toEqual(saved.requireApiKey);
@@ -406,29 +382,22 @@ describe('AI 模型编号列表', () => {
         });
     });
 
-    it('旧 custom 当前选择预设模型时仍保留页面与文档曾保存的自定义模型', () => {
+    it('旧 custom 当前选择预设模型时仍保留页面曾保存的自定义模型', () => {
         const normalized = normalizeConfig({
             service: services.custom,
-            documentService: services.custom,
             model: {[services.custom]: 'page-preset-model'},
-            documentModel: {[services.custom]: 'document-preset-model'},
             customModel: {[services.custom]: 'saved-page-custom-model'},
-            documentCustomModel: {[services.custom]: 'saved-document-custom-model'},
         });
 
         expect(normalized.model[services.custom]).toBe('page-preset-model');
-        expect(normalized.documentModel[services.custom]).toBe('document-preset-model');
         expect(normalized.customModel).not.toHaveProperty(services.custom);
-        expect(normalized.documentCustomModel).not.toHaveProperty(services.custom);
         expect(normalized.customOpenAIProviders).toEqual([{
             id: services.custom,
             name: '自定义接口',
             endpoint: defaultOption.custom,
             models: [
                 'page-preset-model',
-                'document-preset-model',
                 'saved-page-custom-model',
-                'saved-document-custom-model',
             ],
         }]);
     });
@@ -440,10 +409,6 @@ describe('AI 模型编号列表', () => {
                 value: {custom: 'https://endpoint-only.example/v1/chat/completions'},
                 expected: (config: Config) => config.customOpenAIProviders[0].endpoint
                     === 'https://endpoint-only.example/v1/chat/completions',
-            },
-            {
-                value: {documentModel: {[services.custom]: 'document-only-model'}},
-                expected: (config: Config) => config.customOpenAIProviders[0].models.includes('document-only-model'),
             },
             {
                 value: {system_role: {[services.custom]: 'system-only-role'}},
@@ -512,7 +477,6 @@ describe('AI 模型编号列表', () => {
         const emptyService = 'custom:empty';
         const normalizedEmpty = normalizeConfig({
             service: emptyService,
-            documentService: emptyService,
             customOpenAIProviders: [{
                 id: emptyService,
                 name: '空模型服务',
@@ -522,7 +486,6 @@ describe('AI 模型编号列表', () => {
         });
         expect(normalizedEmpty.customOpenAIProviders[0].models).toEqual([]);
         expect(normalizedEmpty.model).not.toHaveProperty(emptyService);
-        expect(normalizedEmpty.documentModel).not.toHaveProperty(emptyService);
         expect(normalizeConfig({...new Config(), service: null}).service).toBe(defaultOption.service);
     });
 
@@ -530,7 +493,6 @@ describe('AI 模型编号列表', () => {
         const service = 'custom:reserved';
         const normalized = normalizeConfig({
             service,
-            documentService: service,
             customOpenAIProviders: [{
                 id: service,
                 name: '保留名测试',
@@ -538,15 +500,13 @@ describe('AI 模型编号列表', () => {
                 models: [CUSTOM_OPENAI_RESERVED_MODEL_ID, 'real-model'],
             }],
             model: {[service]: CUSTOM_OPENAI_RESERVED_MODEL_ID},
-            documentModel: {[service]: CUSTOM_OPENAI_RESERVED_MODEL_ID},
         });
 
         expect(normalized.customOpenAIProviders[0].models).toEqual(['real-model']);
         expect(normalized.model[service]).toBe('real-model');
-        expect(normalized.documentModel[service]).toBe('real-model');
     });
 
-    it('模型列表满额时同时保护页面与文档的活跃模型且不突破容量上限', () => {
+    it('模型列表满额时保护页面活跃模型且不突破容量上限', () => {
         const service = 'custom:full';
         const storedModels = Array.from(
             {length: MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER},
@@ -554,7 +514,6 @@ describe('AI 模型编号列表', () => {
         );
         const normalized = normalizeConfig({
             service,
-            documentService: service,
             customOpenAIProviders: [{
                 id: service,
                 name: '满额服务',
@@ -562,13 +521,11 @@ describe('AI 模型编号列表', () => {
                 models: storedModels,
             }],
             model: {[service]: 'active-page-model'},
-            documentModel: {[service]: 'active-document-model'},
         });
 
         const models = normalized.customOpenAIProviders[0].models;
         expect(models).toHaveLength(MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER);
         expect(models).toContain('active-page-model');
-        expect(models).toContain('active-document-model');
         expect(new Set(models)).toHaveLength(MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER);
     });
 
@@ -587,7 +544,6 @@ describe('AI 模型编号列表', () => {
                 models: storedModels,
             }],
             model: {[service]: 'active-page-model'},
-            documentModel: {[service]: 'active-document-model'},
             customModel: {[service]: protectedStoredModel},
         });
 
@@ -595,7 +551,6 @@ describe('AI 模型编号列表', () => {
         expect(normalized.customOpenAIProviders[0].models).toEqual(expect.arrayContaining([
             protectedStoredModel,
             'active-page-model',
-            'active-document-model',
         ]));
     });
 
@@ -667,9 +622,6 @@ describe('AI 模型编号列表', () => {
         const normalized = normalizeConfig({
             customOpenAIProviders: providers,
             service: 'custom:1',
-            documentService: 'custom:2',
-            videoService: 'custom:3',
-            translationCenterServices: ['custom:1', 'custom:20', 'custom:21', 'custom:999'],
             model: {'custom:1': 'model-1', 'custom:21': 'model-21'},
             token: {'custom:1': 'keep', 'custom:999': 'drop'},
             apiKeyRotationEnabled: {'custom:1': false, 'custom:999': true},
@@ -688,9 +640,6 @@ describe('AI 模型编号列表', () => {
         expect(normalized.customOpenAIProviders).toHaveLength(providerCount);
         expect(normalized).toMatchObject({
             service: 'custom:1',
-            documentService: 'custom:2',
-            videoService: 'custom:3',
-            translationCenterServices: ['custom:1', 'custom:20', 'custom:21'],
         });
         expect(normalized.token).toMatchObject({'custom:1': 'keep'});
         expect(normalized.token).not.toHaveProperty('custom:999');
@@ -705,348 +654,9 @@ describe('AI 模型编号列表', () => {
     });
 });
 
-describe('图片翻译配置', () => {
-    it('默认关闭，并保留用户主动启用或关闭的状态', () => {
-        expect(new Config().disableImageTranslator).toBe(true);
-        expect(normalizeConfig({}).disableImageTranslator).toBe(true);
-        expect(normalizeConfig({disableImageTranslator: false}).disableImageTranslator).toBe(false);
-        expect(normalizeConfig({disableImageTranslator: true}).disableImageTranslator).toBe(true);
-    });
-});
 
-describe('翻译中心配置', () => {
-    it('结果布局默认列表，保留并排选择且安全归一化旧配置', () => {
-        expect(new Config().translationCenterLayout).toBe('list');
-        expect(normalizeConfig({}).translationCenterLayout).toBe('list');
-        expect(normalizeConfig({translationCenterLayout: 'grid'}).translationCenterLayout).toBe('grid');
-        expect(normalizeConfig({translationCenterLayout: 'invalid'}).translationCenterLayout).toBe('list');
-    });
-    it('默认使用服务列表，保存后保留去重后的服务顺序和语言选择', () => {
-        expect(new Config().translationCenterServices).toEqual([]);
-        expect(normalizeConfig({
-            translationCenterServices: ['google', 'openai', 'google', ' ', 12],
-            translationCenterSourceLanguage: ' en ',
-            translationCenterTargetLanguage: ' ja ',
-        })).toMatchObject({
-            translationCenterServices: ['google', 'openai'],
-            translationCenterSourceLanguage: 'en',
-            translationCenterTargetLanguage: 'ja',
-        });
-    });
 
-    it('旧配置或非法值安全回退为空服务配置', () => {
-        expect(normalizeConfig({
-            translationCenterServices: 'google',
-            translationCenterSourceLanguage: 12,
-            translationCenterTargetLanguage: null,
-        })).toMatchObject({
-            translationCenterServices: [],
-            translationCenterSourceLanguage: '',
-            translationCenterTargetLanguage: '',
-        });
-    });
-});
 
-describe('快捷翻译方案配置', () => {
-    it('默认为空列表，并保留 Ctrl+T/Ctrl+Y 的独立动作与展示设置', () => {
-        expect(new Config().quickTranslationProfiles).toEqual([]);
-        expect(normalizeConfig({}).quickTranslationProfiles).toEqual([]);
-
-        const normalized = normalizeConfig({
-            quickTranslationProfiles: [
-                {
-                    id: ' hover / primary ',
-                    enabled: true,
-                    action: 'hover',
-                    hotkey: ' control + t ',
-                    service: services.openai,
-                    model: '  quick-gpt  ',
-                    targetLanguage: ' ja ',
-                    displayMode: 'bilingual',
-                    fullPageMode: 'all',
-                },
-                {
-                    id: 'page',
-                    enabled: false,
-                    action: 'full-page',
-                    hotkey: 'CTRL+y',
-                    service: services.microsoft,
-                    model: 'machine-services-do-not-use-models',
-                    targetLanguage: ' en ',
-                    displayMode: 'translation-only',
-                    fullPageMode: 'all',
-                },
-            ],
-        });
-
-        expect(normalized.quickTranslationProfiles).toEqual([
-            {
-                id: 'hover-primary',
-                enabled: true,
-                action: 'hover',
-                hotkey: 'Ctrl+T',
-                service: services.openai,
-                model: 'quick-gpt',
-                targetLanguage: 'ja',
-                displayMode: 'bilingual',
-                fullPageMode: 'inherit',
-            },
-            {
-                id: 'page',
-                enabled: false,
-                action: 'full-page',
-                hotkey: 'Ctrl+Y',
-                service: services.microsoft,
-                model: '',
-                targetLanguage: 'en',
-                displayMode: 'translation-only',
-                fullPageMode: 'all',
-            },
-        ]);
-    });
-
-    it('清理畸形/重复热键与未知服务，并只为支持模型的服务保留有界模型名', () => {
-        const longModel = 'm'.repeat(MAX_QUICK_TRANSLATION_MODEL_LENGTH + 20);
-        const normalized = normalizeConfig({
-            customOpenAIProviders: [{
-                id: 'custom:team',
-                name: '团队网关',
-                endpoint: 'https://team.example/v1/chat/completions',
-                models: ['team-default'],
-            }],
-            quickTranslationProfiles: [
-                {
-                    id: 'first', action: 'hover', hotkey: 'Ctrl+T',
-                    service: services.openai, model: longModel,
-                },
-                {
-                    id: 'duplicate', action: 'full-page', hotkey: 'control+t',
-                    service: services.microsoft, model: 'must-clear',
-                    displayMode: 'invalid', fullPageMode: 'viewport',
-                },
-                {
-                    id: 'custom', action: 'hover', hotkey: 'Option+Y',
-                    service: 'custom:team', model: '  vendor-model  ',
-                },
-                {
-                    id: 'unknown', action: 'hover', hotkey: 'Ctrl+Hyper+Y',
-                    service: 'removed-service', model: 'must-clear',
-                },
-            ],
-        });
-
-        expect(normalized.quickTranslationProfiles[0].model).toBe(
-            'm'.repeat(MAX_QUICK_TRANSLATION_MODEL_LENGTH),
-        );
-        expect(normalized.quickTranslationProfiles[1]).toMatchObject({
-            hotkey: '',
-            service: services.microsoft,
-            model: '',
-            displayMode: 'inherit',
-            fullPageMode: 'viewport',
-        });
-        expect(normalized.quickTranslationProfiles[2]).toMatchObject({
-            hotkey: 'Alt+Y',
-            service: 'custom:team',
-            model: 'vendor-model',
-            fullPageMode: 'inherit',
-        });
-        expect(normalized.quickTranslationProfiles[3]).toMatchObject({
-            hotkey: '',
-            service: '',
-            model: '',
-            enabled: false,
-        });
-    });
-
-    it('孤儿服务与旧快捷键冲突会安全停用，Google 切换后仍保留显示偏好', () => {
-        const normalized = normalizeConfig({
-            floatingBallHotkey: 'Alt+T',
-            quickTranslationProfiles: [
-                {id: 'orphan', enabled: true, action: 'hover', hotkey: 'Ctrl+Y',
-                    service: 'custom:removed', model: 'private-model'},
-                {id: 'conflict', enabled: true, action: 'hover', hotkey: 'Alt+T',
-                    service: services.openai, model: 'gpt-4o-mini'},
-                {id: 'google', enabled: true, action: 'full-page', hotkey: 'Ctrl+U',
-                    service: services.google, displayMode: 'translation-only'},
-            ],
-        }).quickTranslationProfiles;
-
-        expect(normalized[0]).toMatchObject({
-            enabled: false, hotkey: 'Ctrl+Y', service: '', model: '',
-        });
-        expect(normalized[1]).toMatchObject({enabled: false, hotkey: 'Alt+T'});
-        expect(normalized[2]).toMatchObject({enabled: true, displayMode: 'translation-only'});
-    });
-
-    it.each([
-        ['ctrl_enter', 'Ctrl+Enter'],
-        ['triple_space', 'Space'],
-        ['triple_equal', '='],
-        ['triple_dash', '-'],
-    ])('输入框触发 %s 启用时保留既有功能的 %s 所有权', (trigger, hotkey) => {
-        const [normalized] = normalizeConfig({
-            inputBoxTranslationTrigger: trigger,
-            quickTranslationProfiles: [{
-                id: 'input-conflict', enabled: true, action: 'hover', hotkey,
-                service: services.openai, model: 'gpt-4o-mini',
-            }],
-        }).quickTranslationProfiles;
-
-        expect(normalized).toMatchObject({hotkey, enabled: false});
-    });
-
-    it('圈选改用自定义快捷键后，快捷翻译方案按新的圈选快捷键避让', () => {
-        const config = normalizeConfig({
-            selectionAreaEnabled: true,
-            selectionAreaHotkey: 'custom',
-            customSelectionAreaHotkey: 'alt+k',
-            quickTranslationProfiles: [
-                {id: 'old-area', enabled: true, action: 'hover', hotkey: 'Shift+Z'},
-                {id: 'new-area', enabled: true, action: 'full-page', hotkey: 'Alt+K'},
-            ],
-        });
-
-        expect(config).toMatchObject({selectionAreaHotkey: 'custom', customSelectionAreaHotkey: 'Alt+K'});
-        expect(config.quickTranslationProfiles[0]).toMatchObject({hotkey: 'Shift+Z', enabled: true});
-        expect(config.quickTranslationProfiles[1]).toMatchObject({hotkey: 'Alt+K', enabled: false});
-    });
-
-    it('圈选快捷键只接受预设与可用的自定义值，其余配置回到默认 Shift+Z', () => {
-        expect(new Config()).toMatchObject({selectionAreaHotkey: 'Shift+Z', customSelectionAreaHotkey: ''});
-        expect(normalizeConfig({})).toMatchObject({selectionAreaHotkey: 'Shift+Z', customSelectionAreaHotkey: ''});
-        expect(normalizeConfig({selectionAreaHotkey: 'alt+x'})).toMatchObject({selectionAreaHotkey: 'Alt+X'});
-        // 选择自定义却没有可用组合键时不能让圈选失去唯一入口。
-        expect(normalizeConfig({selectionAreaHotkey: 'custom', customSelectionAreaHotkey: 'cmd+k'}))
-            .toMatchObject({selectionAreaHotkey: 'Shift+Z', customSelectionAreaHotkey: ''});
-        for (const invalid of [undefined, 'none', 'Ctrl+C', 42]) {
-            expect(normalizeConfig({selectionAreaHotkey: invalid}).selectionAreaHotkey).toBe('Shift+Z');
-        }
-    });
-
-    it('段落复制快捷键只接受预设与可用的自定义值，其余配置回到默认 Alt+C', () => {
-        expect(new Config()).toMatchObject({
-            paragraphCopyEnabled: false, paragraphCopyHotkey: 'Alt+C', customParagraphCopyHotkey: '', paragraphCopyContent: 'auto',
-        });
-        expect(normalizeConfig({})).toMatchObject({paragraphCopyHotkey: 'Alt+C', customParagraphCopyHotkey: '', paragraphCopyContent: 'auto'});
-        expect(normalizeConfig({paragraphCopyHotkey: 'shift+d'})).toMatchObject({paragraphCopyHotkey: 'Shift+D'});
-        expect(normalizeConfig({paragraphCopyContent: 'bilingual'})).toMatchObject({paragraphCopyContent: 'bilingual'});
-        expect(normalizeConfig({paragraphCopyContent: 'both'})).toMatchObject({paragraphCopyContent: 'auto'});
-        // 选择自定义却没有可用组合键时不能让段落复制失去唯一入口。
-        expect(normalizeConfig({paragraphCopyHotkey: 'custom', customParagraphCopyHotkey: 'cmd+k'}))
-            .toMatchObject({paragraphCopyHotkey: 'Alt+C', customParagraphCopyHotkey: ''});
-        expect(normalizeConfig({paragraphCopyEnabled: 'yes'})).toMatchObject({paragraphCopyEnabled: false});
-        expect(normalizeConfig({paragraphCopyEnabled: false})).toMatchObject({paragraphCopyEnabled: false});
-    });
-
-    it('快捷翻译方案按段落复制的实际快捷键避让，关闭后释放占用', () => {
-        const occupied = normalizeConfig({
-            paragraphCopyEnabled: true,
-            paragraphCopyHotkey: 'custom',
-            customParagraphCopyHotkey: 'alt+j',
-            quickTranslationProfiles: [{id: 'copy-clash', enabled: true, action: 'hover', hotkey: 'Alt+J'}],
-        });
-        expect(occupied.quickTranslationProfiles[0]).toMatchObject({hotkey: 'Alt+J', enabled: false});
-
-        const released = normalizeConfig({
-            paragraphCopyEnabled: false,
-            paragraphCopyHotkey: 'custom',
-            customParagraphCopyHotkey: 'alt+j',
-            quickTranslationProfiles: [{id: 'copy-clash', enabled: true, action: 'hover', hotkey: 'Alt+J'}],
-        });
-        expect(released.quickTranslationProfiles[0]).toMatchObject({hotkey: 'Alt+J', enabled: true});
-    });
-
-    it('局部翻译快捷键默认关闭，只接受预设与可用的自定义值', () => {
-        expect(new Config()).toMatchObject({
-            sectionTranslationHotkeyEnabled: false, sectionTranslationHotkey: 'Alt+R', customSectionTranslationHotkey: '',
-        });
-        expect(normalizeConfig({})).toMatchObject({
-            sectionTranslationHotkeyEnabled: false, sectionTranslationHotkey: 'Alt+R', customSectionTranslationHotkey: '',
-        });
-        expect(normalizeConfig({sectionTranslationHotkeyEnabled: true, sectionTranslationHotkey: 'shift+x'}))
-            .toMatchObject({sectionTranslationHotkeyEnabled: true, sectionTranslationHotkey: 'Shift+X'});
-        expect(normalizeConfig({sectionTranslationHotkeyEnabled: 'yes'})).toMatchObject({sectionTranslationHotkeyEnabled: false});
-        expect(normalizeConfig({sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: 'alt+k'}))
-            .toMatchObject({sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: 'Alt+K'});
-        // 选择自定义却没有可用组合键时回到默认预设，开启的快捷键不会失去可用组合。
-        expect(normalizeConfig({sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: 'cmd+k'}))
-            .toMatchObject({sectionTranslationHotkey: 'Alt+R', customSectionTranslationHotkey: ''});
-        for (const invalid of [undefined, 'none', 'Ctrl+C', 42]) {
-            expect(normalizeConfig({sectionTranslationHotkey: invalid}).sectionTranslationHotkey).toBe('Alt+R');
-        }
-    });
-
-    it('快捷翻译方案只在局部翻译快捷键开启时避让它', () => {
-        const profile = {id: 'section-clash', enabled: true, action: 'hover', hotkey: 'Alt+R'};
-        const occupied = normalizeConfig({sectionTranslationHotkeyEnabled: true, quickTranslationProfiles: [profile]});
-        expect(occupied.quickTranslationProfiles[0]).toMatchObject({hotkey: 'Alt+R', enabled: false});
-        const released = normalizeConfig({sectionTranslationHotkeyEnabled: false, quickTranslationProfiles: [profile]});
-        expect(released.quickTranslationProfiles[0]).toMatchObject({hotkey: 'Alt+R', enabled: true});
-    });
-
-    it('划词快捷键与快捷翻译可共存，圈选的默认快捷键仍保留既有所有权', () => {
-        const normalized = normalizeConfig({
-            selectionTranslatorMode: 'bilingual',
-            selectionTranslatorTrigger: 'custom',
-            customSelectionTranslatorHotkey: 'Ctrl+Y',
-            selectionAreaEnabled: true,
-            quickTranslationProfiles: [
-                {id: 'selection-fallback', enabled: true, action: 'hover', hotkey: 'Ctrl+Y'},
-                {id: 'area-conflict', enabled: true, action: 'hover', hotkey: 'Shift+Z'},
-            ],
-        }).quickTranslationProfiles;
-
-        expect(normalized[0]).toMatchObject({hotkey: 'Ctrl+Y', enabled: true});
-        expect(normalized[1]).toMatchObject({hotkey: 'Shift+Z', enabled: false});
-    });
-
-    it('忽略畸形项，为重复 ID 生成稳定替代值，并分别限制两种动作各八条', () => {
-        const candidates = [
-            ...Array.from({length: MAX_QUICK_TRANSLATION_PROFILES + 2}, (_, index) => ({
-                id: 'same-id',
-                action: 'hover',
-                hotkey: `Ctrl+${String.fromCharCode(65 + index)}`,
-                service: services.openai,
-                model: `hover-model-${index}`,
-            })),
-            ...Array.from({length: MAX_QUICK_TRANSLATION_PROFILES + 2}, (_, index) => ({
-                id: 'same-id',
-                action: 'full-page',
-                hotkey: `Alt+${String.fromCharCode(65 + index)}`,
-                service: services.openai,
-                model: `page-model-${index}`,
-            })),
-        ];
-        const normalized = normalizeConfig({
-            quickTranslationProfiles: [null, 'legacy', {action: 'selection'}, ...candidates],
-        }).quickTranslationProfiles;
-
-        expect(normalized).toHaveLength(MAX_QUICK_TRANSLATION_PROFILES * 2);
-        expect(normalized.filter((profile) => profile.action === 'hover'))
-            .toHaveLength(MAX_QUICK_TRANSLATION_PROFILES);
-        expect(normalized.filter((profile) => profile.action === 'full-page'))
-            .toHaveLength(MAX_QUICK_TRANSLATION_PROFILES);
-        expect(normalized.map((profile) => profile.hotkey)).toEqual([
-            'Ctrl+A', 'Ctrl+B', 'Ctrl+C', 'Ctrl+D',
-            'Ctrl+E', 'Ctrl+F', 'Ctrl+G', 'Ctrl+H',
-            'Alt+A', 'Alt+B', 'Alt+C', 'Alt+D',
-            'Alt+E', 'Alt+F', 'Alt+G', 'Alt+H',
-        ]);
-        expect(new Set(normalized.map((profile) => profile.id)).size)
-            .toBe(MAX_QUICK_TRANSLATION_PROFILES * 2);
-        expect(normalizeConfig({quickTranslationProfiles: {}}).quickTranslationProfiles).toEqual([]);
-    });
-});
-
-describe('圈选翻译配置', () => {
-    it('默认开启，并保留用户主动启用或关闭的状态', () => {
-        expect(new Config().selectionAreaEnabled).toBe(true);
-        expect(normalizeConfig({}).selectionAreaEnabled).toBe(true);
-        expect(normalizeConfig({selectionAreaEnabled: true}).selectionAreaEnabled).toBe(true);
-        expect(normalizeConfig({selectionAreaEnabled: 'true'}).selectionAreaEnabled).toBe(true);
-    });
-});
 
 describe('右键全文翻译配置', () => {
     it('默认开启，并保留用户主动关闭的状态', () => {
@@ -1358,10 +968,9 @@ describe('旧模型编号兼容迁移', () => {
         },
     );
 
-    it('将 MiMo 即将下线的网页和文档模型迁移到对应 2.6 型号，并保留模型级偏好', () => {
+    it('将 MiMo 即将下线的网页模型迁移到对应 2.6 型号，并保留模型级偏好', () => {
         const normalized = normalizeConfig({
             model: {[services.mimo]: 'mimo-v2.5'},
-            documentModel: {[services.mimo]: 'mimo-v2.5-pro'},
             modelThinking: {[services.mimo]: {
                 'mimo-v2.5': false,
                 'mimo-v2.5-pro': true,
@@ -1369,9 +978,7 @@ describe('旧模型编号兼容迁移', () => {
         });
 
         expect(new Config().model[services.mimo]).toBe('mimo-v2.6-flash');
-        expect(new Config().documentModel[services.mimo]).toBe('mimo-v2.6-flash');
         expect(normalized.model[services.mimo]).toBe('mimo-v2.6-flash');
-        expect(normalized.documentModel[services.mimo]).toBe('mimo-v2.6-pro');
         expect(normalized.modelThinking[services.mimo]).toEqual({
             'mimo-v2.6-flash': false,
             'mimo-v2.6-pro': true,
@@ -1415,7 +1022,6 @@ describe('旧模型编号兼容迁移', () => {
                 [services.huanYuan]: 'hunyuan-turbos-latest',
                 [services.infini]: 'glm-4-9b-chat',
             },
-            documentModel: {[services.minimax]: 'MiniMax-M3.1'},
             modelThinking: {[services.minimax]: {'MiniMax-M3.1': true}},
         });
 
@@ -1426,7 +1032,6 @@ describe('旧模型编号兼容迁移', () => {
             [services.huanYuan]: 'hy3',
             [services.infini]: 'glm-5.2',
         });
-        expect(normalized.documentModel[services.minimax]).toBe('MiniMax-M3.1-flash');
         expect(normalized.modelThinking[services.minimax]).toEqual({'MiniMax-M3.1-flash': true});
     });
 
@@ -1468,22 +1073,19 @@ describe('旧模型编号兼容迁移', () => {
         )).toBe('gpt-private-deployment');
     });
 
-    it('把旧网页与文档 singular 模型迁入服务级列表并保持归一化幂等', () => {
+    it('把旧网页 singular 模型迁入服务级列表并保持归一化幂等', () => {
         const normalized = normalizeConfig({
             model: {[services.grok]: defaultModels.get(services.grok)},
-            documentModel: {[services.grok]: defaultModels.get(services.grok)},
             customModel: {[services.grok]: 'legacy-page-model'},
-            documentCustomModel: {[services.grok]: 'legacy-document-model'},
         });
 
         expect(normalized.customModels[services.grok]).toEqual([
             'legacy-page-model',
-            'legacy-document-model',
         ]);
         expect(normalizeConfig(normalized)).toEqual(normalized);
     });
 
-    it('显式新模型列表不会复活未激活 singular，但会保护真正活跃的网页与文档模型', () => {
+    it('显式新模型列表不会复活未激活 singular，但会保护真正活跃的网页模型', () => {
         const preset = defaultModels.get(services.grok)!;
         const deleted = normalizeConfig({
             ...new Config(),
@@ -1496,18 +1098,15 @@ describe('旧模型编号兼容迁移', () => {
         const active = normalizeConfig({
             ...new Config(),
             model: {...new Config().model, [services.grok]: customModelString},
-            documentModel: {...new Config().documentModel, [services.grok]: customModelString},
             customModel: {[services.grok]: 'active-page-model'},
-            documentCustomModel: {[services.grok]: 'active-document-model'},
             customModels: {},
         });
         expect(active.customModels[services.grok]).toEqual([
             'active-page-model',
-            'active-document-model',
         ]);
     });
 
-    it('内置服务模型列表满额时腾位保护两个活跃模型，并清理无效、官方及动态服务条目', () => {
+    it('内置服务模型列表满额时腾位保护活跃模型，并清理无效、官方及动态服务条目', () => {
         const storedModels = Array.from(
             {length: MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER},
             (_, index) => `stored-grok-model-${index + 1}`,
@@ -1516,9 +1115,7 @@ describe('旧模型编号兼容迁移', () => {
         const normalized = normalizeConfig({
             ...new Config(),
             model: {...new Config().model, [services.grok]: customModelString},
-            documentModel: {...new Config().documentModel, [services.grok]: customModelString},
             customModel: {[services.grok]: 'active-page-model'},
-            documentCustomModel: {[services.grok]: 'active-document-model'},
             customModels: {
                 [services.grok]: [
                     ...storedModels,
@@ -1536,7 +1133,6 @@ describe('旧模型编号兼容迁移', () => {
         expect(normalized.customModels[services.grok]).toHaveLength(MAX_CUSTOM_OPENAI_MODELS_PER_PROVIDER);
         expect(normalized.customModels[services.grok]).toEqual(expect.arrayContaining([
             'active-page-model',
-            'active-document-model',
         ]));
         expect(normalized.customModels[services.grok]).not.toContain(preset);
         expect(normalized.customModels).not.toHaveProperty(services.microsoft);
@@ -1640,7 +1236,6 @@ describe('旧模型编号兼容迁移', () => {
                 models: ['model-a'],
             }],
             model: {'custom:team': 'model-a'},
-            documentModel: {'custom:team': 'model-a'},
             modelThinking: {'custom:team': {'model-a': true, orphan: false}},
         });
 
@@ -1728,11 +1323,6 @@ describe('划词翻译配置兼容', () => {
         ]);
     });
 
-    it('keeps the vocabulary book beta opt-in and normalizes invalid values', () => {
-        expect(new Config().vocabularyBookEnabled).toBe(false);
-        expect(normalizeConfig({vocabularyBookEnabled: true}).vocabularyBookEnabled).toBe(true);
-        expect(normalizeConfig({vocabularyBookEnabled: 'yes'}).vocabularyBookEnabled).toBe(false);
-    });
 });
 
 describe('OpenAI 兼容服务端点', () => {
@@ -1785,12 +1375,3 @@ describe('OpenAI 兼容服务端点', () => {
     });
 });
 
-it('图片入口偏好默认开启并保留独立关闭状态', () => {
-    expect(new Config().imageTranslationHoverEnabled).toBe(true);
-    expect(new Config().imageTranslationContextMenuEnabled).toBe(true);
-    expect(normalizeConfig({}).imageTranslationHoverEnabled).toBe(true);
-    expect(normalizeConfig({imageTranslationHoverEnabled: 'false'}).imageTranslationHoverEnabled).toBe(true);
-    expect(normalizeConfig({imageTranslationHoverEnabled: false}).imageTranslationHoverEnabled).toBe(false);
-    expect(normalizeConfig({imageTranslationContextMenuEnabled: false}).imageTranslationContextMenuEnabled).toBe(false);
-    expect(normalizeConfig({imageTranslationContextMenuEnabled: 'false'}).imageTranslationContextMenuEnabled).toBe(true);
-});

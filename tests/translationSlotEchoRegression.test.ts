@@ -765,10 +765,8 @@ describe('frontend 区分原生数组、机器逐槽与 AI 槽协议的会话边
     });
 
     it.each([
-        {service: 'localTranslation', sourceLanguage: 'auto', sample: true},
-        {service: 'localTranslation', sourceLanguage: 'en', sample: false},
         {service: 'chromeTranslator', sourceLanguage: 'en', sample: false},
-    ])('逐槽兼容 $service/$sourceLanguage 保留本地样本策略且不扩散样本', async ({service, sourceLanguage, sample}) => {
+    ])('逐槽兼容 $service/$sourceLanguage 保留内置检测样本策略', async ({service, sourceLanguage, sample}) => {
         const h = createHarness({service});
         connectFrontend(h);
         const sources = [first, second];

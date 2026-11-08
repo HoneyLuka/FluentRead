@@ -94,23 +94,6 @@ export function resolveSelectionDictionaryFallback(targetLanguage: string, trans
         .join('；');
 }
 
-export function resolveSelectionVocabularyAnswer(
-    current: SelectionContentRequest | null,
-    translation: SelectionAnswerCandidate | null,
-    dictionary: SelectionAnswerCandidate | null,
-): string {
-    if (!current) return '';
-    const matches = (candidate: SelectionAnswerCandidate | null): candidate is SelectionAnswerCandidate => Boolean(
-        candidate
-        && candidate.generation === current.generation
-        && candidate.text === current.text
-        && normalizeSelectionRequestLanguage(candidate.targetLanguage) === normalizeSelectionRequestLanguage(current.targetLanguage)
-        && candidate.answer.trim(),
-    );
-    if (matches(translation)) return translation.answer.trim();
-    return matches(dictionary) ? dictionary.answer.trim() : '';
-}
-
 export interface SelectionPresentationState {
     showIndicator: boolean;
     showTooltip: boolean;

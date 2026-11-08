@@ -57,31 +57,6 @@ describe('配置差异预览', () => {
             {key: 'nativeBatchTranslationEnabled.microsoft', label: '微软翻译开启合并', before: '关闭', after: '开启'},
         ]);
     });
-    it('图片识别方式在历史中使用与设置相同的可读名称', () => {
-        expect(group(buildConfigDiff({imageTranslationOcrEngine: 'tesseract'}, {imageTranslationOcrEngine: 'paddle'}), 'imageTranslation')?.changes).toEqual([
-            {key: 'imageTranslationOcrEngine', label: '图片识别方式', before: 'Tesseract（轻量模型）', after: 'PaddleOCR（标准模型）'},
-        ]);
-    });
-    it('云备份只能获得已知设置名称；词库选择和功能偏好保持可辨认摘要', () => {
-        expect(configDiffFieldLabel('hotkey')).toBe('鼠标悬浮快捷键');
-        expect(configDiffFieldLabel('private-fixture-key')).toBeUndefined();
-        const before={documentGlossaryIds:null,videoGlossaryIds:[],selectionTranslatorPresentation:'card',freeTranslationOrder:['google'],freeTranslationMode:'sequential',freeTranslationTimeoutMs:1000,freeTranslationCooldownMs:5000,bilingualSentenceHighlightProfiles:[{name:'一'},'旧样式'],glossaryLibraries:[{entries:[]},{}]};
-        const after={documentGlossaryIds:['one'],videoGlossaryIds:'legacy',selectionTranslatorPresentation:'plain',freeTranslationOrder:'legacy',freeTranslationMode:'auto',freeTranslationTimeoutMs:3000,freeTranslationCooldownMs:8000,bilingualSentenceHighlightProfiles:'legacy',glossaryLibraries:'legacy'};
-        const result=buildConfigDiff(before,after);
-        expect(result.changeCount).toBe(9);
-        const preview=JSON.stringify(result.groups);
-        expect(preview).toContain('跟随全局词库');expect(preview).toContain('不使用术语库');expect(preview).toContain('指定 1 套词库');
-        for (const glossaryIds of [null,[],['one'],'legacy']) expect(buildConfigDiff({quickTranslationProfiles:[]},{quickTranslationProfiles:[{action:'hover',hotkey:'Alt',glossaryIds}]}).changeCount).toBe(1);
-    });
-    it('漫画预译窗口以用户可理解名称显示，零页可以撤销恢复', () => {
-        const changes=group(buildConfigDiff({imageTranslationMangaPrefetchPages:3},{imageTranslationMangaPrefetchPages:0}),'imageTranslation')?.changes;
-        expect(changes).toEqual([{key:'imageTranslationMangaPrefetchPages',label:'提前翻译后续页面',before:'3',after:'0'}]);
-    });
-    it('翻译中心布局在历史中以阅读方式展示', () => {
-        expect(group(buildConfigDiff({translationCenterLayout: 'list'}, {translationCenterLayout: 'grid'}), 'tools')?.changes).toEqual([
-            {key: 'translationCenterLayout', label: '翻译中心结果布局', before: '列表阅读', after: '并排对比'},
-        ]);
-    });
     it('双向划词开关使用对用户可见的启停状态', () => {
         for (const enabled of [true, false]) {
             const changes = group(buildConfigDiff(
@@ -94,15 +69,6 @@ describe('配置差异预览', () => {
             ]);
         }
     });
-    it('快捷方案区分局部、悬停与全文动作，局部不借用全文范围', () => {
-        for (const [action, label] of [['section', '局部'], ['hover', '悬停'], ['full-page', '全文']] as const) {
-            const result = buildConfigDiff({quickTranslationProfiles: []}, {quickTranslationProfiles: [
-                {id: 'quick-one', enabled: true, action, hotkey: 'Ctrl+J', fullPageMode: 'all'},
-            ]});
-            const preview = group(result, 'translation')?.changes[0].after;
-            expect(preview).toBe(`${label} Ctrl+J：默认服务，默认语言，默认显示${action === 'full-page' ? '，立即翻译到网页底部' : ''}`);
-        }
-    });
     it('悬浮球拖动后的高度在配置历史中以比例显示', () => {
         expect(group(buildConfigDiff(
             {floatingBallVerticalPosition: null},
@@ -112,10 +78,6 @@ describe('配置差异预览', () => {
         }]);
     });
 
-    it('字幕校时记录保留正负偏移和毫秒单位', () => {
-        const changes = group(buildConfigDiff({videoSubtitleOffsetMs: -500}, {videoSubtitleOffsetMs: 1000}), 'videoSubtitles')?.changes;
-        expect(changes).toEqual([{key: 'videoSubtitleOffsetMs', label: '字幕时间偏移', before: '-500ms', after: '1000ms'}]);
-    });
 
     it('不翻译的语言以可读语言名预览，清空或非法旧值显示为无', () => {
         const changes = group(buildConfigDiff({excludedLanguages: []}, {excludedLanguages: ['ja', 'zh-Hant']}), 'translation')?.changes;
@@ -219,12 +181,10 @@ describe('配置差异预览', () => {
     });
 
     it('语言配置差异明确标出简体与繁体名称', () => {
-        const result = buildConfigDiff({from: 'zh-Hans', to: 'zh-Hans', inputBoxTranslationTarget: 'zh-Hans',
-            translationCenterSourceLanguage: 'zh-Hans', translationCenterTargetLanguage: 'zh-Hans'},
-        {from: 'zh-Hant', to: 'zh-Hant', inputBoxTranslationTarget: 'zh-Hant',
-            translationCenterSourceLanguage: 'zh-Hant', translationCenterTargetLanguage: 'zh-Hant'});
+        const result = buildConfigDiff({from: 'zh-Hans', to: 'zh-Hans'},
+        {from: 'zh-Hant', to: 'zh-Hant'});
         const languageChanges = result.groups.flatMap(item => item.changes);
-        expect(languageChanges).toHaveLength(5);
+        expect(languageChanges).toHaveLength(2);
         expect(languageChanges.every(item => item.before === '简体中文' && item.after === '繁體中文')).toBe(true);
     });
 
@@ -321,48 +281,8 @@ describe('配置差异预览', () => {
         ]));
     });
 
-    it('显示圈选的独立翻译方式和服务变更', () => {
-        const result = buildConfigDiff({areaTranslationMode: 'standard', areaTranslationService: ''}, {
-            areaTranslationMode: 'ai', areaTranslationService: 'microsoft',
-        });
-        expect(group(result, 'areaTranslation')?.changes).toEqual(expect.arrayContaining([
-            {key: 'areaTranslationMode', label: '圈选翻译方式', before: '标准翻译', after: 'AI 上下文增强'},
-            {key: 'areaTranslationService', label: '圈选翻译服务', before: '跟随当前服务', after: '微软翻译'},
-        ]));
-    });
 
-    it('显示圈选快捷键的预设切换与自定义录制', () => {
-        const preset = buildConfigDiff({selectionAreaHotkey: 'Shift+Z'}, {selectionAreaHotkey: 'Alt+X'});
-        expect(group(preset, 'areaTranslation')?.changes).toEqual(expect.arrayContaining([
-            {key: 'selectionAreaHotkey', label: '圈选快捷键', before: 'Shift+Z', after: 'Alt+X'},
-        ]));
-        const custom = buildConfigDiff({selectionAreaHotkey: 'Shift+Z', customSelectionAreaHotkey: ''}, {
-            selectionAreaHotkey: 'custom', customSelectionAreaHotkey: 'Alt+K',
-        });
-        expect(group(custom, 'areaTranslation')?.changes).toEqual(expect.arrayContaining([
-            {key: 'selectionAreaHotkey', label: '圈选快捷键', before: 'Shift+Z', after: '自定义快捷键'},
-            {key: 'customSelectionAreaHotkey', label: '自定义圈选快捷键', before: '未设置', after: 'Alt+K'},
-        ]));
-    });
 
-    it('显示段落复制的开关、快捷键与复制内容口径', () => {
-        const changed = buildConfigDiff(
-            {paragraphCopyEnabled: true, paragraphCopyHotkey: 'Alt+C', paragraphCopyContent: 'auto'},
-            {paragraphCopyEnabled: false, paragraphCopyHotkey: 'Shift+D', paragraphCopyContent: 'bilingual'},
-        );
-        expect(group(changed, 'translation')?.changes).toEqual(expect.arrayContaining([
-            {key: 'paragraphCopyEnabled', label: '段落复制', before: '开启', after: '关闭'},
-            {key: 'paragraphCopyHotkey', label: '段落复制快捷键', before: 'Alt+C', after: 'Shift+D'},
-            {key: 'paragraphCopyContent', label: '段落复制内容', before: '跟随页面显示', after: '原文和译文'},
-        ]));
-        const custom = buildConfigDiff({paragraphCopyHotkey: 'Alt+C', customParagraphCopyHotkey: ''}, {
-            paragraphCopyHotkey: 'custom', customParagraphCopyHotkey: 'Alt+J',
-        });
-        expect(group(custom, 'translation')?.changes).toEqual(expect.arrayContaining([
-            {key: 'paragraphCopyHotkey', label: '段落复制快捷键', before: 'Alt+C', after: '自定义快捷键'},
-            {key: 'customParagraphCopyHotkey', label: '自定义段落复制快捷键', before: '未设置', after: 'Alt+J'},
-        ]));
-    });
 
     it('显示局部翻译快捷键的开关与组合', () => {
         const changed = buildConfigDiff(
@@ -412,11 +332,8 @@ describe('配置差异预览', () => {
                 hover: true,
                 selection: true,
                 appearance: true,
-                image: true,
-                video: true,
-                document: true,
             },
-            popupQuickFeatureOrder: ['hover', 'selection', 'appearance', 'image', 'video', 'document'],
+            popupQuickFeatureOrder: ['hover', 'selection', 'appearance'],
         }, {
             interfaceSkin: 'minimal',
             interfaceVisibility: {
@@ -428,12 +345,9 @@ describe('配置差异预览', () => {
             popupQuickFeatureVisibility: {
                 hover: true,
                 selection: true,
-                appearance: true,
-                image: false,
-                video: true,
-                document: true,
+                appearance: false,
             },
-            popupQuickFeatureOrder: ['document', 'hover', 'selection', 'appearance', 'image', 'video'],
+            popupQuickFeatureOrder: ['appearance', 'hover', 'selection'],
         });
 
         expect(group(result, 'general')?.changes).toEqual(expect.arrayContaining([
@@ -453,14 +367,14 @@ describe('配置差异预览', () => {
             {
                 key: 'popupQuickFeatureVisibility',
                 label: '快捷功能卡片',
-                before: '鼠标悬停翻译：显示、划词翻译：显示、译文显示：显示、图片翻译：显示、文档翻译：显示',
-                after: '鼠标悬停翻译：显示、划词翻译：显示、译文显示：显示、图片翻译：隐藏、文档翻译：显示',
+                before: '鼠标悬停翻译：显示、划词翻译：显示、译文显示：显示',
+                after: '鼠标悬停翻译：显示、划词翻译：显示、译文显示：隐藏',
             },
             {
                 key: 'popupQuickFeatureOrder',
                 label: '快捷功能顺序',
-                before: '鼠标悬停翻译 → 划词翻译 → 译文显示 → 图片翻译 → video → 文档翻译',
-                after: '文档翻译 → 鼠标悬停翻译 → 划词翻译 → 译文显示 → 图片翻译 → video',
+                before: '鼠标悬停翻译 → 划词翻译 → 译文显示',
+                after: '译文显示 → 鼠标悬停翻译 → 划词翻译',
             },
         ]));
 
@@ -567,10 +481,7 @@ describe('配置差异预览', () => {
             service: 'microsoft',
             hotkey: 'Control',
             alwaysTranslateDomains: ['example.com'],
-            disableImageTranslator: true,
-            videoSubtitleFontSize: 100,
             useCache: true,
-            translationCenterServices: ['microsoft'],
             futureSetting: false,
         }, {
             on: false,
@@ -578,10 +489,7 @@ describe('配置差异预览', () => {
             service: 'openai',
             hotkey: 'Alt',
             alwaysTranslateDomains: ['example.com', 'openai.com'],
-            disableImageTranslator: false,
-            videoSubtitleFontSize: 140,
             useCache: false,
-            translationCenterServices: ['openai', 'deepseek'],
             futureSetting: {mode: 'compact', enabled: true},
         });
 
@@ -589,13 +497,10 @@ describe('配置差异预览', () => {
             'general',
             'translation',
             'siteRules',
-            'imageTranslation',
-            'videoSubtitles',
             'advanced',
-            'tools',
             'other',
         ]);
-        expect(result.changeCount).toBe(10);
+        expect(result.changeCount).toBe(7);
         expect(group(result, 'general')?.changes[0]).toMatchObject({
             key: 'on', label: '插件状态', before: '开启', after: '关闭',
         });
@@ -609,91 +514,15 @@ describe('配置差异预览', () => {
         expect(group(result, 'siteRules')?.changes[0]).toMatchObject({
             before: 'example.com', after: 'example.com、openai.com',
         });
-        expect(group(result, 'imageTranslation')?.changes[0]).toMatchObject({before: '关闭', after: '开启'});
-        expect(group(result, 'videoSubtitles')?.changes[0]).toMatchObject({before: '100%', after: '140%'});
         expect(group(result, 'advanced')?.changes[0]).toMatchObject({before: '开启', after: '关闭'});
-        expect(group(result, 'tools')?.changes[0]).toMatchObject({
-            before: '微软翻译', after: 'OpenAI、DeepSeek',
-        });
         expect(group(result, 'other')?.changes[0]).toMatchObject({
             key: 'futureSetting', label: 'future setting', before: '关闭', after: 'mode：compact；enabled：开启',
         });
     });
 
-    it('把多个快捷翻译方案展示为可辨认的动作、热键和服务摘要', () => {
-        const result = buildConfigDiff({quickTranslationProfiles: []}, {
-            quickTranslationProfiles: [
-                {
-                    id: 'hover', enabled: true, action: 'hover', hotkey: 'Ctrl+T',
-                    service: 'openai', model: 'gpt-5.6-luna', targetLanguage: 'ja',
-                    displayMode: 'bilingual', fullPageMode: 'inherit',
-                },
-                {
-                    id: 'page', enabled: false, action: 'full-page', hotkey: 'Ctrl+Y',
-                    service: '', model: '', targetLanguage: '',
-                    displayMode: 'translation-only', fullPageMode: 'all',
-                },
-            ],
-        });
 
-        expect(result.changeCount).toBe(1);
-        const change = group(result, 'translation')?.changes[0];
-        expect(change).toMatchObject({
-            key: 'quickTranslationProfiles',
-            label: '快捷翻译方案',
-            before: '无',
-        });
-        expect(change?.after).toContain('悬停 Ctrl+T：OpenAI · gpt-5.6-luna，日本語，双语');
-        expect(change?.after).toContain('全文 Ctrl+Y（已停用）：默认服务，默认语言，仅译文');
-    });
 
-    it('全文方案只改变翻译范围时，diff 仍能直接说明改了什么', () => {
-        const profile = {
-            id: 'page', enabled: true, action: 'full-page', hotkey: 'Ctrl+Y',
-            service: '', model: '', targetLanguage: '', displayMode: 'inherit',
-        };
-        const result = buildConfigDiff(
-            {quickTranslationProfiles: [{...profile, fullPageMode: 'viewport'}]},
-            {quickTranslationProfiles: [{...profile, fullPageMode: 'all'}]},
-        );
-        const change = group(result, 'translation')?.changes[0];
 
-        expect(change?.before).toContain('按阅读进度');
-        expect(change?.after).toContain('立即翻译到网页底部');
-        expect(change?.before).not.toBe(change?.after);
-    });
-
-    it('第 5 至 8 个快捷方案的变化也会出现在历史差异中', () => {
-        const profiles = Array.from({length: 8}, (_, index) => ({
-            id: `quick-${index + 1}`, enabled: true, action: 'hover',
-            hotkey: `Ctrl+${String.fromCharCode(65 + index)}`, service: 'openai',
-            model: `model-${index + 1}`, targetLanguage: '', displayMode: 'inherit',
-            fullPageMode: 'inherit',
-        }));
-        const result = buildConfigDiff(
-            {quickTranslationProfiles: profiles},
-            {quickTranslationProfiles: profiles.map((profile, index) => index === 7
-                ? {...profile, model: 'changed-eighth-model'} : profile)},
-        );
-        const change = group(result, 'translation')?.changes[0];
-
-        expect(change?.before).toContain('model-8');
-        expect(change?.after).toContain('changed-eighth-model');
-        expect(change?.before).not.toBe(change?.after);
-    });
-
-    it('畸形或未完成的快捷方案差异仍可读且不遗漏默认范围', () => {
-        const result = buildConfigDiff({quickTranslationProfiles: []}, {
-            quickTranslationProfiles: [null, {
-                action: 'full-page', hotkey: '', service: '', model: '', targetLanguage: '',
-                displayMode: 'inherit', fullPageMode: 'inherit',
-            }],
-        });
-        const after = group(result, 'translation')?.changes[0]?.after || '';
-
-        expect(after).toContain('未设置');
-        expect(after).toContain('默认范围');
-    });
 
     it('把任务调度的不限速和退避参数格式化为可读差异', () => {
         const result = buildConfigDiff({
@@ -886,7 +715,6 @@ describe('配置差异预览', () => {
             customBody: {openai: '{"Authorization":"Bearer old-body-token"}'},
             count: 1,
             persistCredentials: false,
-            videoServiceDefaultMigrated: false,
             __fluentConfigRevision: 2,
         }, {
             token: {openai: 'new-token'},
@@ -906,7 +734,6 @@ describe('配置差异预览', () => {
             customBody: {openai: '{"Authorization":"Bearer new-body-token"}'},
             count: 2,
             persistCredentials: true,
-            videoServiceDefaultMigrated: true,
             __fluentConfigRevision: 3,
         });
         expect(result.changeCount).toBe(1);
@@ -1002,227 +829,11 @@ describe('配置差异预览', () => {
         expect(group(removed, 'general')?.changes[0]).toMatchObject({before: '暗色主题', after: '未设置'});
     });
 
-    it('覆盖所有已知页面字段，并对异常旧值保持可预览而不泄露内容', () => {
-        const cyclicArray: unknown[] = [];
-        cyclicArray.push(cyclicArray);
-        const result = buildConfigDiff({
-            on: undefined,
-            from: 'auto',
-            to: 'zh-Hans',
-            theme: 'auto',
-            display: 1,
-            style: 1,
-            contextMenuEnabled: true,
-            fullPageTranslationMode: 'viewport',
-            disableFloatingBall: true,
-            floatingBallPosition: 'right',
-            floatingBallHotkey: 'Alt+T',
-            customFloatingBallHotkey: '',
-            translationProgressPanelEnabled: false,
-            service: 'microsoft',
-            model: 'legacy-invalid-model-map',
-            customModel: {},
-            requireApiKey: {},
-            minimaxBillingPlan: 'payg',
-            minimaxRegion: 'cn',
-            mimoBillingPlan: 'payg',
-            mimoRegion: 'cn',
-            customBody: {},
-            proxy: {},
-            custom: '',
-            deeplx: '',
-            newApiUrl: '',
-            azureOpenaiEndpoint: '',
-            system_role: {},
-            user_role: {},
-            deepseekApiType: 'auto',
-            deepseekThinkingMode: 'disabled',
-            hotkey: 'Control',
-            customHotkey: '',
-            mouseHoverTranslationDelay: undefined,
-            disableSelectionTranslator: true,
-            selectionTranslatorMode: 'disabled',
-            selectionTranslatorTrigger: 'icon',
-            selectionTranslatorHotkey: 'Control',
-            customSelectionTranslatorHotkey: '',
-            selectionTranslatorDelay: 300,
-            selectionTtsVoices: [],
-            inputBoxTranslationTrigger: 'disabled',
-            inputBoxTranslationTarget: 'en',
-            autoTranslate: false,
-            alwaysTranslateDomains: [],
-            disabledExtensionDomains: [],
-            disableImageTranslator: true,
-            selectionAreaEnabled: false,
-            videoTranslationEnabled: false,
-            videoService: 'microsoft',
-            videoSubtitleVisible: true,
-            videoSubtitleDisplayMode: 'bilingual',
-            videoSubtitleFontSize: 100,
-            useCache: true,
-            enableAIContext: false,
-            maxConcurrentTranslations: 6,
-            animations: true,
-            documentService: 'microsoft',
-            documentModel: {},
-            documentCustomModel: {},
-            translationCenterServices: 'microsoft',
-            translationCenterSourceLanguage: '',
-            translationCenterTargetLanguage: '',
-            vocabularyBookEnabled: false,
-            oddValue: false,
-            blankValue: 'visible',
-        }, {
-            on: 'legacy-enabled',
-            from: 'en',
-            to: 'ja',
-            theme: 'sepia',
-            display: 0,
-            style: 23,
-            contextMenuEnabled: false,
-            fullPageTranslationMode: 'all',
-            disableFloatingBall: false,
-            floatingBallPosition: 'left',
-            floatingBallHotkey: 'F9',
-            customFloatingBallHotkey: 'Meta+T',
-            translationProgressPanelEnabled: true,
-            service: 'openai',
-            model: 'another-invalid-model-map',
-            customModel: {openai: 'my-model', unlistedProvider: 'future-model'},
-            requireApiKey: {openai: false},
-            minimaxBillingPlan: 'token-plan',
-            minimaxRegion: 'global',
-            mimoBillingPlan: 'token-plan',
-            mimoRegion: 'sgp',
-            customBody: {
-                openai: '[1,2,3]',
-                deepseek: '{not-json',
-                custom: 42,
-                grok: 'token=hidden',
-            },
-            proxy: {openai: 'https://proxy.example.com'},
-            custom: 'https://custom.example.com',
-            deeplx: 'https://deeplx.example.com',
-            newApiUrl: 'https://new-api.example.com',
-            azureOpenaiEndpoint: 'https://example.openai.azure.com/chat/completions',
-            system_role: {openai: 42, deepseek: 'short prompt'},
-            user_role: {openai: 'authorization: Bearer hidden'},
-            deepseekApiType: 'responses',
-            deepseekThinkingMode: 'enabled',
-            hotkey: 'Alt',
-            customHotkey: 'Meta+H',
-            mouseHoverTranslationDelay: 'fast',
-            disableSelectionTranslator: false,
-            selectionTranslatorMode: 'translation-only',
-            selectionTranslatorTrigger: 'dot',
-            selectionTranslatorHotkey: 'Shift',
-            customSelectionTranslatorHotkey: 'Meta+S',
-            selectionTranslatorDelay: 450,
-            selectionTtsVoices: ['a', 'b', 'c', 'd', 'e'],
-            selectionTtsMode: 'local-first',
-            inputBoxTranslationTrigger: 'triple_space',
-            inputBoxTranslationTarget: 'de',
-            autoTranslate: true,
-            alwaysTranslateDomains: ['a.example'],
-            disabledExtensionDomains: ['b.example'],
-            disableImageTranslator: false,
-            selectionAreaEnabled: true,
-            videoTranslationEnabled: true,
-            videoService: 'deepseek',
-            videoSubtitleVisible: false,
-            videoSubtitleDisplayMode: 'original-only',
-            videoSubtitleFontSize: 'large',
-            useCache: false,
-            enableAIContext: true,
-            maxConcurrentTranslations: 8,
-            animations: false,
-            documentService: 'openai',
-            documentModel: {openai: 'gpt-5'},
-            documentCustomModel: {openai: 'document-model'},
-            translationCenterServices: ['openai'],
-            translationCenterSourceLanguage: 'en',
-            translationCenterTargetLanguage: 'ja',
-            vocabularyBookEnabled: true,
-            manyItems: ['a', 'b', 'c', 'd', 'e'],
-            manyValues: {openai: 'model', one: 1, two: 2, three: 3, four: 4},
-            emptyPublicMap: {password: 'hidden'},
-            invalidNumber: Number.NaN,
-            oddValue: () => 'legacy',
-            blankValue: '   ',
-            '---': cyclicArray,
-        });
 
-        expect(result.changeCount).toBeGreaterThan(60);
-        expect(JSON.stringify(result)).not.toContain('Bearer hidden');
-        expect(group(result, 'translationServices')?.changes).toEqual(expect.arrayContaining([
-            expect.objectContaining({key: 'model', before: 'legacy-invalid-model-map', after: 'another-invalid-model-map'}),
-            expect.objectContaining({key: 'customBody.openai', after: '3 项 JSON（内容已摘要）'}),
-            expect.objectContaining({key: 'customBody.deepseek', after: '文本请求体（9 字符，内容已摘要）'}),
-            expect.objectContaining({key: 'customBody.custom', after: '已配置（内容已摘要）'}),
-            expect.objectContaining({key: 'system_role.openai', after: '42'}),
-        ]));
-        expect(group(result, 'translation')?.changes).toEqual(expect.arrayContaining([
-            expect.objectContaining({key: 'mouseHoverTranslationDelay', after: 'fast'}),
-            expect.objectContaining({key: 'selectionTtsVoices', after: '5 项：a、b、c、d 等'}),
-            expect.objectContaining({key: 'selectionTtsMode', after: '本地优先'}),
-        ]));
-        expect(group(result, 'other')?.changes).toEqual(expect.arrayContaining([
-            expect.objectContaining({key: 'manyValues', after: expect.stringContaining('5 项：')}),
-            expect.objectContaining({key: 'emptyPublicMap', after: '无'}),
-            expect.objectContaining({key: 'invalidNumber', after: '未设置'}),
-            expect.objectContaining({key: '---', label: '---', after: expect.stringContaining('循环引用')}),
-        ]));
-    });
 
-    it('双语输出顺序在配置历史中显示用户可读名称', () => {
-        expect(group(buildConfigDiff({inputBoxTranslationOutputMode: 'append'}, {inputBoxTranslationOutputMode: 'prepend'}), 'translation')?.changes).toEqual([
-            {key: 'inputBoxTranslationOutputMode', label: '输入框翻译输出方式', before: '原文在前，译文在后', after: '译文在前，原文在后'},
-        ]);
-        expect(group(buildConfigDiff({inputBoxTranslationOutputMode: 'replace'}, {inputBoxTranslationOutputMode: 'append'}), 'translation')?.changes[0].before).toBe('替换原文');
-    });
-
-    it('输入框翻译独立配置在历史差异中显示间隔、服务、模型和提示词摘要', () => {
-        const result = buildConfigDiff({
-            inputBoxTranslationInterval: 1000,
-            inputBoxTranslationService: 'microsoft',
-            inputBoxTranslationModel: '',
-            inputBoxTranslationPrompt: '',
-            inputBoxTranslationSystemPrompt: '',
-        }, {
-            inputBoxTranslationInterval: 1500,
-            inputBoxTranslationService: 'deepseek',
-            inputBoxTranslationModel: 'deepseek-chat',
-            inputBoxTranslationPrompt: 'Translate {{origin}} into {{to}}.',
-            inputBoxTranslationSystemPrompt: 'Return only the translation.',
-        });
-
-        expect(group(result, 'translation')?.changes).toEqual([
-            {key: 'inputBoxTranslationInterval', label: '输入框翻译触发间隔', before: '1000 ms', after: '1500 ms'},
-            {key: 'inputBoxTranslationService', label: '输入框翻译服务', before: '微软翻译', after: 'DeepSeek'},
-            {key: 'inputBoxTranslationModel', label: '输入框翻译模型', before: '未设置', after: 'deepseek-chat'},
-            {key: 'inputBoxTranslationPrompt', label: '输入框翻译提示词', before: '未设置', after: '已配置（33 字符）'},
-            {key: 'inputBoxTranslationSystemPrompt', label: '输入框翻译系统提示词', before: '未设置', after: '已配置（28 字符）'},
-        ]);
-        // 旧版历史记录没有专用模型字段，升级后的第一次编辑也必须可预览。
-        expect(group(buildConfigDiff({}, {inputBoxTranslationModel: 'input-model'}), 'translation')?.changes).toEqual([
-            {key: 'inputBoxTranslationModel', label: '输入框翻译模型', before: '未设置', after: 'input-model'},
-        ]);
-    });
 });
 
 
-it('previews area recognition choices, user prompt edits, and per-model capability overrides', () => {
-    const result = buildConfigDiff(
-        {areaRecognitionMode:'ocr',areaVisionPrompt:'original',modelVision:{}},
-        {areaRecognitionMode:'prefer-vision',areaVisionPrompt:'keep line breaks',modelVision:{openai:{'private-model':true}}},
-    );
-    expect(group(result,'areaTranslation')?.changes).toEqual(expect.arrayContaining([
-        expect.objectContaining({key:'areaRecognitionMode',before:'本地 OCR',after:'优先模型识图'}),
-        expect.objectContaining({key:'areaVisionPrompt',before:'已配置（8 字符）',after:'已配置（16 字符）'}),
-    ]));
-    expect(group(result,'translationServices')?.changes[0]).toMatchObject({key:'modelVision',after:expect.stringContaining('private-model')});
-    expect(group(buildConfigDiff({areaRecognitionMode:'prefer-vision'}, {areaRecognitionMode:'ocr'}),'areaTranslation')?.changes[0].after).toBe('本地 OCR');
-});
 
 it('previews per-service API key rotation switches', () => {
     expect(group(buildConfigDiff({apiKeyRotationEnabled: {}}, {apiKeyRotationEnabled: {openai: true}}), 'translationServices')?.changes)

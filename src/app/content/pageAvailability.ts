@@ -1,7 +1,7 @@
 /**
  * @file src/app/content/pageAvailability.ts
- * 文件职责：统一协调 content 总开关、站点禁用、YouTube SPA 路由与页面功能的 activate/dispose 边界。
- * 主要内容：幂等启停 MAIN-world bridge 和页面 feature，合并同步与在途协调请求，限制失效挂载重试次数，维护视频字幕路由挂载；按排除普通锚点的页面身份记录自动翻译意图，使新 SPA 页面可重新启动、手动恢复后的同页保持原文，并让自动翻译不受非必要 UI 的异步挂载阻塞。
+ * 文件职责：统一协调 content 总开关、站点禁用、SPA 路由与页面功能的 activate/dispose 边界。
+ * 主要内容：幂等启停 MAIN-world bridge 和页面 feature，合并同步与在途协调请求，限制失效挂载重试次数；按排除普通锚点的页面身份记录自动翻译意图，使新 SPA 页面可重新启动、手动恢复后的同页保持原文，并让自动翻译不受非必要 UI 的异步挂载阻塞。
  * 模块边界：本模块通过 composition root 注入当前路由、可用性、挂载器和全文状态，不读取全局配置、不操作具体功能 DOM；具体 feature 保留自己的清理实现。
  */
 import {getPageTranslationMaterialIdentity} from '@/src/services/translation/context/policy';
@@ -12,14 +12,12 @@ export const getAutoTranslationPageIdentity = getPageTranslationMaterialIdentity
 export interface ContentPageAvailabilityDependencies {
     isEnabled(): boolean;
     isPageFeaturesActive(): boolean;
-    isVideoPage(): boolean;
     getPageIdentity?(): string;
     shouldAutomaticallyTranslate(): boolean;
     isFullPageTranslationActive(): boolean;
     setMainWorldBridgesEnabled(enabled: boolean): void;
     activatePageFeatures(): Promise<void>;
     disposePageFeatures(): void;
-    mountVideoSubtitle(): () => void;
     autoTranslate(): void;
 }
 
@@ -27,8 +25,6 @@ export interface ContentPageAvailabilityRuntime {
     needsLifecycleReconcile(): boolean;
     reconcile(): Promise<void>;
     refreshAutoTranslation(): void;
-    syncVideoSubtitlePage(): void;
-    disposeVideoSubtitlePage(): void;
 }
 
 /** 以最新页面配置重试功能挂载；跨 await 后复核当前 owner，不复活失效页面。 */
@@ -51,27 +47,12 @@ export async function reconcileCurrentContentPage(
 export function createContentPageAvailabilityRuntime(
     dependencies: ContentPageAvailabilityDependencies,
 ): ContentPageAvailabilityRuntime {
-    let videoSubtitlePageActive = false;
-    let disposeVideoSubtitle: (() => void) | null = null;
     let shouldAutomaticallyTranslate = false;
     let autoTranslationPageIdentity: string | null = null;
     let pendingReconcile: Promise<void> | null = null;
     let reconcileRequestVersion = 0;
     let disabledStateApplied = false;
 
-    const disposeVideoSubtitlePage = (): void => {
-        disposeVideoSubtitle?.();
-        disposeVideoSubtitle = null;
-        videoSubtitlePageActive = false;
-    };
-    const syncVideoSubtitlePage = (): void => {
-        const shouldMount = dependencies.isEnabled() && dependencies.isVideoPage();
-        if (shouldMount === videoSubtitlePageActive) return;
-        disposeVideoSubtitlePage();
-        if (!shouldMount) return;
-        disposeVideoSubtitle = dependencies.mountVideoSubtitle();
-        videoSubtitlePageActive = true;
-    };
     const refreshAutoTranslation = (): void => {
         if (!dependencies.isEnabled()) {
             shouldAutomaticallyTranslate = false;
@@ -92,7 +73,6 @@ export function createContentPageAvailabilityRuntime(
         if (disabledStateApplied) return;
         disabledStateApplied = true;
         dependencies.setMainWorldBridgesEnabled(false);
-        disposeVideoSubtitlePage();
         dependencies.disposePageFeatures();
     };
     const reconcileLatest = async (): Promise<void> => {
@@ -106,7 +86,7 @@ export function createContentPageAvailabilityRuntime(
             dependencies.setMainWorldBridgesEnabled(true);
             const activation = dependencies.activatePageFeatures();
             // composition root 在首个 await 前发布 featureController 并安装样式。
-            // 全文会话自持 DOM observer 和取消域，不必等待 share-card 等 UI 完成。
+            // 全文会话自持 DOM observer 和取消域，不必等待其余异步 UI 完成。
             if (dependencies.isEnabled() && dependencies.isPageFeaturesActive()) refreshAutoTranslation();
             await activation;
             if (!dependencies.isEnabled()) {
@@ -116,7 +96,6 @@ export function createContentPageAvailabilityRuntime(
             // 失效期间 dispose 会让刚完成的 activation 过期；重新激活而不是发布半激活状态。
             if (!dependencies.isPageFeaturesActive()) continue;
             dependencies.setMainWorldBridgesEnabled(true);
-            syncVideoSubtitlePage();
             refreshAutoTranslation();
             return;
         }
@@ -152,8 +131,6 @@ export function createContentPageAvailabilityRuntime(
         needsLifecycleReconcile: () => dependencies.isEnabled() !== dependencies.isPageFeaturesActive(),
         reconcile,
         refreshAutoTranslation,
-        syncVideoSubtitlePage,
-        disposeVideoSubtitlePage,
     };
 }
 
@@ -187,7 +164,6 @@ export function createContentRouteChangeHandler(dependencies: {
             void availability.reconcile();
             return;
         }
-        availability.syncVideoSubtitlePage();
         dependencies.reconcileFeatures();
         availability.refreshAutoTranslation();
     };

@@ -59,7 +59,6 @@ export interface BilingualTranslationReplay {
     /** 扩展保存当前翻译的源语言，稍后主动开启校订仍能沿用原请求语言。 */
     sourceLanguage?: string;
     /** 个人校订来源随骨架重挂保留，不混入译文文字。 */
-    personalCorrectionId?: string;
     sources: readonly string[];
     translations: readonly string[];
     /** 整句行内代码协议的本地来源，仅供重放复验，不发送给服务。 */

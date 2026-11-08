@@ -17,7 +17,6 @@ import {
     reconcileSelectionPresentation,
     resolveSelectionDictionaryFallback,
     selectionReverseTarget,
-    resolveSelectionVocabularyAnswer,
     SelectionRequestTokenGate,
     shouldIgnoreSelection,
     summarizeSelectionContext,
@@ -716,7 +715,7 @@ describe('selection translator presentation stability', () => {
 });
 
 describe('selection translator async request generations', () => {
-    it('keeps vocabulary lookup refreshes independent from an in-flight save', () => {
+    it('keeps independent async channels from invalidating each other', () => {
         const lookupGate = new SelectionRequestTokenGate();
         const saveGate = new SelectionRequestTokenGate();
         const saveToken = saveGate.begin();
@@ -784,17 +783,6 @@ describe('selection translator text and speech language normalization', () => {
         expect(summarizeSelectionContext(`${'x'.repeat(80)} common tail`, 'common', 40, 500)).toContain('common');
         expect(summarizeSelectionContext(`common left ${'x'.repeat(40)} common right`, 'common', 40, 45)).toContain('right');
         expect(summarizeSelectionContext(`common ${'x'.repeat(80)}`, 'common', 40, 0).startsWith('common')).toBe(true);
-    });
-
-    it('only exposes answers completed for the current selection request', () => {
-        const current = {text: 'common', targetLanguage: 'zh-Hans', generation: 3};
-        const translated = {...current, answer: '常见的'};
-        const dictionary = {...current, answer: 'occurring often'};
-        expect(resolveSelectionVocabularyAnswer(null, translated, dictionary)).toBe('');
-        expect(resolveSelectionVocabularyAnswer(current, translated, dictionary)).toBe('常见的');
-        expect(resolveSelectionVocabularyAnswer(current, {...translated, text: 'current'}, dictionary)).toBe('occurring often');
-        expect(resolveSelectionVocabularyAnswer(current, {...translated, targetLanguage: 'ja'}, null)).toBe('');
-        expect(resolveSelectionVocabularyAnswer(current, {...translated, generation: 2}, null)).toBe('');
     });
 
     it('only uses bundled ECDICT auxiliary text for Simplified Chinese targets', () => {

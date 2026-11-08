@@ -61,11 +61,6 @@
       <path d="M12 8h6.9M12 16l3.5-6" />
       <circle cx="12" cy="12" r="2.5" />
     </svg>
-    <svg v-else-if="service === 'localTranslation'" viewBox="0 0 24 24" role="img">
-      <rect x="4" y="5" width="16" height="14" rx="2" />
-      <path d="M8 9h8M8 13h5M8 16h3" />
-      <path d="m16 13 2 2-2 2" />
-    </svg>
     <svg v-else-if="isCustomOpenAIService" viewBox="0 0 24 24" role="img">
       <path d="M12 5v14M5 12h14" />
     </svg>
@@ -95,7 +90,7 @@ const tone = computed(() => {
   if (isCustomOpenAIService.value) return 'violet'
   if (['openai', 'chatgptPlan', 'azureOpenai', 'newapi'].includes(props.service)) return 'violet'
   if (['deepseek', 'deepL', 'deeplx', 'microsoft', 'freeTranslation', 'myMemory'].includes(props.service)) return 'blue'
-  if (['gemini', 'google', 'chromeTranslator', 'localTranslation', 'ollama', 'googleCloudTranslation'].includes(props.service)) return 'green'
+  if (['gemini', 'google', 'chromeTranslator', 'ollama', 'googleCloudTranslation'].includes(props.service)) return 'green'
   if (['azureTranslator', 'tencent', 'baiduTranslation'].includes(props.service)) return 'blue'
   if (['mistral', 'cohere', 'cerebras', 'togetherai', 'fireworks', 'deepinfra', 'perplexity', 'runcrate', 'cloudgpu'].includes(props.service)) return 'violet'
   return 'rose'

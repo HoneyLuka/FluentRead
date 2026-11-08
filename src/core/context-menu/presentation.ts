@@ -23,8 +23,6 @@ export interface ContextMenuTitleContext {
 const TRANSLATE_ACTION_KEYS: Readonly<Record<ContextMenuActionId, string>> = {
     translateSelection: 'contextMenu.translateSelection',
     translatePage: 'contextMenu.translatePage',
-    translateArea: 'contextMenu.translateArea',
-    translateImage: 'contextMenu.translateImage',
     toggleSite: 'contextMenu.disableSite',
 };
 

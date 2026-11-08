@@ -70,41 +70,19 @@ describe('两点选取配置与快捷键归属', () => {
         ['鼠标悬停翻译', {hotkey: 'custom', customHotkey: 'Alt+Shift+S'}],
         ['全文翻译', {floatingBallHotkey: 'custom', customFloatingBallHotkey: 'Alt+Shift+S'}],
         ['划词翻译', {selectionTranslatorTrigger: 'custom', customSelectionTranslatorHotkey: 'Alt+Shift+S'}],
-        ['圈选翻译', {selectionAreaEnabled: true, selectionAreaHotkey: 'custom', customSelectionAreaHotkey: 'Alt+Shift+S'}],
-        ['段落复制', {paragraphCopyEnabled: true, paragraphCopyHotkey: 'custom', customParagraphCopyHotkey: 'Alt+Shift+S'}],
         ['局部翻译', {sectionTranslationHotkeyEnabled: true, sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: 'Alt+Shift+S'}],
-        ['智能高亮', {informationHighlight: {hotkeyEnabled: true, hotkey: 'shift+alt+s'}}],
-        ['额外翻译方案', {quickTranslationProfiles: [{enabled: true, hotkey: 'Alt+Shift+S'}]}],
     ] as const)('与%s冲突时不占用按键，导入配置也不会触发两种功能', (owner, patch) => {
         const config = {...enabled(), ...patch} as Config;
         expect(findClickSelectionHotkeyConflict(config, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe(owner);
         expect(matchesClickSelectionShortcut(keyboardEvent(), config)).toBe(false);
     });
 
-    it('智能高亮快捷键不依赖自动分析与全局暂停，停用快捷键的草稿不占用', () => {
-        const config = {...enabled(), on: false, informationHighlight: {enabled: false, hotkeyEnabled: true, hotkey: 'Alt+Shift+S'}};
-        expect(findClickSelectionHotkeyConflict(config, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('智能高亮');
-        expect(findClickSelectionHotkeyConflict({...config, informationHighlight: {...config.informationHighlight, hotkeyEnabled: false}}, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
-        expect(findClickSelectionHotkeyConflict({...config, informationHighlight: {hotkeyEnabled: true}}, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
-        expect(findClickSelectionHotkeyConflict({...config, informationHighlight: {}}, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
-    });
-
-    it.each([undefined, ''])('已启用但快捷键缺失（%s）的局部高亮配置不阻挡实际点选组合', hotkey => {
-        const config = {...enabled(), informationHighlight: {hotkeyEnabled: true, hotkey}};
-        expect(findClickSelectionHotkeyConflict(config, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
-        expect(matchesClickSelectionShortcut(keyboardEvent(), config)).toBe(true);
-    });
-
-    it('停用的旧快捷键不阻挡入口，输入翻译与缺失方案列表仍可安全判定', () => {
+    it('停用的旧快捷键不阻挡入口，缺失方案仍可安全判定', () => {
         const config = {...enabled(), selectionTranslatorMode: 'disabled', disableSelectionTranslator: true,
             selectionTranslatorTrigger: 'custom', customSelectionTranslatorHotkey: DEFAULT_CLICK_SELECTION_HOTKEY,
-            selectionAreaEnabled: false, selectionAreaHotkey: 'custom', customSelectionAreaHotkey: DEFAULT_CLICK_SELECTION_HOTKEY,
-            paragraphCopyEnabled: false, paragraphCopyHotkey: 'custom', customParagraphCopyHotkey: DEFAULT_CLICK_SELECTION_HOTKEY,
-            sectionTranslationHotkeyEnabled: false, sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: DEFAULT_CLICK_SELECTION_HOTKEY,
-            quickTranslationProfiles: undefined};
+            sectionTranslationHotkeyEnabled: false, sectionTranslationHotkey: 'custom', customSectionTranslationHotkey: DEFAULT_CLICK_SELECTION_HOTKEY};
         expect(findClickSelectionHotkeyConflict(config, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
         expect(findClickSelectionHotkeyConflict({...config, selectionTranslatorMode: 'bilingual'}, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
-        expect(findClickSelectionHotkeyConflict({...enabled(), inputBoxTranslationTrigger: 'ctrl_enter'}, 'Ctrl+Enter')).toBe('输入框翻译');
         expect(findClickSelectionHotkeyConflict({}, DEFAULT_CLICK_SELECTION_HOTKEY)).toBe('');
     });
 });

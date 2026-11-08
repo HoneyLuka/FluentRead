@@ -10,8 +10,6 @@ const runtime = createRequire(import.meta.url)('vue') as typeof import('vue');
 const specifications = [
     {label: '局部翻译', file: 'SectionTranslationSettings.vue', mode: 'sectionTranslationHotkey', custom: 'customSectionTranslationHotkey',
         enabled: 'sectionTranslationHotkeyEnabled', fallback: 'Alt+R', conflict: 'sectionTranslation.settings.hotkeyConflict'},
-    {label: '圈选翻译', file: 'AreaTranslationSettings.vue', mode: 'selectionAreaHotkey', custom: 'customSelectionAreaHotkey',
-        enabled: 'selectionAreaEnabled', fallback: 'Shift+Z', conflict: 'area.settings.hotkeyConflict'},
 ];
 describe.each(specifications)('$label 实际录制组件', spec => {
     let server: ViteDevServer, app: import('vue').App, state: Record<string, any>;
@@ -127,20 +125,9 @@ describe.each(specifications)('$label 实际录制组件', spec => {
         expect(state.findHotkeyConflict('none')).toBe(spec.conflict);state.handleCustomHotkeyConfirm('none');
         expect(props.config[spec.mode]).toBe('Shift+D');expect(state.showCustomHotkeyDialog).toBe(true);
     });
-    it('清除录制不能绕过默认组合的快捷方案冲突', () => {
-        state.handleHotkeyChange('custom');props.config.quickTranslationProfiles = [{id: 'conflict', enabled: true, action: 'full-page',
-            hotkey: spec.fallback, service: '', model: '', targetLanguage: '', displayMode: 'inherit', fullPageMode: 'inherit'}];
-        expect(state.findHotkeyConflict('none')).toBe('quickTranslation.conflictProfile');state.handleCustomHotkeyConfirm('none');
-        expect(props.config[spec.mode]).toBe('Shift+D');expect(state.showCustomHotkeyDialog).toBe(true);
-    });
     it('恢复已有自定义入口也检查现在新增的冲突', () => {
         props.config[spec.custom] = 'Alt+K';props.config.floatingBallHotkey = 'Alt+K';state.handleHotkeyChange('custom');
         expect(props.config[spec.mode]).toBe('Shift+D');expect(feedback).toHaveBeenCalled();
-    });
-    it('段落复制启用时占用按键，停用后可录制', () => {
-        props.config.paragraphCopyEnabled = true;props.config.paragraphCopyHotkey = 'custom';props.config.customParagraphCopyHotkey = 'Alt+K';
-        expect(state.findHotkeyConflict('Alt+K')).toBe(spec.conflict);props.config.paragraphCopyEnabled = false;
-        state.handleHotkeyChange('custom');state.handleCustomHotkeyConfirm('Alt+K');expect(props.config[spec.custom]).toBe('Alt+K');
     });
     it('已保存组合的冲突不提交，也不关闭当前草稿', () => {
         state.handleHotkeyChange('custom');props.config.floatingBallHotkey = 'Alt+K';state.handleCustomHotkeyConfirm('Alt+K');

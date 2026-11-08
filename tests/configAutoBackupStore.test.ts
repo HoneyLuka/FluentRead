@@ -83,7 +83,6 @@ describe('自动配置备份 store', () => {
             token: {openai: 'current-secret'},
             count: 42,
             persistCredentials: true,
-            videoServiceDefaultMigrated: true,
         });
         configHarness.saveConfig.mockReset().mockImplementation(async (value: Record<string, unknown>) => {
             Object.assign(configHarness.config, structuredClone(value));
@@ -170,7 +169,6 @@ describe('自动配置备份 store', () => {
                     token: {openai: 'legacy-secret'},
                     count: 1,
                     persistCredentials: false,
-                    videoServiceDefaultMigrated: false,
                 },
             }],
             nextVersion: 8,
@@ -226,7 +224,6 @@ describe('自动配置备份 store', () => {
             to: 'ja',
             token: {openai: 'current-secret'},
             count: 42,
-            videoServiceDefaultMigrated: true,
         }), {recordHistory: true, immediateHistory: true});
         expect(configHarness.saveConfig.mock.calls[0]?.[0]).not.toHaveProperty('persistCredentials');
         expect(result.backups.entries[0]?.version).toBe(3);

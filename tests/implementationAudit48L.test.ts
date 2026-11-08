@@ -34,10 +34,10 @@ afterEach(() => {
 describe('48L 注册表公开状态合同', () => {
     it('未注入 options 时使用生产浏览器能力门控，而不是绕过默认能力', async () => {
         const mount = vi.fn(), isEnabled = vi.fn(() => true);
-        const runtime = createContentFeatureRegistry([{id: 'default-capability', requiredCapability: 'imageTranslation', isEnabled, mount}]);
+        const runtime = createContentFeatureRegistry([{id: 'default-capability', requiredCapability: 'chromeTranslation', isEnabled, mount}]);
         registries.push(runtime);
-        expect(onlyStatus(await runtime.mountEnabled(activation()))).toBe(browserCapabilities.imageTranslation ? 'mounted' : 'skipped');
-        expect(mount).toHaveBeenCalledTimes(browserCapabilities.imageTranslation ? 1 : 0);
+        expect(onlyStatus(await runtime.mountEnabled(activation()))).toBe(browserCapabilities.chromeTranslation ? 'mounted' : 'skipped');
+        expect(mount).toHaveBeenCalledTimes(browserCapabilities.chromeTranslation ? 1 : 0);
     });
     it('显式 false 不被历史 Set 覆盖，显式外部 true 仍兼容并归入清理所有权', async () => {
         let actual = true, enabled = true; const mount = vi.fn(() => {actual = true;}), unmount = vi.fn(() => {actual = false;});
@@ -61,9 +61,9 @@ describe('48L 注册表公开状态合同', () => {
     });
     it('不支持的 capability 先于配置门控，支持的定义按注册顺序执行', async () => {
         const disabled = vi.fn(() => true), mount = vi.fn(), runtime = createContentFeatureRegistry([
-            {id: 'unsupported', requiredCapability: 'imageTranslation', isEnabled: disabled, mount},
+            {id: 'unsupported', requiredCapability: 'chromeTranslation', isEnabled: disabled, mount},
             {id: 'healthy', isEnabled: () => true, mount},
-        ], {capabilities: resolveBrowserCapabilities({browser: 'userscript', manifestVersion: 2})}); registries.push(runtime);
+        ], {capabilities: resolveBrowserCapabilities({browser: 'safari', manifestVersion: 3})}); registries.push(runtime);
         expect((await runtime.mountEnabled(activation())).map(row => row.status)).toEqual(['skipped', 'mounted']);
         expect(disabled).not.toHaveBeenCalled(); expect(mount).toHaveBeenCalledOnce();
     });

@@ -108,39 +108,19 @@ describe('Popup configured model overview', () => {
     expect(find('[data-feature-service="hover"] .assignment-follow').textContent).toBe('跟随默认');
     expect(find('[data-feature-service="hover"] .assignment-service').textContent).toBe('OpenAI');
     expect(find('[data-feature-service="hover"]').getAttribute('aria-label')).toBe('鼠标悬浮 · 跟随默认 · OpenAI · 配置模型：saved-openai-model');
-    config.inputBoxTranslationService = 'deepseek'; config.inputBoxTranslationModel = 'input-override';
-    config.documentService = 'deepseek'; config.documentModel.deepseek = 'document-override';
-    await runtime.nextTick();
-    expect(find('[data-feature-service="input"] small').textContent).toContain('input-override');
-    expect(find('[data-feature-service="document"] small').textContent).toContain('document-override');
     config.model.openai = customModelString; config.customModel.openai = 'custom/active';
     await runtime.nextTick();
     expect(find('[data-feature-service="default"] small').textContent).toContain('custom/active');
     expect(root.querySelector('[data-feature-service="hover"] small')).toBeNull();
     expect(find('[data-feature-service="hover"]').getAttribute('aria-label')).toContain('custom/active');
-    config.documentModel.deepseek = customModelString;
-    config.documentCustomModel.deepseek = 'document/custom';
-    await runtime.nextTick();
-    expect(find('[data-feature-service="document"] small').textContent).toBe('配置模型：document/custom');
-    expect(find('[data-feature-service="document"]').getAttribute('aria-label')).toContain('配置模型：document/custom');
-    config.documentService = '';
-    await runtime.nextTick();
-    expect(root.querySelector('[data-feature-service="document"] small')).toBeNull();
-    expect(find('[data-feature-service="document"]').getAttribute('aria-label')).toContain('配置模型：custom/active');
   });
 
   it('labels configuration rather than claiming the final request model when custom bodies override it', async () => {
     const {config, find} = mount();
     config.customBody.openai = '{"model":"request-body-model"}';
-    config.inputBoxTranslationModel = 'configured-input-model';
-    config.documentService = 'deepseek';
-    config.documentModel.deepseek = 'configured-document-model';
-    config.customBody.deepseek = '{"model":"request-document-model"}';
-    const before = JSON.stringify({model: config.model, customBody: config.customBody,
-      inputModel: config.inputBoxTranslationModel, documentModel: config.documentModel});
+    const before = JSON.stringify({model: config.model, customBody: config.customBody});
     await runtime.nextTick();
-    for (const [feature, model] of [['default', 'saved-openai-model'], ['hover', 'saved-openai-model'],
-      ['input', 'configured-input-model'], ['document', 'configured-document-model']]) {
+    for (const [feature, model] of [['default', 'saved-openai-model'], ['hover', 'saved-openai-model']]) {
       const row = find(`[data-feature-service="${feature}"]`);
       if (feature === 'hover') expect(row.querySelector('small')).toBeNull();
       else {
@@ -150,31 +130,12 @@ describe('Popup configured model overview', () => {
       expect(row.getAttribute('aria-label')).toContain(`配置模型：${model}`);
       expect(row.getAttribute('aria-label')).not.toContain('当前模型');
     }
-    expect(JSON.stringify({model: config.model, customBody: config.customBody,
-      inputModel: config.inputBoxTranslationModel, documentModel: config.documentModel})).toBe(before);
-  });
-
-  it('keeps reading, writing and input model overrides when their provider follows the default', async () => {
-    const {config, find} = mount();
-    config.harness.service = ''; config.harness.model = 'inherited-reading-override';
-    config.writing.service = ''; config.writing.model = 'inherited-writing-override';
-    config.inputBoxTranslationService = ''; config.inputBoxTranslationModel = 'inherited-input-override';
-    for (const service of ['openai', 'deepseek']) {
-      config.service = service;
-      await runtime.nextTick();
-      for (const [feature, model] of [['reading', 'inherited-reading-override'], ['writing', 'inherited-writing-override'], ['input', 'inherited-input-override']]) {
-        expect(find(`[data-feature-service="${feature}"] .assignment-follow`).textContent).toBe('跟随默认');
-        expect(find(`[data-feature-service="${feature}"] .assignment-service`).textContent).toBe(service === 'openai' ? 'OpenAI' : 'DeepSeek');
-        expect(find(`[data-feature-service="${feature}"] small`).textContent).toBe(`配置模型：${model}`);
-        expect(find(`[data-feature-service="${feature}"]`).getAttribute('aria-label')).toContain(`跟随默认 · ${service === 'openai' ? 'OpenAI' : 'DeepSeek'} · 配置模型：${model}`);
-      }
-    }
+    expect(JSON.stringify({model: config.model, customBody: config.customBody})).toBe(before);
   });
 
   it('shows the configured model after switching services without changing model maps', async () => {
     const {config, root, find, click, search} = mount();
-    const before = JSON.stringify({model: config.model, customModel: config.customModel, customModels: config.customModels,
-      documentModel: config.documentModel, documentCustomModel: config.documentCustomModel});
+    const before = JSON.stringify({model: config.model, customModel: config.customModel, customModels: config.customModels});
     await click('[data-feature-service="default"]');
     await search('search-only-model');
     expect(find('[data-service-choice="deepseek"] small').textContent).toBe('search-only-model');
@@ -183,8 +144,7 @@ describe('Popup configured model overview', () => {
     expect(config.model.deepseek).toBe('saved-deepseek-model');
     expect(find('[data-feature-service="default"] small').textContent).toBe('配置模型：saved-deepseek-model');
     expect(root.querySelector('.popup-service-picker')).toBeNull();
-    expect(JSON.stringify({model: config.model, customModel: config.customModel, customModels: config.customModels,
-      documentModel: config.documentModel, documentCustomModel: config.documentCustomModel})).toBe(before);
+    expect(JSON.stringify({model: config.model, customModel: config.customModel, customModels: config.customModels})).toBe(before);
   });
 
   it('preserves existing service search and clear behavior', async () => {
@@ -220,34 +180,6 @@ describe('Popup configured model overview', () => {
     expect(find('[data-feature-service="hover"]').getAttribute('aria-label')).toContain('配置模型：private-active');
     expect(config.model).toEqual(modelsBefore);
     expect(config.customModel).toEqual(customModelsBefore);
-  });
-
-  it('shows reading and writing overrides and retains the existing reset and AI-only rules', async () => {
-    const {config, root, find, click, search} = mount();
-    config.harness.service = 'deepseek'; config.harness.model = 'reading-override';
-    config.writing.service = 'openai'; config.writing.model = 'writing-override';
-    await runtime.nextTick();
-    expect(find('[data-feature-service="reading"] small').textContent).toBe('配置模型：reading-override');
-    expect(find('[data-feature-service="writing"] small').textContent).toBe('配置模型：writing-override');
-    const modelsBefore = {...config.model};
-    await click('[data-feature-service="reading"]');
-    expect(root.querySelector('[data-service-choice="microsoft"]')).toBeNull();
-    await search('saved-openai-model');
-    await click('[data-service-choice="openai"]');
-    expect(config.harness.service).toBe('openai');
-    expect(config.harness.model).toBe('');
-    expect(find('[data-feature-service="reading"] small').textContent).toBe('配置模型：saved-openai-model');
-    await click('[data-feature-service="writing"]');
-    await search('search-only-model');
-    await click('[data-service-choice="deepseek"]');
-    expect(config.writing.service).toBe('deepseek');
-    expect(config.writing.model).toBe('');
-    expect(find('[data-feature-service="writing"] small').textContent).toBe('配置模型：saved-deepseek-model');
-    await click('[data-feature-service="writing"]');
-    await click('[data-service-choice=""]');
-    expect(config.writing.service).toBe('');
-    expect(root.querySelector('[data-feature-service="writing"] small')).toBeNull();
-    expect(config.model).toEqual(modelsBefore);
   });
 
   it('retains a removed provider as a disabled old choice without making its model selectable', async () => {
@@ -319,24 +251,6 @@ describe('Popup configured model overview', () => {
     expect((reopened.find('input[type="search"]') as HTMLInputElement).value).toBe('');
     expect(reopened.config.model.openai).toBe('saved-openai-model');
     expect(reopened.config.model.deepseek).toBe('saved-deepseek-model');
-  });
-
-  it('preserves existing per-feature model reset rules when choosing another service', async () => {
-    const {config, find, click, search} = mount();
-    config.inputBoxTranslationService = 'openai'; config.inputBoxTranslationModel = 'old-feature-model';
-    await runtime.nextTick();
-    await click('[data-feature-service="input"]');
-    await search('search-only-model');
-    await click('[data-service-choice="deepseek"]');
-    expect(config.service).toBe('openai');
-    expect(config.inputBoxTranslationService).toBe('deepseek');
-    expect(config.inputBoxTranslationModel).toBe('');
-    expect(config.model.deepseek).toBe('saved-deepseek-model');
-    expect(find('[data-feature-service="input"] small').textContent).toBe('配置模型：saved-deepseek-model');
-    await click('[data-feature-service="input"]');
-    await click('[data-service-choice=""]');
-    expect(config.inputBoxTranslationService).toBe('');
-    expect(find('[data-feature-service="input"]').getAttribute('aria-label')).toContain('配置模型：saved-openai-model');
   });
 
   it('preserves assignments when returning from the picker and reopening it', async () => {

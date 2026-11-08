@@ -11,26 +11,10 @@ import {
     usesExactCredentialReplacement,
 } from '@/src/features/settings/model/dataBackup';
 import {
-    VOCABULARY_BOOK_EXPORT_FORMAT,
-    VOCABULARY_BOOK_EXPORT_VERSION,
-    type VocabularyBookExport,
-} from '@/src/features/vocabulary/public';
-import {
     MODEL_USAGE_TRANSFER_FORMAT,
     MODEL_USAGE_TRANSFER_VERSION,
     type ModelUsageTransferDocument,
 } from '@/src/services/model-usage/types';
-
-function vocabulary(): VocabularyBookExport {
-    return {
-        format: VOCABULARY_BOOK_EXPORT_FORMAT,
-        version: VOCABULARY_BOOK_EXPORT_VERSION,
-        exportedAt: 100,
-        includesPrivateContext: false,
-        entries: [],
-        reviewLogs: [],
-    };
-}
 
 function modelUsage(): ModelUsageTransferDocument {
     return {
@@ -42,12 +26,11 @@ function modelUsage(): ModelUsageTransferDocument {
 }
 
 describe('统一本机数据备份信封', () => {
-    it('组合并识别配置、单词本与模型用量完整备份', () => {
+    it('组合并识别配置与模型用量完整备份', () => {
         const config = new Config();
         config.translationLoadingStyle = 'orbit';
         const backup = createFluentReadDataBackup({
             config: prepareConfigForExport(config),
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: 200,
         });
@@ -69,8 +52,6 @@ describe('统一本机数据备份信封', () => {
         expect(summarizeLocalDataImport(parsed)).toEqual({
             kind: 'complete',
             configIncluded: true,
-            vocabularyEntries: 0,
-            vocabularyReviewLogs: 0,
             modelUsageEvents: 0,
         });
     });
@@ -78,7 +59,6 @@ describe('统一本机数据备份信封', () => {
     it('旧 v1 完整备份保持兼容但不声明精确凭据替换', () => {
         const current = createFluentReadDataBackup({
             config: prepareConfigForExport(new Config()),
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: 100,
         });
@@ -109,7 +89,6 @@ describe('统一本机数据备份信封', () => {
             configCredentialMode: FLUENTREAD_DATA_BACKUP_EXACT_CREDENTIAL_MODE,
             exportedAt: 100,
             config: legacyConfig,
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
         };
         const serialized = JSON.stringify(backup);
@@ -136,7 +115,6 @@ describe('统一本机数据备份信封', () => {
 
         const reexported = createFluentReadDataBackup({
             config: prepareConfigForExport(restored),
-            vocabulary: parsed.backup.vocabulary,
             modelUsage: parsed.backup.modelUsage,
             exportedAt: 200,
         });
@@ -148,7 +126,6 @@ describe('统一本机数据备份信封', () => {
         'v2 中显式提供的畸形 secret 不能当作旧版缺省值：%j', (secret) => {
             const backup = createFluentReadDataBackup({
                 config: prepareConfigForExport(new Config()),
-                vocabulary: vocabulary(),
                 modelUsage: modelUsage(),
             });
             backup.config.secret = secret;
@@ -160,7 +137,6 @@ describe('统一本机数据备份信封', () => {
     it('v2 精确替换拒绝缺失或畸形凭据快照，v1 仍按旧协议兼容', () => {
         const complete = createFluentReadDataBackup({
             config: prepareConfigForExport(new Config()),
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: 100,
         });
@@ -168,7 +144,6 @@ describe('统一本机数据备份信封', () => {
 
         expect(() => createFluentReadDataBackup({
             config: missingToken,
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
         })).toThrow('精确凭据快照');
         expect(() => parseLocalDataImport({...complete, config: missingToken}))
@@ -198,28 +173,13 @@ describe('统一本机数据备份信封', () => {
         }
     });
 
-    it('兼容识别旧版单词本、模型用量与配置文件', () => {
-        expect(parseLocalDataImport(vocabulary())).toEqual({kind: 'vocabulary', vocabulary: vocabulary()});
+    it('兼容识别旧版模型用量与配置文件', () => {
         expect(parseLocalDataImport(modelUsage())).toEqual({kind: 'model-usage', modelUsage: modelUsage()});
 
-        const vocabularyWithRows = {
-            ...vocabulary(),
-            entries: [null as never],
-            reviewLogs: [null as never],
-        };
-        expect(summarizeLocalDataImport({kind: 'vocabulary', vocabulary: vocabularyWithRows})).toEqual({
-            kind: 'vocabulary',
-            configIncluded: false,
-            vocabularyEntries: 1,
-            vocabularyReviewLogs: 1,
-            modelUsageEvents: 0,
-        });
         const modelUsageWithRows = {...modelUsage(), events: [null as never]};
         expect(summarizeLocalDataImport({kind: 'model-usage', modelUsage: modelUsageWithRows})).toEqual({
             kind: 'model-usage',
             configIncluded: false,
-            vocabularyEntries: 0,
-            vocabularyReviewLogs: 0,
             modelUsageEvents: 1,
         });
 
@@ -228,8 +188,6 @@ describe('统一本机数据备份信封', () => {
         expect(summarizeLocalDataImport({kind: 'config', config})).toEqual({
             kind: 'config',
             configIncluded: true,
-            vocabularyEntries: 0,
-            vocabularyReviewLogs: 0,
             modelUsageEvents: 0,
         });
     });
@@ -246,40 +204,15 @@ describe('统一本机数据备份信封', () => {
             version: 2,
             exportedAt: 100,
             config,
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
         })).toThrow('精确凭据快照标记');
-        expect(() => createFluentReadDataBackup({config: {}, vocabulary: vocabulary(), modelUsage: modelUsage()}))
+        expect(() => createFluentReadDataBackup({config: {}, modelUsage: modelUsage()}))
             .toThrow('配置');
-        expect(() => parseLocalDataImport({
-            format: FLUENTREAD_DATA_BACKUP_FORMAT,
-            version: 1,
-            exportedAt: 100,
-            config,
-            vocabulary: {...vocabulary(), entries: null},
-            modelUsage: modelUsage(),
-        })).toThrow('单词本');
         expect(() => parseLocalDataImport({format: 'unsupported'})).toThrow('不是受支持');
     });
 
-    it('对创建时的单词本、模型用量和时间字段执行完整校验', () => {
+    it('对创建时的模型用量和时间字段执行完整校验', () => {
         const config = prepareConfigForExport(new Config());
-        const invalidVocabularyValues = [
-            null,
-            {...vocabulary(), format: 'other'},
-            {...vocabulary(), version: 2},
-            {...vocabulary(), exportedAt: '100'},
-            {...vocabulary(), includesPrivateContext: 'false'},
-            {...vocabulary(), entries: null},
-            {...vocabulary(), reviewLogs: null},
-        ] as unknown as VocabularyBookExport[];
-        for (const invalidVocabulary of invalidVocabularyValues) {
-            expect(() => createFluentReadDataBackup({
-                config,
-                vocabulary: invalidVocabulary,
-                modelUsage: modelUsage(),
-            })).toThrow('单词本');
-        }
 
         const invalidModelUsageValues = [
             null,
@@ -291,26 +224,23 @@ describe('统一本机数据备份信封', () => {
         for (const invalidModelUsage of invalidModelUsageValues) {
             expect(() => createFluentReadDataBackup({
                 config,
-                vocabulary: vocabulary(),
                 modelUsage: invalidModelUsage,
             })).toThrow('模型用量');
         }
 
         expect(() => createFluentReadDataBackup({
             config,
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: Number.POSITIVE_INFINITY,
         })).toThrow('导出时间');
         expect(() => createFluentReadDataBackup({
             config,
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: -1,
         })).toThrow('导出时间');
 
         const now = vi.spyOn(Date, 'now').mockReturnValue(321);
-        expect(createFluentReadDataBackup({config, vocabulary: vocabulary(), modelUsage: modelUsage()}).exportedAt)
+        expect(createFluentReadDataBackup({config, modelUsage: modelUsage()}).exportedAt)
             .toBe(321);
         now.mockRestore();
     });
@@ -318,7 +248,6 @@ describe('统一本机数据备份信封', () => {
     it('对完整备份的时间、配置和各领域严格拒绝失真数据', () => {
         const backup = createFluentReadDataBackup({
             config: prepareConfigForExport(new Config()),
-            vocabulary: vocabulary(),
             modelUsage: modelUsage(),
             exportedAt: 100,
         });

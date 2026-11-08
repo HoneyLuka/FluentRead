@@ -8,8 +8,6 @@ import {
     resolveSectionTranslationHotkey,
     sectionTranslationHotkeyDisplayName,
 } from '@/src/core/config/sectionTranslation';
-import {DEFAULT_AREA_TRANSLATION_HOTKEY} from '@/src/core/config/areaTranslation';
-import {DEFAULT_PARAGRAPH_COPY_HOTKEY} from '@/src/core/config/paragraphCopy';
 
 function keyboardEvent(overrides: Record<string, unknown> = {}): KeyboardEvent {
     return {
@@ -24,11 +22,11 @@ function keyboardEvent(overrides: Record<string, unknown> = {}): KeyboardEvent {
 }
 
 describe('局部翻译快捷键配置', () => {
-    it('默认组合键避开全文、段落复制、圈选和浏览器菜单键，预设全部带修饰键', () => {
+    it('默认组合键避开全文和浏览器菜单键，预设全部带修饰键', () => {
         expect(DEFAULT_SECTION_TRANSLATION_HOTKEY).toBe('Alt+R');
         const presets = SECTION_TRANSLATION_HOTKEY_OPTIONS.map((option) => option.value);
         expect(presets).toContain(DEFAULT_SECTION_TRANSLATION_HOTKEY);
-        for (const occupied of ['Alt+T', DEFAULT_PARAGRAPH_COPY_HOTKEY, DEFAULT_AREA_TRANSLATION_HOTKEY, 'Alt+E', 'Alt+F', 'Alt+S']) {
+        for (const occupied of ['Alt+T', 'Alt+E', 'Alt+F', 'Alt+S']) {
             expect(presets).not.toContain(occupied);
         }
         for (const option of SECTION_TRANSLATION_HOTKEY_OPTIONS) {

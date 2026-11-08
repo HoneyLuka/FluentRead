@@ -230,12 +230,10 @@ describe('配置 schema 与历史纯状态机', () => {
             token: {openai: 'old-secret'},
             count: 2,
             persistCredentials: false,
-            videoServiceDefaultMigrated: false,
         });
         expect(snapshot).not.toHaveProperty('token');
         expect(snapshot).not.toHaveProperty('count');
         expect(snapshot).not.toHaveProperty('persistCredentials');
-        expect(snapshot).not.toHaveProperty('videoServiceDefaultMigrated');
 
         const restored = restoreRestorableConfig(snapshot, {
             ...baseConfig,
@@ -243,29 +241,26 @@ describe('配置 schema 与历史纯状态机', () => {
             token: {openai: 'current-secret'},
             count: 42,
             persistCredentials: true,
-            videoServiceDefaultMigrated: true,
         });
         expect(restored).toMatchObject({
             to: 'ja',
             token: {openai: 'current-secret'},
             count: 42,
-            videoServiceDefaultMigrated: true,
         });
         expect(restored).not.toHaveProperty('persistCredentials');
 
-        const deepLxSnapshot = toRestorableConfig({
+        const serviceSnapshot = toRestorableConfig({
             ...baseConfig,
-            videoService: 'deeplx',
-            videoServiceDefaultMigrated: true,
+            hoverTranslationService: 'google',
         });
-        expect(deepLxSnapshot.videoService).toBe('deeplx');
+        expect(serviceSnapshot.hoverTranslationService).toBe('google');
         expect(cloneConfigHistory(history({
-            entries: [{...entry(1), config: deepLxSnapshot}],
+            entries: [{...entry(1), config: serviceSnapshot}],
             cursor: 0,
             nextVersion: 2,
-        })).entries[0]?.config.videoService).toBe('deeplx');
-        expect(restoreRestorableConfig(deepLxSnapshot, baseConfig).videoService).toBe('deeplx');
-        expect(toRestorableConfig(null)).toMatchObject({videoService: ''});
+        })).entries[0]?.config.hoverTranslationService).toBe('google');
+        expect(restoreRestorableConfig(serviceSnapshot, baseConfig).hoverTranslationService).toBe('google');
+        expect(toRestorableConfig(null)).toMatchObject({hoverTranslationService: ''});
     });
 
     it('恢复历史或自动备份时只保留仍绑定同一有效地址的 token', () => {

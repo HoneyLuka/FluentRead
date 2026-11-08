@@ -1,8 +1,8 @@
 /**
  * @file src/platform/browser/capabilities.ts
  *
- * 文件职责：集中计算编译目标与运行时浏览器能力，为 Chrome、Edge、Firefox 和 userscript 的功能装配提供确定契约。
- * 主要内容：定义 BrowserBuildTarget、BrowserCapabilities 与 feature 类型，从 import.meta.env 生成构建标记，并结合 userAgent 约束 Chrome Translator、Offscreen、OCR、区域翻译和 TTS。 可核对的公开符号包括 BrowserBuildTarget、BrowserCapabilities、BrowserFeatureCapability、resolveBrowserCapabilities、applyRuntimeBrowserConstraints、readRuntimeUserAgent、browserBuildTargetFromEnv。
+ * 文件职责：集中计算编译目标与运行时浏览器能力，为 Chrome、Safari 和 userscript 的功能装配提供确定契约。
+ * 主要内容：定义 BrowserBuildTarget、BrowserCapabilities 与 feature 类型，从 import.meta.env 生成构建标记，并结合 userAgent 约束 Chrome Translator、Offscreen 和 TTS。 可核对的公开符号包括 BrowserBuildTarget、BrowserCapabilities、BrowserFeatureCapability、resolveBrowserCapabilities、applyRuntimeBrowserConstraints、readRuntimeUserAgent、browserBuildTargetFromEnv。
  * 模块边界：本文件属于 platform 基础设施边界，只封装浏览器、网络、存储上下文或 Shadow DOM 机制；不决定翻译业务策略，不直接实现 feature，业务层通过类型化端口消费这里的能力。
  */
 
@@ -17,19 +17,13 @@ export interface BrowserCapabilities extends BrowserBuildTarget {
     /** 可承载共享 DOM 运行时：Chromium MV3 Offscreen 或 Firefox MV2 后台 iframe。 */
     readonly extensionDom: boolean;
     readonly chromeTranslation: boolean;
-    readonly imageOcr: boolean;
-    readonly imageTranslation: boolean;
-    readonly areaTranslation: boolean;
     readonly selectionTtsExtensionPlayback: boolean;
     /** Edge TTS 始终能够返回合成音频字节，供内容页面播放。 */
     readonly selectionTtsPageFallback: true;
 }
 
 export type BrowserFeatureCapability =
-    | 'areaTranslation'
     | 'chromeTranslation'
-    | 'imageOcr'
-    | 'imageTranslation'
     | 'offscreenDocument'
     | 'extensionDom'
     | 'selectionTtsExtensionPlayback'
@@ -56,9 +50,6 @@ export function resolveBrowserCapabilities(target: BrowserBuildTarget): BrowserC
         extensionDom,
         // Offscreen 只是传输前提；offscreen runtime 仍会动态检查 Translator API 就绪状态。
         chromeTranslation: target.manifestVersion === 3 && browser === 'chrome',
-        imageOcr: extensionDom,
-        imageTranslation: extensionDom,
-        areaTranslation: extensionDom,
         selectionTtsExtensionPlayback: extensionDom,
         selectionTtsPageFallback: true as const,
     });
@@ -70,7 +61,7 @@ export function applyRuntimeBrowserConstraints(
     userAgent: string,
 ): BrowserCapabilities {
     // Thunderbird 复用 Firefox MV2 产物，但不具备浏览器标签页的共享 DOM 容器。
-    // 邮件正文的基础全文/划词翻译仍可用；OCR、圈选和本地语音需另行适配。
+    // 邮件正文的基础全文/划词翻译仍可用；本地语音需另行适配。
     if (capabilities.browser === 'firefox' && /\bThunderbird\//i.test(userAgent)) {
         return resolveBrowserCapabilities({browser: 'thunderbird', manifestVersion: capabilities.manifestVersion});
     }

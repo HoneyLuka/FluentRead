@@ -1,7 +1,7 @@
 /**
  * @file src/core/config/sectionTranslationRules.ts
  * 文件职责：定义用户显式保存的局部翻译区域规则，统一网站与路径匹配、有限选择器路径和配置校验。
- * 主要内容：规则只保存作用域、区域定位和自动/提醒模式，可引用既有快捷方案；归一化移除未知字段和损坏条目，限制规则、选区与开放 Shadow DOM 深度，以精确主机和路径段边界匹配页面。
+ * 主要内容：规则只保存作用域、区域定位和自动/提醒模式；归一化移除未知字段和损坏条目，限制规则、选区与开放 Shadow DOM 深度，以精确主机和路径段边界匹配页面。
  * 模块边界：本文件为无副作用的配置领域模型，不查询网页 DOM、不保存凭据、不监听导航，也不启动翻译；定位与生命周期由 section-translation feature 拥有。
  */
 import {getSiteBaseDomain} from '@/src/core/site-rules/domain';
@@ -12,14 +12,13 @@ export interface SectionTranslationRule {
     site: string;
     selectors: string[][];
     mode: 'auto' | 'remind';
-    profileId?: string;
 }
 
 export const MAX_SECTION_TRANSLATION_RULES = 100;
 export const MAX_SECTION_RULE_REGIONS = 16;
 export const MAX_SECTION_LOCATOR_DEPTH = 8;
 export const MAX_SECTION_SELECTOR_LENGTH = 512;
-export type SectionTranslationRuleError = '' | 'id' | 'enabled' | 'site' | 'selectors' | 'mode' | 'profile';
+export type SectionTranslationRuleError = '' | 'id' | 'enabled' | 'site' | 'selectors' | 'mode';
 
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identity = (value: unknown): value is string => typeof value === 'string' && /^[\w-]{1,128}$/u.test(value);
@@ -83,7 +82,6 @@ export function validateSectionTranslationRule(value: unknown): SectionTranslati
     if (!parseRuleSite(value.site)) return 'site';
     if (!Array.isArray(value.selectors) || value.selectors.length === 0 || value.selectors.length > MAX_SECTION_RULE_REGIONS || !value.selectors.every(isValidSectionLocatorPath)) return 'selectors';
     if (value.mode !== 'auto' && value.mode !== 'remind') return 'mode';
-    if (value.profileId !== undefined && !identity(value.profileId)) return 'profile';
     return '';
 }
 
@@ -98,7 +96,7 @@ export function normalizeSectionTranslationRules(value: unknown): SectionTransla
         ids.add(rule.id);
         result.push({id: rule.id, enabled: rule.enabled, site: normalizeSectionRuleSite(rule.site)!,
             selectors: [...new Map(rule.selectors.map(path => {const clean = path.map(selector => selector.trim()); return [JSON.stringify(clean), clean] as const;})).values()],
-            mode: rule.mode, ...(rule.profileId ? {profileId: rule.profileId} : {})});
+            mode: rule.mode});
         if (result.length === MAX_SECTION_TRANSLATION_RULES) break;
     }
     return result;

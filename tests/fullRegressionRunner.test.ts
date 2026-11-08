@@ -62,11 +62,7 @@ describe('full regression runner', () => {
             'compile',
             'strict-coverage',
             'chrome-build',
-            'firefox-build',
-            'firefox-zip',
             'extension-manifest-verifier',
-            'userscript-build',
-            'userscript-verifier',
             'docs-typecheck',
             'storybook-typecheck',
             'docs-build',
@@ -86,19 +82,15 @@ describe('full regression runner', () => {
                 '--coverage.reportOnFailure',
             ]});
         expect(plan.steps.some((step: {args: string[]}) => step.args.includes('scripts/testing/run-test-group.mjs'))).toBe(false);
-        const firefoxZip = plan.steps.find((step: {id: string}) => step.id === 'firefox-zip');
         expect(plan.steps.some((step: {args: string[]}) => step.args.includes('--test'))).toBe(false);
         const manifestVerifier = plan.steps.find(
             (step: {id: string}) => step.id === 'extension-manifest-verifier',
         );
-        expect(firefoxZip).toMatchObject({command: 'pnpm', args: ['zip:firefox']});
         expect(manifestVerifier).toMatchObject({
             command: 'node',
-            args: ['scripts/testing/verify-extension-manifests.mjs', '--require-firefox-archives'],
-            dependsOn: ['chrome-build', 'firefox-zip'],
+            args: ['scripts/testing/verify-extension-manifests.mjs'],
+            dependsOn: ['chrome-build'],
         });
-        // ZIP 自带一次完整 Firefox 构建，可以在此前独立 Firefox build 失败后收集新证据。
-        expect(firefoxZip.dependsOn).toEqual(['wxt-prepare']);
         expect(plan.steps.find((step: {id: string}) => step.id === 'docs-verifier').dependsOn)
             .toEqual(['docs-build', 'storybook-build']);
         expect(plan.steps.some((step: {phase: string}) => step.phase === 'browser' || step.phase === 'network')).toBe(false);
@@ -107,7 +99,7 @@ describe('full regression runner', () => {
     it('enables fail-fast only when requested without changing the checks', () => {
         const plan = dryRun(['--fail-fast']);
         expect(plan.failFast).toBe(true);
-        expect(plan.steps).toHaveLength(16);
+        expect(plan.steps).toHaveLength(12);
     });
 
     it('returns a nonzero CLI exit and saves evidence when the first command cannot start', () => {
@@ -145,7 +137,7 @@ describe('full regression runner', () => {
         const plan = dryRun(['--browser', ...BROWSER_ARGS]);
         const browserSteps = plan.steps.filter((step: {phase: string}) => step.phase === 'browser');
 
-        expect(browserSteps).toHaveLength(14);
+        expect(browserSteps).toHaveLength(11);
         expect(browserSteps.map((step: {id: string}) => step.id)).toEqual([
             'popup-first-run-height',
             'selection-trigger',
@@ -155,17 +147,13 @@ describe('full regression runner', () => {
             'github-spacing',
             'github-nested-list',
             'github-task-list',
-            'video-subtitle-fixture',
-            'document-translation',
             'settings-center-ui',
             'glossary',
             'privacy-boundary',
-            'userscript-smoke',
         ]);
         for (const step of browserSteps) {
             expect(step.gates).toEqual(['--browser']);
-            expect(step.dependsOn).toEqual(step.id === 'userscript-smoke'
-                ? ['userscript-build', 'userscript-verifier'] : ['chrome-build']);
+            expect(step.dependsOn).toEqual(['chrome-build']);
             expect(step.args).toContain('--focus-safe-helper');
             expect(step.args).toContain(resolve(PROJECT_ROOT, 'scripts/focus-safe-browser.cjs'));
             expect(step.args).toContain('--background');
@@ -177,18 +165,10 @@ describe('full regression runner', () => {
             expect(step.windowPlacement.mode).toBe('background-visible-no-focus');
         }
 
-        const userscriptSmoke = browserSteps.find((step: {id: string}) => step.id === 'userscript-smoke');
         const fullPageTranslation = browserSteps.find((step: {id: string}) => step.id === 'full-page-translation');
         expect(fullPageTranslation).toBeDefined();
         expect(fullPageTranslation!.args).toContain('--verify-floating-ui');
         expect(fullPageTranslation!.args).toContain('--verify-loading-style-isolation');
-        expect(userscriptSmoke).toBeDefined();
-        expect(userscriptSmoke!.args).toContain('--artifact');
-        expect(userscriptSmoke!.args).toContain(resolve(PROJECT_ROOT, '.output/userscript/fluent-read.user.js'));
-        expect(userscriptSmoke!.args).not.toContain('--extension-dir');
-        const stepIds = plan.steps.map((step: {id: string}) => step.id);
-        expect(stepIds.indexOf('userscript-build')).toBeLessThan(stepIds.indexOf('userscript-smoke'));
-        expect(stepIds.indexOf('userscript-verifier')).toBeLessThan(stepIds.indexOf('userscript-smoke'));
 
         expect(plan.steps.some((step: {phase: string}) => step.phase === 'network')).toBe(false);
     });
@@ -252,7 +232,6 @@ describe('full regression runner', () => {
             'selection-trigger',
             'full-page-translation',
             'privacy-boundary',
-            'userscript-smoke',
         ]);
         expect(headedSteps.every((step: {focusPolicy: string}) => step.focusPolicy === 'foreground-authorized')).toBe(true);
         expect(backgroundSteps.map((step: {id: string}) => step.id)).toEqual([
@@ -262,8 +241,6 @@ describe('full regression runner', () => {
             'github-spacing',
             'github-nested-list',
             'github-task-list',
-            'video-subtitle-fixture',
-            'document-translation',
             'settings-center-ui',
             'glossary',
         ]);

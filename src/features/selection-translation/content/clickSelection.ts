@@ -28,7 +28,7 @@ interface PointerGesture {point: Endpoint | null; x: number; y: number; pointerI
 const MAX_TEXT = 4096;
 const MAX_NODES = 8192;
 const MAX_TRAVEL = 6;
-const EXCLUDED = 'a[href],button,label,input,textarea,select,option,summary,script,style,noscript,template,iframe,object,embed,canvas,svg,math,video,audio,[inert],[hidden],[aria-hidden="true"],[contenteditable]:not([contenteditable="false"]),[role="link"],[role="button"],[role="textbox"],[role="checkbox"],[role="combobox"],[role="listbox"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="radio"],[role="scrollbar"],[role="slider"],[role="spinbutton"],[role="switch"],[role="tab"],[data-fluent-read-ui],.fluent-read-bilingual-content,.fluent-read-loading,.fluent-read-retry-wrapper,#fluent-read-selection-translator-container,#fluent-read-floating-ball-container,#fluent-read-share-card-container';
+const EXCLUDED = 'a[href],button,label,input,textarea,select,option,summary,script,style,noscript,template,iframe,object,embed,canvas,svg,math,video,audio,[inert],[hidden],[aria-hidden="true"],[contenteditable]:not([contenteditable="false"]),[role="link"],[role="button"],[role="textbox"],[role="checkbox"],[role="combobox"],[role="listbox"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="radio"],[role="scrollbar"],[role="slider"],[role="spinbutton"],[role="switch"],[role="tab"],[data-fluent-read-ui],.fluent-read-bilingual-content,.fluent-read-loading,.fluent-read-retry-wrapper,#fluent-read-selection-translator-container,#fluent-read-floating-ball-container';
 
 /** html/body 的全局禁译标记不阻止主动选取；同层的控件、编辑器与扩展 UI 标记仍逐层检查。 */
 function isExcludedEndpoint(element: Element): boolean {

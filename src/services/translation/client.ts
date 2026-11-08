@@ -53,7 +53,6 @@ import {
 
 // 调试相关
 const isDev = process.env.NODE_ENV === 'development';
-const VIDEO_COUNT_SAVE_INTERVAL = 10_000;
 const TRANSLATION_COUNT_SAVE_INTERVAL = 500;
 const COUNT_SAVE_RETRY_INTERVAL = 1_000;
 const COUNT_SAVE_MAX_AUTOMATIC_RETRIES = 3;
@@ -112,13 +111,6 @@ const translationCountPersistence = createConfigCountPersistenceQueue({
   maxAutomaticRetries: COUNT_SAVE_MAX_AUTOMATIC_RETRIES,
   persist: persistCountIncrement,
   onError: (error) => console.error('[FluentRead] 保存翻译计数失败:', error),
-});
-const videoCountPersistence = createConfigCountPersistenceQueue({
-  delayMs: VIDEO_COUNT_SAVE_INTERVAL,
-  retryDelayMs: COUNT_SAVE_RETRY_INTERVAL,
-  maxAutomaticRetries: COUNT_SAVE_MAX_AUTOMATIC_RETRIES,
-  persist: persistCountIncrement,
-  onError: (error) => console.error('[FluentRead] 保存视频翻译计数失败:', error),
 });
 
 function createAbortError(): Error {
@@ -301,14 +293,6 @@ function flushTranslationCountSave(): void {
   void translationCountPersistence.flush();
 }
 
-function scheduleVideoCountSave(): void {
-  videoCountPersistence.record();
-}
-
-function flushVideoCountSave(): void {
-  void videoCountPersistence.flush();
-}
-
 /**
  * 翻译API的统一入口
  * 所有翻译请求都应该通过此函数发送，以便集中管理队列和重试逻辑
@@ -392,7 +376,7 @@ export async function translateText(origin: string, context: string = document.t
             serviceOverride: selectedService,
             sourceLanguage: selectedLanguages.sourceLanguage,
             targetLanguage: selectedLanguages.targetLanguage,
-            ...((selectedService === services.chromeTranslator || selectedService === services.localTranslation)
+            ...(selectedService === services.chromeTranslator
               && selectedLanguages.sourceLanguage === 'auto'
               && options.sourceLanguageDetectionText?.trim()
               ? {sourceLanguageDetectionText: options.sourceLanguageDetectionText}
@@ -554,68 +538,6 @@ export async function translateTextBatch(
   return result;
 }
 
-/**
- * 翻译视频字幕。视频字幕可继承网页默认或独立选择服务，通过 background
- * 统一请求、缓存和错误边界；只发送字幕纯文本，允许 X 原语言独立于网页设置。
- */
-export async function translateVideoText(origin: string, signal?: AbortSignal, sourceLanguage?: string): Promise<string> {
-  if (signal?.aborted) throw createAbortError();
-  const cleanedOrigin = origin?.replace(/[\s\u3000]/g, '') || '';
-  if (!cleanedOrigin) return origin || '';
-  const glossary = captureTranslationGlossaryOptions({
-    glossaryContext: 'video',
-    glossaryIds: config.videoGlossaryIds,
-  });
-
-  const service = config.videoService || config.service;
-  assertTranslationServiceEnabled(service);
-  const timeout = servicesType.isAI(service)
-    ? getTranslationTimeout(service)
-    : 20_000;
-  const enableNativeBatch = isNativeTranslationBatchEnabled(service, config.nativeBatchTranslationEnabled);
-  const model = resolveConfiguredModel(config.model[service], config.customModel[service]);
-  const thinking = isModelThinkingEnabled(config.modelThinking, service, model);
-  const languages = getTranslationLanguages({sourceLanguage});
-  const useCache = config.useCache;
-  const pageContext = await resolvePageContext(undefined, service, model, undefined, signal);
-  throwIfAborted(signal);
-  const aiSdkService = servicesType.isAiSdk(service);
-  const retryPolicy = getTranslationRetryPolicy({}, service);
-
-  const result = await enqueueTranslation(async (lease) => {
-    const translationTask = async (retryCount = 0): Promise<string> => {
-      try {
-        const response = await waitForRequest({
-          ...glossary,
-          context: `视频字幕：${typeof document === 'undefined' ? '' : document.title}`,
-          pageContext,
-          origin,
-          enableNativeBatch,
-          useCache,
-          serviceOverride: service,
-          modelOverride: model,
-          thinkingOverride: thinking,
-          sourceLanguage: languages.sourceLanguage,
-          targetLanguage: languages.targetLanguage,
-          requestTimeoutMs: Math.max(1_000, timeout - TRANSLATION_RESPONSE_GRACE_MS),
-        }, timeout, signal, lease, true);
-        return unwrapTranslationResponse<string>(response);
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        if (retryCount < retryPolicy.maxRetries
-          && shouldRetryTranslationRequest(error, aiSdkService, retryPolicy.explicitRetryPolicy)) {
-          await waitForDelay(getTranslationRetryDelay(error, retryCount, retryPolicy), signal);
-          return translationTask(retryCount + 1);
-        }
-        throw error;
-      }
-    };
-    return translationTask();
-  }, undefined, signal);
-  // 视频字幕是高频短文本；成功后才记账，并合并为低频写入。
-  scheduleVideoCountSave();
-  return result;
-}
 
 /**
  * 当用户离开页面或主动取消翻译时，清空翻译队列
@@ -626,7 +548,6 @@ export function cancelAllTranslations() {
   }
   clearTranslationQueue();
   flushTranslationCountSave();
-  flushVideoCountSave();
 }
 
 /**

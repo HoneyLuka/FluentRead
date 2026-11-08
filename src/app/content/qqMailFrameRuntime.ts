@@ -30,7 +30,6 @@ import {resetPageTranslationContextCache} from '@/src/services/translation/conte
 import {getCenterPoint} from '@/src/shared/geometry/touch';
 import {mountHoverTranslationContentFeature} from '@/src/features/hover-translation/public';
 import {createContentHotkeyRuntime} from './hotkeyRuntime';
-import {mountConfiguredQuickTranslation} from './quickTranslationRuntime';
 import {installPageStyles} from './pageStyles';
 import {syncBilingualSentenceHighlight} from './bilingualSentenceHighlight';
 import {applyCoreTranslationPreferences, createContentSiteAdaptationRuntime} from './siteAdaptationRuntime';
@@ -203,17 +202,15 @@ async function startMailFrameApp(ctx: ContentScriptContext, kind: MailFrameKind,
         activation = new AbortController();
         removeStyles = installPageStyles(ctx);
         syncBilingualSentenceHighlight(document, config.bilingualSentenceHighlightEnabled === true, config.bilingualSentenceHighlightStyle, config.bilingualSentenceHighlightAppearance);
-        const resetHover = mountHoverTranslationContentFeature({
+        mountHoverTranslationContentFeature({
             config, constants, document, window, navigator, getCenterPoint,
             subscribeConfig: createHoverTranslationConfigSubscription(config, subscribeConfig, cancelPendingHoverTranslation),
             isSiteDisabled: () => !enabled() || !authorized,
             handleTranslation, noteBilingualHostGesture, cancelPendingHoverTranslation,
             ...hotkeys.selectionShortcutPorts,
         }, activation.signal);
-        const resetFull = hotkeys.installFloatingBallHotkey(activation.signal);
+        hotkeys.installFloatingBallHotkey(activation.signal);
         syncSelectionTranslator();
-        mountConfiguredQuickTranslation(config, hotkeys, () => !enabled() || !authorized, activation.signal,
-            () => { resetHover(); resetFull(); }, toggle);
     };
     const controller = createFrameSessionController({
         readState: () => browser.runtime.sendMessage({type: messages.request, action: 'state'}),

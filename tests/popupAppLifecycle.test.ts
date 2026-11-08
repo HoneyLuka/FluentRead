@@ -30,7 +30,7 @@ let locale:import('vue').Ref<string>,bundleRevision:import('vue').Ref<number>,lo
 const catalogs:Record<string,Readonly<Record<string,string>>>={'zh-CN':zhCNMessages,'en-US':enUSMessages}
 function permissionEvent(kind:'added'|'removed'){for(const listener of permissionEvents)listener(kind)}
 function permissionText(key:string,params:Record<string,unknown>={}){void bundleRevision.value;if(!localized)return key;const id=locale.value==='en-US'&&englishLoaded?'en-US':'zh-CN';let text=catalogs[id][key]||key;for(const[k,v]of Object.entries(params))text=text.replaceAll('{'+k+'}',String(v));return text}
-const close=vi.fn(),noticeFocus=vi.fn(),patches=vi.fn(),handoff=vi.fn(),getTab=vi.fn(),getSourceTab=vi.fn(),send=vi.fn(),createTab=vi.fn(),openOptions=vi.fn(),runtimeSend=vi.fn(),reloadTab=vi.fn(),openSidepanel=vi.fn()
+const close=vi.fn(),noticeFocus=vi.fn(),patches=vi.fn(),handoff=vi.fn(),getTab=vi.fn(),getSourceTab=vi.fn(),send=vi.fn(),createTab=vi.fn(),openOptions=vi.fn(),runtimeSend=vi.fn(),reloadTab=vi.fn()
 let config:Config,subscribe:(value:Config)=>void,tabEvents:Record<string,Set<(...args:any[])=>void>>,runtimeEvents:Set<(...args:any[])=>void>
 type ConfigStore = typeof import('@/src/services/config/store')
 type ConfigSender = NonNullable<Parameters<ConfigStore['requestConfigPatch']>[1]>
@@ -68,8 +68,7 @@ beforeEach(async()=>{
   config=new Config();config.uiLanguageSetupCompleted=true;config.on=true;config.service='google';config.alwaysTranslateDomains=[];config.disabledExtensionDomains=[]
   getTab.mockResolvedValue([{id:7,windowId:3,url:'https://example.com/a'}]);send.mockImplementation(async(_id,message)=>message.type==='getFullPageTranslationState'?{isTranslated:false,documentToken:'popup-fixture-document'}:{status:'success',isTranslated:message.action==='fullPage',documentToken:'popup-fixture-document'});createTab.mockResolvedValue({id:8});openOptions.mockResolvedValue(undefined);runtimeSend.mockResolvedValue({success:true})
   getSourceTab.mockResolvedValue({id:7,windowId:3,url:'https://example.com/a'})
-  fixture={capabilities:runtime.reactive({browser:'chrome',areaTranslation:true,imageTranslation:true}),ready:Promise.resolve(),darkMode:{matches:false,onchange:null}}
-  openSidepanel.mockReset().mockResolvedValue(undefined)
+  fixture={capabilities:runtime.reactive({browser:'chrome'}),ready:Promise.resolve(),darkMode:{matches:false,onchange:null}}
   vi.resetModules()
   vi.doMock('webextension-polyfill',()=>({default:{i18n:{getUILanguage:()=>fixture.browserLocale?.()},tabs:{query:getTab,get:getSourceTab,sendMessage:send,create:createTab,reload:reloadTab,
     ...Object.fromEntries(Object.entries(tabEvents).map(([name,set])=>[name,{addListener:(fn:any)=>set.add(fn),removeListener:(fn:any)=>set.delete(fn)}]))},
@@ -81,7 +80,6 @@ beforeEach(async()=>{
   vi.doMock('@/src/ui/interfaceAppearance',()=>({applyInterfaceFont(){},applyInterfaceSkin(){}}))
   vi.doMock('@/src/platform/browser/freeProviderPermissions',()=>({readFreePoolAccess:readAccess,requestFreeProviderAccess:requestAccess,subscribeFreeProviderAccessChanges:(fn:any)=>{permissionEvents.add(fn);return()=>permissionEvents.delete(fn)}}))
   vi.doMock('@/src/platform/browser/capabilities',()=>({browserCapabilities:fixture.capabilities}))
-  vi.doMock('@/src/platform/browser/translationSidepanel',()=>({canOpenTranslationSidepanel:()=>fixture.capabilities.sidepanel===true,openTranslationSidepanel:openSidepanel}))
   vi.doMock('@element-plus/icons-vue',()=>({Setting:{render:()=>null}}))
   // 动画和 Element Plus 定位属于展示端口；真实业务 SFC 由正常 Vite 模块加载并保留源码映射。
   vi.doMock('element-plus/es/components/tooltip/index',()=>({ElTooltip:{inheritAttrs:false,setup:(_:unknown,{slots,expose}:any)=>{expose({onClose(){},hide(){}});return()=>slots.default?.()}}}))
@@ -143,21 +141,6 @@ async function focusedServiceSearchAtCompact(scrollTop = 22, naturalTop = 92) {
 }
 function growServiceViewport(height=263){Object.assign(viewport,{height});viewport.dispatchEvent(new win.Event('resize'));flushViewport()}
 describe('实际 Popup 缓存模板与页面操作',()=>{
-  it('点击侧边栏入口在当前窗口内立即打开，等待期间去重，成功后关闭弹窗',async()=>{
-    fixture.capabilities.sidepanel=true;await mount();const pending=deferred<void>();openSidepanel.mockReturnValueOnce(pending.promise)
-    const entry=button('sidebar-translation');expect(entry.closest('.header-actions')).not.toBeNull();expect(entry.closest('.hero-card')).toBeNull()
-    const donation=document.querySelector('.donation-button')!;expect(donation.nextElementSibling).toBe(entry);expect(entry.nextElementSibling).toBe(document.querySelector('.settings-button'))
-    expect(donation.textContent?.trim()).toBe('');expect(donation.getAttribute('aria-label')).toBe('popup.donationTitle')
-    expect(entry.getAttribute('aria-label')).toBe('sidepanel.title');expect(entry.textContent?.trim()).toBe('');eventOf(entry)();expect(openSidepanel).toHaveBeenCalledWith(3)
-    eventOf(entry)();expect(openSidepanel).toHaveBeenCalledOnce();expect(close).not.toHaveBeenCalled()
-    pending.resolve();await drain();expect(close).toHaveBeenCalledOnce()
-  })
-  it('侧边栏原生调用失败保留重试入口，关闭后的旧点击与迟到失败不再反馈',async()=>{
-    fixture.capabilities.sidepanel=true;await mount();openSidepanel.mockRejectedValueOnce(new Error('gesture failed'))
-    await eventOf(button('sidebar-translation'))();await drain();expect(close).not.toHaveBeenCalled();expect(document.querySelector('.notice.error')?.textContent).toBe('sidepanel.openError')
-    const pending=deferred<void>();openSidepanel.mockReturnValueOnce(pending.promise);const old=eventOf(button('sidebar-translation'));old();shown.value=false;await drain()
-    const calls=openSidepanel.mock.calls.length;old();expect(openSidepanel).toHaveBeenCalledTimes(calls);pending.reject(new Error('late failure'));await drain();expect(close).not.toHaveBeenCalled()
-  })
   it('网站仅译文优先展示且禁用全局快捷切换，外部移除与换站后重新沿用全局模式',async()=>{
     config.service='bing';config.translationOnlyDomains=['example.com'];await mount();const mode=()=>document.querySelector('[data-testid="popup-display-mode"]')!;
     expect(mode().getAttribute('data-display-mode')).toBe('translation-only');expect(mode().hasAttribute('disabled')).toBe(true);
@@ -203,42 +186,25 @@ describe('实际 Popup 缓存模板与页面操作',()=>{
     const before=state.config.enableAIContext;const old=eventOf(document.querySelector('.ai-context-detail-switch')!);old();await drain();expect(state.config.enableAIContext).toBe(!before);expect(commands()).toHaveLength(0)
     state.config.on=false;await drain();old();expect(state.config.enableAIContext).toBe(!before);eventOf(document.querySelector('.ai-context-detail-switch')!)();expect(state.config.enableAIContext).toBe(!before)
   })
-  it('图片开关提交偏好，能力变化撤销旧点击并保留已有设置',async()=>{
-    await mount();await openFeature('image');const before=state.config.disableImageTranslator;const old=eventOf(document.querySelector('[aria-label="启用或关闭图片翻译"]')!)
-    old();await drain();expect(state.config.disableImageTranslator).toBe(!before);expect(patches).toHaveBeenLastCalledWith(expect.objectContaining({disableImageTranslator:!before}))
-    fixture.capabilities.imageTranslation=false;await drain();old();expect(state.config.disableImageTranslator).toBe(!before);expect(document.querySelector('[aria-label="启用或关闭图片翻译"]')).toBeNull();expect(document.querySelector('.image-methods')?.textContent).toContain('当前浏览器暂不支持图片翻译')
-  })
-  it('独立悬浮方案展示本身模型及默认服务，关闭默认开关不隐藏独立方案',async()=>{
-    config.quickTranslationProfiles=[{id:'machine',enabled:true,action:'hover',hotkey:'Alt+J',service:'microsoft',model:'',targetLanguage:'',displayMode:'inherit',fullPageMode:'inherit'},
-      {id:'ai',enabled:true,action:'hover',hotkey:'Alt+K',service:'openai',model:'custom-model',targetLanguage:'',displayMode:'inherit',fullPageMode:'inherit'},
-      {id:'default',enabled:true,action:'hover',hotkey:'Alt+L',service:'',model:'',targetLanguage:'',displayMode:'inherit',fullPageMode:'inherit'}]
-    await mount();await openFeature('hover');const preview=document.querySelector('[data-testid="popup-quick-hover-profiles"]')!
-    expect(preview.textContent).toContain('微软');expect(preview.textContent).toContain('custom-model');expect(preview.textContent).toContain('谷歌');expect(preview.querySelectorAll('kbd')).toHaveLength(3)
-    eventOf(button('hover-enable'))();await drain();expect(state.config.hotkey).toBe('none');expect(preview.isConnected).toBe(true);expect(state.config.quickTranslationProfiles).toHaveLength(3)
-  })
-  it('悬停开关关闭并重开后恢复预设、手势与自定义快捷键，不改变额外方案',async()=>{
+  it('悬停开关关闭并重开后恢复预设、手势与自定义快捷键',async()=>{
     await mount()
     for(const hotkey of ['Control','Alt','Shift','Escape','`','DoubleClick','LongPress','MiddleClick','TwoFinger','ThreeFinger','FourFinger','DoubleClickScree','TripleClickScree','custom']){
       state.config=normalizeConfig({...state.config,hotkey,customHotkey:'Alt+J'})
-      const extra=state.config.quickTranslationProfiles
       state.toggleDefaultHoverShortcut();expect(state.config.hotkey).toBe('none')
       state.config=normalizeConfig(JSON.parse(JSON.stringify(state.config)));expect(state.config.hoverShortcutBeforeDisable).toBe(hotkey)
-      state.toggleDefaultHoverShortcut();expect(state.config.hotkey).toBe(hotkey);expect(state.config.customHotkey).toBe('Alt+J');expect(state.config.quickTranslationProfiles).toEqual(extra)
+      state.toggleDefaultHoverShortcut();expect(state.config.hotkey).toBe(hotkey);expect(state.config.customHotkey).toBe('Alt+J')
     }
   })
-  it('旧版关闭状态和损坏恢复字段安全迁移；空自定义键回退，冲突时不覆盖独立方案',async()=>{
+  it('旧版关闭状态和损坏恢复字段安全迁移；空自定义键回退',async()=>{
     expect(normalizeConfig({hotkey:'none'}).hotkey).toBe('none');expect(normalizeConfig({hotkey:'none',hoverShortcutBeforeDisable:'Computer'}).hoverShortcutBeforeDisable).toBe('Control')
     await mount();state.config=normalizeConfig({...state.config,hotkey:'none',hoverShortcutBeforeDisable:'custom',customHotkey:''})
     state.toggleDefaultHoverShortcut();expect(state.config.hotkey).toBe('Control')
-    state.config.hotkey='none';state.config.customHotkey='Alt+J';state.config.hoverShortcutBeforeDisable='custom';state.config.quickTranslationProfiles=[{id:'occupied',enabled:true,action:'hover',hotkey:'Alt+J',service:'',model:'',targetLanguage:'',displayMode:'inherit',fullPageMode:'inherit'}]
-    state.toggleDefaultHoverShortcut();expect(state.config.hotkey).toBe('none');expect(state.notice).toBe('quickTranslation.conflictProfilePopup');expect(state.noticeType).toBe('error')
-    expect(state.config.quickTranslationProfiles[0].id).toBe('occupied')
   })
   it('划词开关恢复关闭前的译文显示偏好且保留触发、卡片与收藏设置',async()=>{
-    await mount();state.config=normalizeConfig({...state.config,selectionTranslatorMode:'translation-only',selectionTranslatorTrigger:'contextMenu',selectionTranslatorPresentation:'card',vocabularyBookEnabled:true})
+    await mount();state.config=normalizeConfig({...state.config,selectionTranslatorMode:'translation-only',selectionTranslatorTrigger:'contextMenu',selectionTranslatorPresentation:'card'})
     state.toggleSelectionTranslation();expect(state.config.selectionTranslatorMode).toBe('disabled');expect(state.config.disableSelectionTranslator).toBe(true)
     state.config=normalizeConfig(JSON.parse(JSON.stringify(state.config)));state.toggleSelectionTranslation()
-    expect(state.config.selectionTranslatorMode).toBe('translation-only');expect(state.config.disableSelectionTranslator).toBe(false);expect(state.config.selectionTranslatorTrigger).toBe('contextMenu');expect(state.config.selectionTranslatorPresentation).toBe('card');expect(state.config.vocabularyBookEnabled).toBe(true)
+    expect(state.config.selectionTranslatorMode).toBe('translation-only');expect(state.config.disableSelectionTranslator).toBe(false);expect(state.config.selectionTranslatorTrigger).toBe('contextMenu');expect(state.config.selectionTranslatorPresentation).toBe('card')
     state.setSelectionMode('bilingual');state.toggleSelectionTranslation();state.toggleSelectionTranslation();expect(state.config.selectionTranslatorMode).toBe('bilingual')
     expect(normalizeConfig({selectionTranslatorMode:'disabled'}).selectionTranslatorModeBeforeDisable).toBe('bilingual');expect(normalizeConfig({selectionTranslatorMode:'disabled',selectionTranslatorModeBeforeDisable:'invalid' as never}).selectionTranslatorModeBeforeDisable).toBe('bilingual')
   })
@@ -373,7 +339,7 @@ describe('实际 Popup 缓存模板与页面操作',()=>{
     const entry=button('page-font-entry');expect(entry.getAttribute('aria-pressed')).toBe('true');expect(entry.hasAttribute('disabled')).toBe(false);
     expect(send.mock.calls.some(call=>['getPageTranslationFontState','setPageTranslationFont'].includes(call[1].type))).toBe(false);
   });
-  it.each(['pdf','thunderbird','unsupported'])('%s 页面不展示字体快捷入口，也不发送页内字体消息',async kind=>{
+  it.each(['thunderbird','unsupported'])('%s 页面不展示字体快捷入口，也不发送页内字体消息',async kind=>{
     if(kind==='thunderbird')fixture.capabilities.browser='thunderbird';
     else getTab.mockResolvedValue([{id:7,url:kind==='pdf'?'https://example.com/article.pdf':'chrome://settings'}]);
     await mount();expect(button('page-font-entry')).toBeNull();expect(send.mock.calls.some(call=>['getPageTranslationFontState','setPageTranslationFont'].includes(call[1].type))).toBe(false);
@@ -650,24 +616,6 @@ describe('实际 Popup 缓存模板与页面操作',()=>{
     await eventOf(button('page-translation'))();await drain();await eventOf(button('page-translation'))();await drain()
     expect(commands().map(call=>[call[0],call[1].action])).toEqual([[7,'fullPage'],[7,'restore']]);expect(getTab).not.toHaveBeenCalled()
     getSourceTab.mockResolvedValue({id:7,windowId:4,url:'https://example.net/b'});tabEvent('onUpdated',7,{url:'https://example.net/b'},{id:7,windowId:4,active:false});await drain();expect(state.currentSiteDomain).toBe('example.net')
-  })
-  it('固定来源面板文档入口读取来源 PDF，源网页关闭后不切换到其它网页',async()=>{
-    win.location.search='?sourceTabId=7';getSourceTab.mockResolvedValue({id:7,windowId:3,url:'https://example.com/paper.pdf'});await mount()
-    await eventOf(document.querySelector('[data-feature="document-translation"]')!)();expect(createTab).toHaveBeenCalledWith({url:'extension://document.html#pdf=https%3A%2F%2Fexample.com%2Fpaper.pdf'});expect(getTab).not.toHaveBeenCalled()
-    createTab.mockClear();close.mockClear();const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});getSourceTab.mockRejectedValue(new Error('source removed'));tabEvent('onRemoved',7);await drain();expect(state.currentTabId).toBeNull();expect(state.currentSiteDomain).toBe('')
-    await eventOf(document.querySelector('[data-feature="document-translation"]')!)();expect(createTab).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();expect(getTab).not.toHaveBeenCalled();warn.mockRestore()
-  })
-  it.each(['keywords','surprisal-local'] as const)('信息高亮 %s 偏好与旧入口配置不进入 Popup，也不启动页面或模型消息',async mode=>{
-    config.informationHighlight.mode=mode;Object.assign(config.popupQuickFeatureVisibility,{highlight:true});(config.popupQuickFeatureOrder as string[]).push('highlight')
-    vi.useFakeTimers({toFake:['setInterval','clearInterval']});await mount()
-    expect(document.querySelector('[data-popup-quick-feature="highlight"]')).toBeNull()
-    expect(document.querySelector('[data-information-highlight-drawer]')).toBeNull()
-    expect(state.visiblePopupQuickFeatureIds).not.toContain('highlight')
-    await openFeature('hover');state.config.informationHighlight.mode=mode==='keywords'?'surprisal-local':'keywords';state.config.on=false;state.config.on=true
-    getTab.mockResolvedValue([{id:8,windowId:3,url:'https://example.net/b'}]);tabEvent('onUpdated',7,{status:'loading'},{id:7,windowId:3,active:true});await drain()
-    vi.advanceTimersByTime(10000);await drain()
-    const messages=[...send.mock.calls.map(call=>call[1]),...runtimeSend.mock.calls.map(call=>call[0])]
-    expect(messages.filter(message=>String(message?.type).includes('INFORMATION_HIGHLIGHT'))).toEqual([])
   })
   it('启动状态晚到不覆盖完成的翻译；原有站点规则也不让读取自行失效',async()=>{
     config.alwaysTranslateDomains=['example.com'];const old=deferred();send.mockImplementationOnce(()=>old.promise);await mount();await eventOf(button('page-translation'))();old.resolve({isTranslated:false});await drain();expect(button('page-translation').getAttribute('aria-pressed')).toBe('true');expect(commands()).toHaveLength(1)
@@ -982,9 +930,6 @@ describe('实际 Popup 缓存模板与页面操作',()=>{
     config.display=0;config.popupQuickFeatureVisibility.appearance=true;config.selectionTranslatorMode='bilingual';config.disableSelectionTranslator=false;await mount();await openFeature('appearance');const translated=()=>document.querySelector('[aria-label="翻译模式"] button')!;expect(translated().getAttribute('aria-pressed')).toBe('true');expect(translated().hasAttribute('disabled')).toBe(true);state.config.display=1;await drain();eventOf(translated())();expect(state.config.display).toBe(1);state.config.service='bing';await drain();const enabled=eventOf(translated());state.config.service='google';state.config.service='bing';await drain();enabled();expect(state.config.display).toBe(1);eventOf(translated())();expect(state.config.display).toBe(0)
     eventOf(document.querySelector('[data-popup-quick-feature="selection"]')!)();await drain();const mode=eventOf(document.querySelector('.chips.two button')!);eventOf(button('selection-enable'))();await drain();mode();expect(state.config.selectionTranslatorMode).toBe('disabled');expect(state.config.disableSelectionTranslator).toBe(true);eventOf(button('selection-enable'))();await drain();expect(state.config.selectionTranslatorMode).toBe(state.config.selectionTranslatorModeBeforeDisable)
   })
-  it('图片抽屉复验平台能力，旧能力回调失效，恢复后新按钮生效',async()=>{
-    config.selectionAreaEnabled=false;await mount();await openFeature('image');const area=eventOf(document.querySelector('[aria-label="启用或关闭圈选翻译"]')!),caps=fixture.capabilities;caps.areaTranslation=false;caps.areaTranslation=true;await drain();area();expect(state.config.selectionAreaEnabled).toBe(false);eventOf(document.querySelector('[aria-label="启用或关闭圈选翻译"]')!)();expect(state.config.selectionAreaEnabled).toBe(true)
-  })
   it('缓存清理独占请求；失活旧回复不能释放重新激活后的新请求',async()=>{
     await mount();const first=deferred(),second=deferred();runtimeSend.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);const cached=eventOf(document.querySelector('footer button')!),pending=cached();await cached();expect(runtimeSend).toHaveBeenCalledOnce();expect(document.querySelector('footer button')!.hasAttribute('disabled')).toBe(true);shown.value=false;await drain();shown.value=true;await drain();cached();expect(runtimeSend).toHaveBeenCalledOnce();const newer=eventOf(document.querySelector('footer button')!)();expect(runtimeSend).toHaveBeenCalledTimes(2);first.resolve({success:true});await pending;await drain();expect(state.clearingCache).toBe(true);expect(state.notice).toBe('');second.resolve({success:true});await newer;expect(state.clearingCache).toBe(false);expect(state.notice).toBe('全部翻译缓存已清除')
   })
@@ -1037,24 +982,12 @@ describe('实际 Popup 缓存模板与页面操作',()=>{
   it('赞赏的未完成焦点任务在关闭/失活后失效，缓存按钮不能重新打开',async()=>{
     await mount();const cached=eventOf(document.querySelector('.donation-button')!),pending=cached();state.donationVisible=false;await pending;expect(focused).toBe(document.body);await drain();await eventOf(document.querySelector('.donation-button')!)();const before=focused;shown.value=false;await drain();shown.value=true;await drain();cached();await drain();expect(state.donationVisible).toBe(false);expect(focused).toBe(before)
   })
-  it.each(['settings','document'])('%s 的 API 失败可恢复，关闭后旧成功不关闭新会话',async target=>{
-    await mount();const selector=target==='settings'?'.settings-button':'[data-feature="document-translation"]',api=target==='settings'?openOptions:createTab;api.mockRejectedValueOnce(new Error('fixture'));await eventOf(document.querySelector(selector)!)();expect(state.noticeType).toBe('error');expect(close).not.toHaveBeenCalled();const reply=deferred();api.mockReturnValueOnce(reply.promise);const cached=eventOf(document.querySelector(selector)!),pending=cached();await drain();expect(api).toHaveBeenCalledTimes(2);shown.value=false;await drain();shown.value=true;await drain();reply.resolve(undefined);await pending;cached();expect(api).toHaveBeenCalledTimes(2);expect(close).not.toHaveBeenCalled();await eventOf(document.querySelector(selector)!)();expect(close).toHaveBeenCalledOnce()
+  it('settings 的 API 失败可恢复，关闭后旧成功不关闭新会话',async()=>{
+    await mount();const selector='.settings-button',api=openOptions;api.mockRejectedValueOnce(new Error('fixture'));await eventOf(document.querySelector(selector)!)();expect(state.noticeType).toBe('error');expect(close).not.toHaveBeenCalled();const reply=deferred();api.mockReturnValueOnce(reply.promise);const cached=eventOf(document.querySelector(selector)!),pending=cached();await drain();expect(api).toHaveBeenCalledTimes(2);shown.value=false;await drain();shown.value=true;await drain();reply.resolve(undefined);await pending;cached();expect(api).toHaveBeenCalledTimes(2);expect(close).not.toHaveBeenCalled();await eventOf(document.querySelector(selector)!)();expect(close).toHaveBeenCalledOnce()
   })
 })
 
 describe('Popup 快捷键提示与能力边界',()=>{
-  it('圈选快捷键冲突仅阻止启用，关闭及更换冲突方案后可恢复',async()=>{
-    config.selectionAreaHotkey='custom';config.customSelectionAreaHotkey='Alt+J';config.selectionAreaEnabled=false
-    config.quickTranslationProfiles=[{id:'occupied',enabled:true,action:'hover',hotkey:'Alt+J',service:'google',model:'',targetLanguage:'',displayMode:'inherit',fullPageMode:'inherit'}]
-    await mount();await openFeature('image');eventOf(document.querySelector('[aria-label="启用或关闭圈选翻译"]')!)();await drain()
-    expect(state.config.selectionAreaEnabled).toBe(false);expect(state.notice).toBe('quickTranslation.conflictProfilePopup');expect(state.noticeType).toBe('error');expect(state.config.quickTranslationProfiles).toHaveLength(1)
-    state.config.quickTranslationProfiles=[];await drain();eventOf(document.querySelector('[aria-label="启用或关闭圈选翻译"]')!)();await drain();expect(state.config.selectionAreaEnabled).toBe(true)
-    state.config.quickTranslationProfiles=config.quickTranslationProfiles;await drain();eventOf(document.querySelector('[aria-label="启用或关闭圈选翻译"]')!)();await drain();expect(state.config.selectionAreaEnabled).toBe(false)
-  })
-  it('不支持圈选的浏览器保留已保存偏好，并明确隐藏不可执行的入口',async()=>{
-    fixture.capabilities.areaTranslation=false;config.selectionAreaEnabled=true;await mount();await openFeature('image')
-    expect(document.querySelector('[aria-label="启用或关闭圈选翻译"]')).toBeNull();expect(document.querySelector('.image-methods')?.textContent).toContain('当前浏览器暂不支持圈选翻译');expect(state.config.selectionAreaEnabled).toBe(true);expect(patches).not.toHaveBeenCalled()
-  })
   it.each([
     {platform:'MacIntel',key:'Ctrl+Shift+PageUp',shown:'⌃+⇧+PgUp',compact:true},
     {platform:'Win32',key:'Ctrl+Shift+PageDown',shown:'Ctrl+Shift+PgDn',compact:false},

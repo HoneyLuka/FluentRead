@@ -139,7 +139,6 @@ import {resetFullPageRouteSession} from './routeLifecycle';
 import type {HoverTranslationInvocation} from './hoverScheduler';
 import {resolveFullPageVisibilityAnchor} from './visibilityAnchor';
 import {createHoverRemountDispatch} from './hoverRemountDispatch';
-import {personalCorrectionIsCurrent, registerPersonalCorrectionResult} from './personalCorrections';
 import {getSiteAdapterAttributeFilter} from '@/src/core/site-adaptation/compiler';
 import {isElementNode, asHTMLElement, mutationTargetElement, isConnectedMutationRoot, allMutationNodesMatch, createMutationRescanSelector, createTranslationAttributeMutationFilter, createTranslationMutationObserverOptions, isOwnSyntheticSegmentMarkerMutation, mutationRootContains as nodeContains, collapseMutationRescanRoot as broadRescanRoot} from './mutationObservation';
 import {isWithinTranslationModal, mayChangeTranslationModal} from './modalPriority';
@@ -409,14 +408,6 @@ async function renderTranslation(
         // 浏览器任务，让输入与绘制能够穿插；让出后仍须复验取消、generation 和宿主节点。
         if (owner) await new Promise<void>(resolve => window.setTimeout(resolve, 0));
         if (state.controller.signal.aborted) return staleOutcome(detachedLayoutAttempt());
-        if (import.meta.env.BROWSER !== 'userscript' && !await waitForCaller(
-            personalCorrectionIsCurrent(result.personalCorrection, node), state.controller.signal,
-        )) {
-            // 旧节点脱离后章节上下文可能已不可读；不使用旧校订，而让通过身份复核的新节点重新查询。
-            const detached = !owner && !node.isConnected && (requestSession.renderCommitGeneration ?? 0) === requestCommitGeneration &&
-                (state.layoutDetachedDiscard === true || (!state.controller.signal.aborted && getTranslationState(node) === state));
-            return staleOutcome(detached);
-        }
         if (state.controller.signal.aborted || getTranslationState(node) !== state || (owner && !owner.active)) return staleOutcome(
             detachedLayoutAttempt());
         if ((requestSession.renderCommitGeneration ?? 0) !== requestCommitGeneration) return staleOutcome();
@@ -503,7 +494,6 @@ async function renderTranslation(
                 inlineCodeClasses: result.inlineCodePacket?.codeClasses,
                 inlineCodeSourceTexts: result.inlineCodePacket?.sourceTexts}));
         setRenderedStyleAttribute(node);
-        if (import.meta.env.BROWSER !== 'userscript') registerPersonalCorrectionResult(node, state, result.personalCorrection);
         syncTranslationDisplayMode(node, state, resolveSiteTranslationDisplay(config, typeof location === 'undefined' ? '' : location.href), false, config.translationBeforeOriginal);
         return {status: "committed"};
     } catch (error) {

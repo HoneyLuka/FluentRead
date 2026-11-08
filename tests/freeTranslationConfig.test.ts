@@ -70,13 +70,11 @@ describe('keyless free translation configuration', () => {
     });
 
     it('旧搜狗服务选择不能在加载或备份恢复后重新成为翻译入口', () => {
-        const previous = {...new Config(), service: 'sogouFree', documentService: 'sogouFree',
-            hoverTranslationService: 'sogouFree', selectionTranslationService: 'sogouFree',
-            imageTranslationService: 'sogouFree', areaTranslationService: 'sogouFree'};
+        const previous = {...new Config(), service: 'sogouFree',
+            hoverTranslationService: 'sogouFree', selectionTranslationService: 'sogouFree'};
         const loaded = normalizeConfig(previous);
         expect(loaded.service).toBe(new Config().service);
-        for (const field of ['documentService', 'hoverTranslationService', 'selectionTranslationService',
-            'imageTranslationService', 'areaTranslationService'] as const) expect(loaded[field]).toBe('');
+        for (const field of ['hoverTranslationService', 'selectionTranslationService'] as const) expect(loaded[field]).toBe('');
         const restored = prepareConfigForImport(prepareConfigForExport(previous), new Config());
         expect(restored.service).toBe(loaded.service);
         expect(restored.selectionTranslationService).toBe('');

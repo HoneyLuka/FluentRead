@@ -6,6 +6,6 @@
  */
 import {createRemoteConfigSync, type DriveSyncPorts} from './remoteConfigSync';
 export type {DriveSyncState, DriveSyncStatus, DriveSyncPreview, DriveSyncDirection, DriveSyncPorts} from './remoteConfigSync';
-export function createGoogleDriveSync(ports: DriveSyncPorts) {
+export function createGoogleDriveSync(ports: Omit<DriveSyncPorts, 'accountChangedError'>) {
     return createRemoteConfigSync({...ports, accountChangedError: 'Google 账号已切换，请重新生成同步预览。'});
 }

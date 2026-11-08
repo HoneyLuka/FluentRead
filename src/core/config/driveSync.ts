@@ -107,11 +107,7 @@ function parseCompleteDriveSyncPayload(value: unknown): DriveSyncConfig {
     const composites = normalizeCompositeTranslationProviders(config.compositeTranslationProviders, providers);
     const references = [
         ...SERVICE_FIELDS.map(field => config[field]),
-        ...(Array.isArray(config.translationCenterServices) ? config.translationCenterServices : []),
         ...(Array.isArray(config.favoriteServices) ? config.favoriteServices : []),
-        ...(Array.isArray(config.quickTranslationProfiles) ? config.quickTranslationProfiles.map(profile => record(profile) ? profile.service : '') : []),
-        record(config.writing) ? config.writing.service : '',
-        record(config.harness) ? config.harness.service : '',
     ];
     if (references.some(service => isCustomOpenAIProviderId(service) && !isConfiguredCustomOpenAIProvider(providers, service))) {
         throw new DriveConfigError('同步配置引用了不存在的自定义服务，请重新预览并选择完整连接配置。');
@@ -119,8 +115,7 @@ function parseCompleteDriveSyncPayload(value: unknown): DriveSyncConfig {
     if (references.some(service => isCompositeTranslationProviderId(service) && !isConfiguredCompositeTranslationProvider(composites, service))) {
         throw new DriveConfigError('同步配置引用了不存在的组合翻译服务，请重新预览配置。');
     }
-    // 快照省略运行时迁移状态，但必须按已完成迁移的用户配置解析，保留用户选择。
-    return toDriveSyncConfig({...value.config, videoServiceDefaultMigrated: true});
+    return toDriveSyncConfig(value.config);
 }
 
 export function driveSyncPayload(config: DriveSyncConfig, includeSensitive = false): unknown {
@@ -130,7 +125,7 @@ export function driveSyncPayload(config: DriveSyncConfig, includeSensitive = fal
         : {format: 'fluentread-complete-config', version: 2, scope: 'settings', config: projectDriveSyncConfig(config)};
 }
 
-const SERVICE_FIELDS = ['service', 'hoverTranslationService', 'selectionTranslationService', 'imageTranslationService', 'documentService', 'videoService', 'areaTranslationService', 'inputBoxTranslationService'];
+const SERVICE_FIELDS = ['service', 'hoverTranslationService', 'selectionTranslationService'];
 const VISIBLE_FIELDS: Record<string, string> = {
     on: '插件开关', service: '默认翻译服务', from: '源语言', to: '目标语言',
     display: '翻译模式', language: '界面语言', uiLanguage: '界面语言', theme: '主题',
@@ -140,12 +135,6 @@ const VISIBLE_FIELDS: Record<string, string> = {
     autoTranslate: '自动翻译', useCache: '使用翻译缓存', animations: '界面动画',
 
     style: '译文样式',
-    videoTranslationEnabled: '视频字幕翻译',
-    videoMeetingAutoEnabled: '会议平台自动开启双语字幕',
-    videoPreferHumanSubtitles: '优先使用人工字幕',
-    videoSubtitleVisible: '显示视频字幕',
-    videoSubtitleFontSize: '视频字幕字号',
-    videoSubtitleOffsetMs: '字幕时间偏移',
     translationCacheMaxBytes: '翻译缓存容量上限',
     translationCacheMaxEntries: '翻译缓存条数上限',
     enableAIContext: 'AI 智能上下文',
@@ -172,25 +161,13 @@ const VISIBLE_FIELDS: Record<string, string> = {
     floatingBallCollapsedOpacity: '悬浮球收起不透明度',
     floatingBallDefaultMargin: '悬浮球默认边距',
     floatingBallPopoutMargin: '悬浮球弹出边距',
-    paragraphCopyEnabled: '段落复制',
     sectionTranslationHotkeyEnabled: '局部翻译快捷键',
     sectionTranslationRules: '记住的翻译区域',
-    selectionAreaEnabled: '圈选翻译',
-    imageTranslationMangaEnabled: '漫画连续翻译入口',
-    imageTranslationMangaPromptEnabled: '独立漫画按钮',
-    imageTranslationMangaDownloadConfirmed: '已了解漫画资源下载',
-    imageTranslationMangaSites: '自定义漫画网站',
-    imageTranslationMangaPrefetchPages: '提前翻译后续页面',
-    imageTranslationMangaCachePages: '快速缓存图片数量',
-    imageTranslationHoverEnabled: '图片悬浮按钮',
-    imageTranslationContextMenuEnabled: '图片右键菜单',
     freeTranslationTimeoutMs: '每路免费翻译超时',
     freeTranslationCooldownMs: '免费翻译失败后休息',
     selectionTranslatorAutoDismiss: '继续阅读时自动收起',
     selectionTranslatorBidirectional: '中英双向划词',
     selectionDictionarySource: '词典来源',
-    vocabularyBookEnabled: '单词本',
-    vocabularyReencounterEnabled: '再次遇见收藏表达',
     maxConcurrentTranslations: '翻译并发数',
     translationRequestsPerSecond: '每秒最多请求数',
     translationRequestsPerMinute: '每分钟最多请求数',
@@ -199,28 +176,25 @@ const VISIBLE_FIELDS: Record<string, string> = {
     translationBackoffBaseMs: '退避初始间隔',
     translationBackoffMaxMs: '退避最大间隔',
     translationProgressPanelEnabled: '翻译进度面板',
-    inputBoxTranslationInterval: '输入框翻译触发间隔',
     interfaceSkin: '界面皮肤', interfaceFont: '界面字体', interfaceVisibility: '界面栏目',
     popupModuleOrder: '菜单栏布局顺序', popupQuickFeatureVisibility: '快捷功能卡片', popupQuickFeatureOrder: '快捷功能顺序',
     translationAppearance: '译文外观', browserDefaultTranslationFont: '浏览器默认译文字体', translationStyleProfiles: '译文样式', activeTranslationStyleProfileId: '译文样式',
     siteAdaptation: '网站规则', alwaysTranslateDomains: '网站规则', disabledExtensionDomains: '网站规则', translationOnlyDomains: '网站规则',
-    excludedLanguages: '跳过翻译的语言', videoSubtitleAppearance: '视频字幕外观',
-    videoSentenceLearningAppearance: '完整句学习外观',
+    excludedLanguages: '跳过翻译的语言',
     system_role: 'System 提示词', user_role: 'User 提示词', glossaryLibraries: '术语库内容',
-    contextMenuEntries: '右键菜单入口', shareCard: '双语卡片',
     contextMenuShowTargetLanguage: '右键菜单显示目标语言', contextMenuShowShortcut: '右键菜单显示快捷键',
+    requestHeaderRules: '移除来源请求头',
     hoverShortcutBeforeDisable: '已保存的悬浮快捷键', selectionTranslatorModeBeforeDisable: '已保存的划词模式',
-    videoLocalModel: '本地语音识别模型', requestHeaderRules: '移除来源请求头',
 };
 // 端点、路由模型与凭据一起选择，防止自动合并把某端的密钥绑定到另一端的新地址。
 const CONNECTION_FIELDS = new Set<string>([
-    ...CONFIG_CREDENTIAL_FIELDS, ...SERVICE_FIELDS, 'translationCenterServices', 'favoriteServices',
-    'quickTranslationProfiles', 'writing', 'harness', 'serviceRegion', 'customModels', 'modelThinking',
-    'requireApiKey', 'apiKeyRotationEnabled', 'inputBoxTranslationModel', 'deepseekApiType', 'deepseekThinkingMode', 'proxy', 'custom', 'deeplx', 'customBody', 'customOpenAIProviders',
+    ...CONFIG_CREDENTIAL_FIELDS, ...SERVICE_FIELDS, 'favoriteServices',
+    'serviceRegion', 'customModels', 'modelThinking',
+    'requireApiKey', 'apiKeyRotationEnabled', 'deepseekApiType', 'deepseekThinkingMode', 'proxy', 'custom', 'deeplx', 'customBody', 'customOpenAIProviders',
     'newApiUrl', 'azureOpenaiEndpoint', 'deeplApiPlan', 'minimaxBillingPlan', 'minimaxRegion',
-    'mimoBillingPlan', 'mimoRegion', 'model', 'customModel', 'documentModel', 'documentCustomModel',
+    'mimoBillingPlan', 'mimoRegion', 'model', 'customModel',
 ]);
-const PRIVATE_FIELDS = new Set(['system_role', 'user_role', 'activeTranslationStyleProfileId', 'myMemoryEmail', 'areaVisionPrompt', 'inputBoxTranslationPrompt', 'inputBoxTranslationSystemPrompt']);
+const PRIVATE_FIELDS = new Set(['system_role', 'user_role', 'activeTranslationStyleProfileId', 'myMemoryEmail']);
 const SETTINGS_SCHEMA = new Config() as unknown as DriveSyncConfig;
 const KNOWN_SETTINGS = new Set(Object.keys(SETTINGS_SCHEMA));
 
@@ -237,12 +211,13 @@ function containsExcludedSettings(value: unknown): boolean {
 /** 归一化器是已知嵌套设置的结构边界；额外字段或伪装成标量的对象整组排除。 */
 function hasUnknownStructure(value: unknown, normalized: unknown): boolean {
     if (Array.isArray(value)) {
-        if (!Array.isArray(normalized)) return true;
         // 普通标量列表可能因枚举退役、去重而缩短；长度变化不代表带入了未知结构。
         // 对象列表仍逐项核对，不能借归一化器丢弃对象来隐藏额外字段或凭据。
         const scalar = (child: unknown) => child === null || typeof child !== 'object';
-        if (value.every(scalar) && normalized.every(scalar)) return false;
-        return value.length !== normalized.length || value.some((child, index) => hasUnknownStructure(child, normalized[index]));
+        // 标量列表只可能因枚举退役或去重而缩短；不会由归一化器换成对象。
+        if (value.every(scalar)) return false;
+        const normalizedList = normalized as unknown[];
+        return value.length !== normalizedList.length || value.some((child, index) => hasUnknownStructure(child, normalizedList[index]));
     }
     if (!record(value)) return false;
     return !record(normalized) || Object.keys(value).some(key => !Object.hasOwn(normalized, key) || hasUnknownStructure(value[key], normalized[key]));
@@ -274,10 +249,9 @@ const fieldLabel = (field: string) => Object.hasOwn(VISIBLE_FIELDS, field) ? VIS
 const CONNECTION_SUMMARIES: [string, readonly string[]][] = [
     ['settings.cloud.changed.credentials', CONFIG_CREDENTIAL_FIELDS],
     ['settings.cloud.changed.requests', ['proxy', 'custom', 'deeplx', 'customBody', 'newApiUrl', 'azureOpenaiEndpoint']],
-    ['settings.cloud.changed.models', ['model', 'customModel', 'customModels', 'modelThinking', 'documentModel', 'documentCustomModel', 'inputBoxTranslationModel']],
-    ['settings.cloud.changed.services', [...SERVICE_FIELDS, 'translationCenterServices', 'favoriteServices', 'quickTranslationProfiles']],
+    ['settings.cloud.changed.models', ['model', 'customModel', 'customModels', 'modelThinking']],
+    ['settings.cloud.changed.services', [...SERVICE_FIELDS, 'favoriteServices']],
     ['settings.cloud.changed.customServices', ['customOpenAIProviders']],
-    ['settings.cloud.changed.assistants', ['writing', 'harness']],
     ['settings.cloud.changed.options', ['serviceRegion', 'requireApiKey', 'apiKeyRotationEnabled', 'deepseekApiType', 'deepseekThinkingMode', 'deeplApiPlan', 'minimaxBillingPlan', 'minimaxRegion', 'mimoBillingPlan', 'mimoRegion']],
 ];
 function connectionDetails(local: DriveSyncConfig, remote: DriveSyncConfig): string[] {
@@ -305,8 +279,8 @@ function previewValue(value: unknown, sensitive: boolean, field: string): string
     if (typeof value === 'boolean') return value ? '开启' : '关闭';
     if (typeof value === 'number') {
         if (field === 'translationCacheMaxBytes' && Number.isFinite(value)) return `${Number((value / 1024 / 1024).toFixed(2))} MiB`;
-        if (field.endsWith('Ms') || field.endsWith('Delay') || field === 'selectionTranslatorDelay' || field === 'inputBoxTranslationInterval') return `${value} ms`;
-        if (field === 'floatingBallCollapsedOpacity' || field === 'videoSubtitleFontSize') return `${value}%`;
+        if (field.endsWith('Ms') || field.endsWith('Delay') || field === 'selectionTranslatorDelay') return `${value} ms`;
+        if (field === 'floatingBallCollapsedOpacity') return `${value}%`;
         if (field === 'floatingBallDefaultMargin' || field === 'floatingBallPopoutMargin') return `${value} px`;
     }
     const choices = field === 'theme' ? options.theme : field === 'from' ? options.from : field === 'to' ? options.to : field === 'style' ? options.styles : [];

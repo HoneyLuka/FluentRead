@@ -4,7 +4,6 @@ import {afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest
 import type {App, Component} from 'vue';
 import {Config, normalizeConfig} from '@/src/core/config/model';
 import type {SectionTranslationRule} from '@/src/core/config/sectionTranslationRules';
-import {createQuickTranslationProfile} from '@/src/core/config/quickTranslation';
 
 // 执行真实 SFC 客户端模板；第三方控件只通过其公开 v-model 端口映射到原生输入。
 vi.mock('@/src/ui/i18n', async () => {
@@ -141,7 +140,7 @@ describe('记住局部区域规则的实际 Vue 界面', () => {
     });
 
     it('取消编辑保留原数据和快捷方案，新增规则时不让旧行事件改变保存快照', async () => {
-        await mount([rule('first', {profileId: 'quick-1'}), rule('second')]);
+        await mount([rule('first'), rule('second')]);
         const oldToggle = get<HTMLInputElement>('[data-rule-id="first"] input');
         const oldEdit = get('[data-rule-id="first"] .rule-actions button:first-child');
         const oldDelete = get('[data-rule-id="first"] .rule-actions button:last-child');
@@ -149,11 +148,11 @@ describe('记住局部区域规则的实际 Vue 界面', () => {
         await input('.rule-editor input', 'example.net');
         oldToggle.checked = false; fire(oldToggle, 'change'); fire(oldEdit, 'click'); fire(oldDelete, 'click'); await settle();
         expect(props.config.sectionTranslationRules).toHaveLength(2);
-        expect(props.config.sectionTranslationRules[0]).toMatchObject({site: 'example.com/articles/', enabled: true, profileId: 'quick-1'});
+        expect(props.config.sectionTranslationRules[0]).toMatchObject({site: 'example.com/articles/', enabled: true});
         await click('.editor-actions button:first-child');
         await click('[data-rule-id="first"] .rule-actions button:first-child');
         await change('.rule-editor select', 'auto'); await save();
-        expect(props.config.sectionTranslationRules[0]).toMatchObject({mode: 'auto', profileId: 'quick-1'});
+        expect(props.config.sectionTranslationRules[0]).toMatchObject({mode: 'auto'});
     });
 
     it('外部规则变化和页面停用关闭旧草稿，停用后的旧控件事件不能提交', async () => {
@@ -222,36 +221,4 @@ describe('记住局部区域规则的实际 Vue 界面', () => {
         expect(props.config.sectionTranslationRules[0].id).toMatch(/^section-\d+-[a-z\d]+$/u);
     });
 
-    it('缺失方案保持原关联并提示，用户可明确清除或重新选择局部方案', async () => {
-        await mount([rule('first', {profileId: 'removed-profile'})]);
-        expect(root.querySelector('.rule-profile-missing')?.textContent).toBe('方案不可用');
-        await click('.rule-actions button:first-child');
-        expect(get('.rule-profile-missing').textContent).toContain('重新选择');
-        const select = get<HTMLSelectElement>('[data-testid="section-rule-profile"]');
-        expect(select.value).toBe('removed-profile');
-        expect(get('option[value="removed-profile"]').hasAttribute('disabled')).toBe(true);
-        expect(get('option[value=""]').textContent).toBe('跟随默认');
-        await save();
-        expect(props.config.sectionTranslationRules[0].profileId).toBe('removed-profile');
-        await click('.rule-actions button:first-child');
-        await change('[data-testid="section-rule-profile"]', ''); await save();
-        expect(props.config.sectionTranslationRules[0]).not.toHaveProperty('profileId');
-        expect(root.querySelector('.rule-profile-missing')).toBeNull();
-        props.config.quickTranslationProfiles = [
-            {...createQuickTranslationProfile('section'), id: 'section-alt', hotkey: 'Alt+K', enabled: true},
-            {...createQuickTranslationProfile('section'), id: 'section-empty'},
-            {...createQuickTranslationProfile('hover'), id: 'hover-only', hotkey: 'Alt+H'},
-        ];
-        await settle(); await click('.rule-actions button:first-child');
-        expect(get('option[value="section-alt"]').textContent).toBe('Alt+K');
-        expect(get('option[value="section-empty"]').textContent).toContain('未设置快捷键');
-        expect(root.querySelector('option[value="hover-only"]')).toBeNull();
-        await change('[data-testid="section-rule-profile"]', 'section-alt'); await save();
-        expect(props.config.sectionTranslationRules[0].profileId).toBe('section-alt');
-        expect(root.querySelector('.rule-profile-missing')).toBeNull();
-        props.config.quickTranslationProfiles = []; await settle();
-        await click('.rule-actions button:first-child');
-        expect(get('.rule-profile-missing').textContent).toContain('重新选择');
-        expect(props.config.sectionTranslationRules[0].profileId).toBe('section-alt');
-    });
 });

@@ -1,30 +1,15 @@
 /**
  * @file tests/platformAuditBoundaries.test.ts
- * 文件职责：验证平台摘要、标识、编译能力及本地推理探测的完整输入与生命周期边界。
- * 主要内容：真实内存 WASM/gzip 响应、受控 GPU 驱动和初始化并发，覆盖失败后重试及资源释放。
- * 模块边界：不启动浏览器、模型或真实 GPU，不访问网络或账号；仅测试六个共享平台模块。
+ * 文件职责：验证平台摘要、浏览器标识与编译期能力契约的输入边界。
+ * 主要内容：摘要的编码与非法输入、tab/window ID 判定，以及构建目标和运行时 UA 约束。
+ * 模块边界：不启动浏览器，不访问网络或账号；只测试共享平台模块，不修改编译环境。
  */
 import {createHash} from 'node:crypto';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {sha256Hex} from '@/src/shared/function/sha256';
-import {configureOnnxWasmBackend, loadCompressedWasmBinary, withCompressedWasmBinary, type OnnxWasmBackend} from '@/src/shared/onnx/wasmBinary';
-import {probeWebGpu} from '@/src/shared/onnx/webgpu';
 import {applyRuntimeBrowserConstraints, browserBuildTargetFromEnv, browserCapabilities, browserCapabilityBuildMarker, readRuntimeUserAgent, resolveBrowserCapabilities} from '@/src/platform/browser/capabilities';
 import {isBrowserTabId} from '@/src/platform/browser/ids';
-import {supportsHunyuanTranslation} from '@/src/platform/browser/localTranslationSupport';
 
-const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
-const unavailable = {available: false, info: ''};
-const fetchBytes = (bytes: Uint8Array = wasm) => vi.fn(async () => new Response(bytes));
-function deferred<T>() {
-    let resolve!: (value: T) => void;
-    let reject!: (reason: unknown) => void;
-    const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
-    return {promise, resolve, reject};
-}
-async function compressed(bytes: Uint8Array) {
-    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
-}
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('摘要与浏览器 ID 输入边界', () => {
@@ -63,7 +48,7 @@ describe('浏览器构建与运行能力契约', () => {
             ['userscript', 2, false, false], ['unknown', 3, false, false], ['', 2, false, false],
         ] as const) {
             const result = resolveBrowserCapabilities({browser, manifestVersion});
-            expect(result).toMatchObject({extensionDom: dom, imageOcr: dom, imageTranslation: dom, areaTranslation: dom, selectionTtsExtensionPlayback: dom, chromeTranslation: translator, selectionTtsPageFallback: true});
+            expect(result).toMatchObject({extensionDom: dom, selectionTtsExtensionPlayback: dom, chromeTranslation: translator, selectionTtsPageFallback: true});
             expect(result.offscreenDocument).toBe(dom && browser !== 'firefox');
             expect(Object.isFrozen(result)).toBe(true);
         }
@@ -92,161 +77,5 @@ describe('浏览器构建与运行能力契约', () => {
         expect(readRuntimeUserAgent({navigator: {userAgent: 'Edg/130'}})).toBe('Edg/130');
         expect(Object.isFrozen(browserCapabilities)).toBe(true);
         expect(browserCapabilities.buildTargetMarker).toBe(browserCapabilityBuildMarker);
-    });
-});
-
-describe('WASM 头部、响应与初始化队列', () => {
-    it.each(['runtime.wasm', 'runtime.wasm?revision=1', 'runtime.wasm#fixture', 'chrome-extension://fixture/runtime.wasm?x=1#y'])('无解压器也加载带修饰的原始资源 %#', async url => {
-        vi.stubGlobal('DecompressionStream', undefined);
-        const fetchImpl = fetchBytes();
-        await expect(loadCompressedWasmBinary(url, {fetchImpl})).resolves.toEqual(wasm);
-        expect(fetchImpl).toHaveBeenCalledWith(url, {cache: 'no-store'});
-    });
-    it.each([wasm.subarray(0, 4), wasm.subarray(0, 7), new Uint8Array([0, 97, 115, 109, 2, 0, 0, 0]), new Uint8Array([0, 97, 115, 109, 1, 1, 0, 0]), new Uint8Array([0, 97, 115, 0, 1, 0, 0, 0])])('拒绝截断或错误的头部，损坏资源只读一次 %#', async bytes => {
-        const fetchImpl = fetchBytes(bytes);
-        await expect(loadCompressedWasmBinary('invalid.wasm', {fetchImpl})).rejects.toMatchObject({message: 'ONNX_WASM_BINARY_LOAD_FAILED:invalid.wasm', cause: {message: 'ONNX_WASM_BINARY_INVALID:invalid.wasm'}});
-        expect(fetchImpl).toHaveBeenCalledTimes(1);
-    });
-    it('gzip 解压后同样验证完整版本头部', async () => {
-        await expect(loadCompressedWasmBinary('runtime.wasm.gz', {fetchImpl: fetchBytes(await compressed(wasm))})).resolves.toEqual(wasm);
-        await expect(loadCompressedWasmBinary('runtime.wasm.gz', {fetchImpl: fetchBytes(await compressed(wasm.subarray(0, 4)))})).rejects.toMatchObject({cause: {message: 'ONNX_WASM_BINARY_INVALID:runtime.wasm.gz'}});
-    });
-    it('大输入保持精确 buffer view，验证成本不扫描全部模型数据', async () => {
-        const buffer = new ArrayBuffer(8 * 1024 * 1024);
-        const bytes = new Uint8Array(buffer); bytes.set(wasm); bytes[bytes.length - 1] = 123;
-        const response = {ok: true, arrayBuffer: vi.fn(async () => buffer)} as unknown as Response;
-        const result = await loadCompressedWasmBinary('large.wasm', {fetchImpl: vi.fn(async () => response)});
-        expect(result.buffer).toBe(buffer);
-        expect(result.byteOffset).toBe(0);
-        expect(result.byteLength).toBe(buffer.byteLength);
-        expect(result[result.byteLength - 1]).toBe(123);
-        expect(bytes.subarray(0, 8)).toEqual(wasm);
-    });
-    it('Response 仅交付源 view 的范围，不包含原 buffer 前后数据', async () => {
-        const envelope = new Uint8Array(32); envelope.fill(77); envelope.set(wasm, 12);
-        await expect(loadCompressedWasmBinary('runtime.wasm', {fetchImpl: fetchBytes(envelope.subarray(12, 20))})).resolves.toEqual(wasm);
-    });
-    it.each([[undefined, 2], [NaN, 2], [Infinity, 2], [-4, 1], [1.9, 1], [99, 3]] as const)('有限重试次数 %#', async (maxAttempts, expected) => {
-        const fetchImpl = vi.fn(async () => { throw new Error('temporary'); });
-        await expect(loadCompressedWasmBinary('runtime.wasm', {fetchImpl, maxAttempts})).rejects.toMatchObject({cause: {message: 'temporary'}});
-        expect(fetchImpl).toHaveBeenCalledTimes(expected);
-    });
-    it('默认 fetch 保持 globalThis 接收者，读取失败和 5xx 能重试', async () => {
-        let receiver: unknown;
-        const fetchImpl = vi.fn(function (this: unknown) { receiver = this; return Promise.resolve(new Response(wasm)); });
-        vi.stubGlobal('fetch', fetchImpl);
-        await expect(loadCompressedWasmBinary('runtime.wasm')).resolves.toEqual(wasm);
-        expect(receiver).toBe(globalThis);
-        const readFailure = {ok: true, arrayBuffer: async () => { throw new Error('read'); }} as unknown as Response;
-        const retry = vi.fn().mockResolvedValueOnce(readFailure).mockResolvedValueOnce(new Response(null, {status: 503})).mockResolvedValueOnce(new Response(wasm));
-        await expect(loadCompressedWasmBinary('runtime.wasm', {fetchImpl: retry, maxAttempts: 3})).resolves.toEqual(wasm);
-        expect(retry).toHaveBeenCalledTimes(3);
-    });
-    it('404、无解压器、缺失 body 与损坏 gzip 不重试', async () => {
-        const missing = vi.fn(async () => new Response(null, {status: 404}));
-        await expect(loadCompressedWasmBinary('missing.wasm', {fetchImpl: missing})).rejects.toMatchObject({cause: {message: 'HTTP_404'}});
-        expect(missing).toHaveBeenCalledTimes(1);
-        const noBody = vi.fn(async () => new Response(null));
-        await expect(loadCompressedWasmBinary('missing.gz', {fetchImpl: noBody})).rejects.toMatchObject({cause: {message: 'ONNX_WASM_BINARY_BODY_MISSING'}});
-        const broken = fetchBytes(new Uint8Array([1, 2, 3]));
-        await expect(loadCompressedWasmBinary('bad.gz', {fetchImpl: broken})).rejects.toMatchObject({cause: {message: 'ONNX_WASM_BINARY_DECOMPRESSION_FAILED:bad.gz'}});
-        vi.stubGlobal('DecompressionStream', undefined);
-        const unsupported = fetchBytes();
-        await expect(loadCompressedWasmBinary('old.gz', {fetchImpl: unsupported})).rejects.toMatchObject({cause: {message: 'ONNX_WASM_DECOMPRESSION_UNSUPPORTED'}});
-        for (const fn of [noBody, broken, unsupported]) expect(fn).toHaveBeenCalledTimes(1);
-    });
-    it('静态路径关闭 proxy 并保留调用方线程数', () => {
-        const backend: OnnxWasmBackend = {numThreads: 2, proxy: true, wasmPaths: 'old/'};
-        configureOnnxWasmBackend(backend, {mjs: 'x.mjs', wasm: 'x.wasm'});
-        expect(backend).toEqual({numThreads: 2, proxy: false, wasmPaths: {mjs: 'x.mjs', wasm: 'x.wasm'}});
-    });
-    it('同后端串行、不同后端独立，成功后只加载一次且释放 buffer', async () => {
-        const backend: OnnxWasmBackend = {}, other: OnnxWasmBackend = {};
-        const hold = deferred<string>(), entered = deferred<void>();
-        const fetchImpl = fetchBytes();
-        const first = withCompressedWasmBinary(backend, 'x.wasm', async () => { expect(backend.wasmBinary).toEqual(wasm); entered.resolve(); return hold.promise; }, {fetchImpl});
-        const secondInit = vi.fn(async () => { expect(backend.wasmBinary).toBeUndefined(); return 'second'; });
-        const second = withCompressedWasmBinary(backend, 'x.wasm', secondInit, {fetchImpl});
-        await entered.promise;
-        await expect(withCompressedWasmBinary(other, 'x.wasm', async () => 'independent', {fetchImpl})).resolves.toBe('independent');
-        expect(secondInit).not.toHaveBeenCalled();
-        hold.resolve('first');
-        await expect(first).resolves.toBe('first'); await expect(second).resolves.toBe('second');
-        expect(fetchImpl).toHaveBeenCalledTimes(2);
-        expect(backend.wasmBinary).toBeUndefined(); expect(other.wasmBinary).toBeUndefined();
-    });
-    it('下载和初始化失败后队列仍允许重新加载', async () => {
-        const backend: OnnxWasmBackend = {};
-        const fetchImpl = fetchBytes();
-        await expect(withCompressedWasmBinary(backend, 'bad.wasm', async () => 'never', {fetchImpl: fetchBytes(new Uint8Array())})).rejects.toThrow('LOAD_FAILED');
-        await expect(withCompressedWasmBinary(backend, 'x.wasm', async () => { throw new Error('init'); }, {fetchImpl})).rejects.toThrow('init');
-        expect(backend.wasmBinary).toBeUndefined();
-        await expect(withCompressedWasmBinary(backend, 'x.wasm', async () => 'recovered', {fetchImpl})).resolves.toBe('recovered');
-        expect(fetchImpl).toHaveBeenCalledTimes(2);
-    });
-    it('清理 setter 抛错也释放初始化队列', async () => {
-        let binary: OnnxWasmBackend['wasmBinary']; let failCleanup = true;
-        const backend: OnnxWasmBackend = {get wasmBinary() { return binary; }, set wasmBinary(value) { if (value === undefined && failCleanup) { failCleanup = false; throw new Error('cleanup'); } binary = value; }};
-        const first = withCompressedWasmBinary(backend, 'x.wasm', async () => 'ready', {fetchImpl: fetchBytes()});
-        const firstRejected = expect(first).rejects.toThrow('cleanup');
-        const initialize = vi.fn(async () => 'next');
-        const second = withCompressedWasmBinary(backend, 'x.wasm', initialize, {fetchImpl: fetchBytes()});
-        await firstRejected;
-        for (let n = 0; n < 10; n++) await Promise.resolve();
-        expect(initialize).toHaveBeenCalledTimes(1);
-        await expect(second).resolves.toBe('next');
-        expect(backend.wasmBinary).toBeUndefined();
-    });
-});
-
-describe('WebGPU 驱动探测与 CPU 回退', () => {
-    it.each(['HeadlessChrome/130', 'HeadlessEdge/130', 'Firefox/130', 'custom-agent'])('有真实硬件适配器时不因 UA 误关闭 %#', async userAgent => {
-        const requestAdapter = vi.fn(async () => ({isFallbackAdapter: false, info: {vendor: 'fixture hardware', architecture: 'metal', device: '0', description: 'integrated'}}));
-        vi.stubGlobal('navigator', {userAgent, gpu: {requestAdapter}});
-        await expect(probeWebGpu()).resolves.toEqual({available: true, info: 'fixture hardware / metal / 0 / integrated'});
-        expect(requestAdapter).toHaveBeenCalledWith({powerPreference: 'high-performance'});
-    });
-    it('只读取一次适配器信息，不请求设备', async () => {
-        const info = vi.fn(() => ({vendor: 'hardware'})), requestDevice = vi.fn();
-        vi.stubGlobal('navigator', {gpu: {requestAdapter: async () => ({get info() { return info(); }, requestDevice})}});
-        await expect(probeWebGpu()).resolves.toEqual({available: true, info: 'hardware'});
-        expect(info).toHaveBeenCalledTimes(1); expect(requestDevice).not.toHaveBeenCalled();
-    });
-    it.each([undefined, {}, {gpu: {}}, {gpu: {requestAdapter: 'not callable'}}, {gpu: {requestAdapter: async () => null}}, {gpu: {requestAdapter: () => { throw new Error('sync'); }}}, {gpu: {requestAdapter: async () => { throw new Error('async'); }}}, {get gpu() { throw new Error('policy'); }}])('缺失能力或驱动异常安全回退 %#', async navigator => {
-        vi.stubGlobal('navigator', navigator); await expect(probeWebGpu()).resolves.toEqual(unavailable);
-    });
-    it.each([{isFallbackAdapter: true}, {info: {isFallbackAdapter: true}}, ...['SwiftShader', 'software renderer', 'llvmpipe', 'fallback adapter'].map(description => ({info: {description}}))])('软件适配器不能误报硬件 %#', async adapter => {
-        vi.stubGlobal('navigator', {gpu: {requestAdapter: async () => adapter}}); await expect(probeWebGpu()).resolves.toEqual(unavailable);
-    });
-    it('诊断信息可选；读取信息抛错也安全回退并清除计时器', async () => {
-        vi.useFakeTimers();
-        vi.stubGlobal('navigator', {gpu: {requestAdapter: async () => ({})}});
-        await expect(probeWebGpu()).resolves.toEqual({available: true, info: ''});
-        vi.stubGlobal('navigator', {gpu: {requestAdapter: async () => ({get info() { throw new Error('info'); }})}});
-        await expect(probeWebGpu()).resolves.toEqual(unavailable);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-    it.each(['resolve', 'reject'] as const)('探测有截止时间，迟到的驱动结果不会改变回退或产生未处理异常 %s', async ending => {
-        vi.useFakeTimers(); const driver = deferred<{} | null>();
-        vi.stubGlobal('navigator', {gpu: {requestAdapter: () => driver.promise}});
-        const probe = probeWebGpu(); await vi.advanceTimersByTimeAsync(1_999);
-        expect(vi.getTimerCount()).toBe(1); await vi.advanceTimersByTimeAsync(1);
-        await expect(probe).resolves.toEqual(unavailable);
-        if (ending === 'resolve') driver.resolve({}); else driver.reject(new Error('late'));
-        await Promise.resolve(); await expect(probe).resolves.toEqual(unavailable);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-});
-
-describe('memory64 必要能力检查', () => {
-    it.each([true, false])('使用零页模块并遵从真实验证结果 %s', supported => {
-        const validate = vi.fn(() => supported), Memory = vi.fn();
-        vi.stubGlobal('WebAssembly', {validate, Memory});
-        expect(supportsHunyuanTranslation()).toBe(supported);
-        expect(validate).toHaveBeenCalledWith(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 4, 0]));
-        expect(Memory).not.toHaveBeenCalled();
-    });
-    it.each([undefined, {}, {validate: 3}, {validate: () => { throw new Error('policy'); }}])('能力缺失或验证异常不使设置/下载链路抛错 %#', wasmRuntime => {
-        vi.stubGlobal('WebAssembly', wasmRuntime); expect(supportsHunyuanTranslation()).toBe(false);
     });
 });

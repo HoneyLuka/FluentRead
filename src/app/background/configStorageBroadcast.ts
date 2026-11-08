@@ -2,7 +2,7 @@
  * @file src/app/background/configStorageBroadcast.ts
  *
  * 文件职责：把后台加密配置仓库的键级变化通知给已打开的扩展页面和网页 content，使各上下文重新向后台拉取授权后的明文快照。
- * 主要内容：监听配置、凭据、历史、备份与 OCR 元数据键，向 extension runtime 广播无值通知，通过共享网页接收者端口投递主配置与阅读模型失效事件并兼容旧适配器；凭据比较仅在后台进行，安装或解绑失败保留清理错误。
+ * 主要内容：监听配置、凭据、历史与备份键，向 extension runtime 广播无值通知，仅主配置向共享网页接收者端口投递；安装或解绑失败保留清理错误。
  * 模块边界：本文件不携带配置值、不判断凭据读取权限、不写 IndexedDB；读取授权由 configStorage handler 承担，运行时装配由 messageRuntime 调用。
  */
 
@@ -11,10 +11,6 @@ import {
     CONFIG_STORAGE_CHANGED_MESSAGE,
     type ConfigStoragePort,
 } from '@/src/platform/storage/configStorage';
-import {config} from '@/src/services/config/store';
-import {normalizeConfig} from '@/src/core/config/model';
-import {extractConfigCredentials, mergeConfigCredentials, parseStoredCredentials} from '@/src/core/config/credentials';
-import {getHarnessModelCacheKey} from '@/src/core/config/harness';
 
 export interface ConfigStorageBroadcastRuntime {
     broadcastTabMessage?(message: unknown, signal?: AbortSignal): Promise<void>;
@@ -53,18 +49,10 @@ export function installConfigStorageBroadcast(
                         runtime.warn('[FluentRead] 扩展配置变化广播失败', error);
                     }
                 });
-                let tabMessage: unknown = message;
-                if (key !== 'local:config') {
-                    if (key !== 'local:credentials' && key !== 'session:credentials') return;
-                    // 专用凭据不会进入 content 快照。复用真实模型输入投影在后台比较，
-                    // 只广播无值事件，删除或无效记录与 store 的空凭据语义一致。
-                    if (getHarnessModelCacheKey(normalizeConfig(mergeConfigCredentials(
-                        config, parseStoredCredentials(value) || extractConfigCredentials({}),
-                    ))) === getHarnessModelCacheKey(normalizeConfig(mergeConfigCredentials(
-                        config, parseStoredCredentials(previousValue) || extractConfigCredentials({}),
-                    )))) return;
-                    tabMessage = {type: 'fluentReadReadingModelInputsChanged'};
-                }
+                // 凭据和历史不进入 content 快照，只有主配置变化需要网页重新拉取。
+                if (key !== 'local:config') return;
+                void value; void previousValue;
+                const tabMessage: unknown = message;
                 if (runtime.broadcastTabMessage) {
                     void runtime.broadcastTabMessage(tabMessage, lifetime.signal)
                         .catch(error => runtime.warn('[FluentRead] 网页配置变化广播失败', error));

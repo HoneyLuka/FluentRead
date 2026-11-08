@@ -33,16 +33,6 @@ export interface DownloadProgressMessage {
     progress?: DownloadProgress;
 }
 
-export const LOCAL_TTS_DOWNLOAD_ID = 'local-tts' as const;
-
-export function videoModelDownloadId(model: string): string {
-    return `video-model:${model}`;
-}
-
-export function ocrLanguageDownloadId(language: string): string {
-    return `ocr-language:${language}`;
-}
-
 export function isDownloadProgressId(value: unknown): value is string {
     return typeof value === 'string' && /^[a-z0-9][a-z0-9:_-]{0,63}$/u.test(value);
 }

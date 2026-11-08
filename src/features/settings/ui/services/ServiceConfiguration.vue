@@ -19,7 +19,6 @@
     <p v-if="isCompositeService && !compositeProvider?.services.length" class="configuration-scope" data-composite-test-empty role="status">{{ t('settings.services.composite.empty') }}</p>
     <FreeTranslationSettings v-if="service === services.freeTranslation" :active="active" :config="config" :advanced="false" :checks="freeProviderChecks" />
 
-    <LocalTranslationModelSettings v-if="service === services.localTranslation" :active="active" :context="config" :config="config" :service="service" />
     <ChatGPTPlanSettings v-if="ChatGPTPlanSettings && service === services.chatgptPlan" :active="active" :config="config" />
 
     <Teleport v-if="connectionActionTarget && !publicPlanBlocked" :to="connectionActionTarget">
@@ -41,7 +40,7 @@
     </div>
 
     <span
-      v-if="service === services.freeTranslation || service === services.localTranslation"
+      v-if="service === services.freeTranslation"
       class="header-connection-status"
       :class="`is-${connectionTestState}`"
       :title="connectionTestMessage"
@@ -54,7 +53,7 @@
 
     </section>
     </Teleport>
-    <section v-if="service !== services.freeTranslation && service !== services.localTranslation && service !== services.chatgptPlan && !isCompositeService" class="connection-card" data-configuration-group="connection">
+    <section v-if="service !== services.freeTranslation && service !== services.chatgptPlan && !isCompositeService" class="connection-card" data-configuration-group="connection">
       <p v-if="service === services.microsoft || service === services.google || service === services.bilibili" class="configuration-scope" data-service-no-setup>{{ t('settings.organization.noSetup') }}</p>
     <template v-if="service === services.myMemory">
       <div class="connection-field" data-mymemory-email>
@@ -363,19 +362,6 @@
             </div>
           </div>
 
-          <div v-if="compute.showModel" class="connection-field" data-testid="model-vision-control">
-            <div class="connection-field-label">
-              <strong>{{ t('settings.services.visionCapability') }}</strong>
-              <FieldHelp :content="`${t('settings.services.visionUnknown')} ${t('settings.services.visionProbeHelp')}`">
-                <template #content>
-                  <p class="field-help-line">{{ t('settings.services.visionUnknown') }}</p>
-                  <p class="field-help-line">{{ t('settings.services.visionProbeHelp') }}</p>
-                </template>
-              </FieldHelp>
-            </div>
-            <ModelVisionSettings :config="config" :service="service" :model="effectiveModelLabel" :active="active && activeSettingsTab === 'translation'" />
-          </div>
-
       </section>
     </el-tab-pane>
     <el-tab-pane v-if="settingsTabs.prompts" name="prompts" :label="t(SETTINGS_TAB_LABELS.prompts)">
@@ -517,8 +503,6 @@ import PromptTemplateEditor from './PromptTemplateEditor.vue'
 import FreeTranslationSettings from './FreeTranslationSettings.vue'
 import ApiKeyList from './ApiKeyList.vue'
 import { normalizeApiKeyList, eligibleApiKeyIndexes, activeApiKeyIndexes, standbyApiKeyIndexes, summarizeApiKeyChecks, type ApiKeyCheckState, type ApiKeySummary } from './apiKeyTypes'
-const LocalTranslationModelSettings = defineAsyncComponent(() => import('../LocalTranslationModelSettings.vue'))
-import ModelVisionSettings from './ModelVisionSettings.vue'
 import RequestLimitSettings from './RequestLimitSettings.vue'
 import RequestHeaderSettings from './RequestHeaderSettings.vue'
 import CompositeTranslationSettings from './CompositeTranslationSettings.vue'
@@ -592,7 +576,7 @@ const SETTINGS_TAB_LABELS = {
 const settingsTabs = computed<Record<keyof typeof SETTINGS_TAB_LABELS, boolean>>(() => ({
   translation: !publicPlanBlocked.value && Boolean(compute.value.showAI && compute.value.showModel),
   prompts: !publicPlanBlocked.value && Boolean(compute.value.showAI),
-  requests: !publicPlanBlocked.value && service.value !== services.localTranslation && !isCompositeService.value,
+  requests: !publicPlanBlocked.value && !isCompositeService.value,
   'custom-request': !publicPlanBlocked.value && service.value !== services.chatgptPlan && Boolean(compute.value.showDeepseekApiType || compute.value.showAI || compute.value.showCustomBody || customProvider.value),
 }))
 // 单一请求页签默认展开并允许收起；多页签继续使用原来的 section，不增加折叠层。

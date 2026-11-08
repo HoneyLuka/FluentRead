@@ -353,7 +353,7 @@ async function translateSlotsIndividually(
     );
     // 本地自动检测沿用整段来源；Chrome 槽协议损坏后也不能退回不可靠的短标题检测。
     const sourceLanguageDetectionText = snapshot.sourceLanguage === 'auto'
-        && (snapshot.service === services.localTranslation || snapshot.service === services.chromeTranslator)
+        && snapshot.service === services.chromeTranslator
         ? origins.join('\n') : undefined;
     let failed = false;
     let firstError: unknown;
@@ -950,10 +950,6 @@ async function translateTextSlotsDirectly(
     discourseContext?: string,
 ): Promise<string[]> {
     throwIfAborted(signal);
-    // 小模型直接翻译各槽，不要求模型复述结构标记；短链接借用段落正文检测语言。
-    if (snapshot.service === services.localTranslation) {
-        return translateSlotsIndividually(origins, snapshot, signal, queueSession, context, discourseContext);
-    }
     const batchFriendly = isCompositeTranslationProviderId(snapshot.service)
         || supportsNativeTranslationBatch(snapshot.service)
         || snapshot.service === services.freeTranslation

@@ -157,7 +157,7 @@ describe('离线内置术语词库', () => {
     it('真实 AI 副本沿 broker 开关和文档选择保护术语，旧误译缓存不能绕过开启后的词库', async () => {
         const ai = add();
         const config = normalizeConfig({service: 'microsoft', from: 'en', to: 'zh-Hans', useCache: true,
-            glossaryLibraries: [ai], documentGlossaryIds: [ai.id]});
+            glossaryLibraries: [ai]});
         const before = structuredClone(config.glossaryLibraries);
         const cache = new Map<string, string>();
         const provider = vi.fn(async (message: TranslationProviderRequest) => {
@@ -191,13 +191,12 @@ describe('离线内置术语词库', () => {
     it('选中的词条及来源版本通过完整配置、公开配置和词库 JSON 往返，不自动改变默认开关', () => {
         const library = add();
         library.entries[0].target = '自定义人工智能';
-        const config = normalizeConfig({glossaryLibraries: [library], documentGlossaryIds: [library.id]});
+        const config = normalizeConfig({glossaryLibraries: [library]});
         expect(config.glossaryEnabled).toBe(false);
         // 完整备份与不含凭据的旧公开配置文件都必须保留术语库。
         for (const exported of [prepareConfigForExport(config), sanitizeConfigCredentials(JSON.parse(JSON.stringify(config)))]) {
             const restored = prepareConfigForImport(JSON.parse(JSON.stringify(exported)), normalizeConfig({}));
             expect(restored.glossaryLibraries).toEqual([library]);
-            expect(restored.documentGlossaryIds).toEqual([library.id]);
             expect(restored.glossaryEnabled).toBe(false);
             expect(addBuiltinGlossary('ai-en-zh-hans', restored.glossaryLibraries, '不能覆盖').status).toBe('existing');
         }

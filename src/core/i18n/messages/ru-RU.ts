@@ -5,7 +5,6 @@
  * 主要内容：保持语言名称使用各自原生写法，并为尚未 key 化的旧 UI 提供俄语映射。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入或翻译结果。
  */
-import videoLearningText from './video-learning/ru-RU.json';
 import selfHelpText from './self-help/ru-RU.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
@@ -13,9 +12,6 @@ import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesRussianMessages} from './sectionTranslationRulesRussian';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/ru-RU.json';
 import settingsCopyText from './settings-copy/ru-RU.json';
 import brandTaglines from './brand-taglines.json';
 import googleDriveText from './google-drive/ru-RU.json';
@@ -25,11 +21,8 @@ enUSMessages} from './en-US';
 import {legacyTextOverrides} from './legacy-overrides';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsRussianMessages} from './localTts';
 import {translationStatsRussianMessages} from './translationStats';
-import {localTranslationRussianMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -38,16 +31,11 @@ export const ruRUMessages = {
     "feedback.serviceHint": "Проверьте подключение или модель выбранного сервиса и повторите попытку.",
     "feedback.retryHint": "Повторите попытку чуть позже. Исходный текст и выделенная область сохранятся.",
     ...countForms['ru-RU'],
-    ...personalCorrectionMessages['ru-RU'],
     "document.config.loadFailed": "Не удалось загрузить настройки. Обновите страницу и повторите попытку.",
     "popup.compact.translate": "Перевести",
     "popup.compact.restore": "Вернуть",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['ru-RU'],
-    ...pdfReadingMessages['ru-RU'],
-    ...informationHighlightMessages['ru-RU'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "Удаление заголовков источника",
     "settings.headers.help": "По умолчанию список пуст. Применяется только к запросам FluentRead к точно указанному домену во всех сервисах. Поддомены добавляются отдельно. Удалите запись или снимите флажок, чтобы восстановить обычное поведение.",
@@ -413,7 +401,6 @@ export const ruRUMessages = {
     "settings.excludedLanguages.hint": "Применяется со следующего перевода. Короткие тексты и тексты с неопределённым языком переводятся по-прежнему.",
     "options.userscriptUnavailableTitle": "Недоступно в пользовательском скрипте",
     "options.userscriptUnavailableDescription": "Для этой функции нужна среда браузерного расширения. Установите расширение FluentRead, чтобы использовать её.",
-    ...localTtsRussianMessages,
     ...translationStatsRussianMessages,
     "settings.services.library.freeReady": "Ключ API не нужен. Доступные бесплатные сервисы выбираются автоматически.",
     "settings.services.library.keepOne": "Оставьте хотя бы один сервис включённым.",
@@ -556,7 +543,6 @@ export const ruRUMessages = {
     "writing.demo.reviewHint": "Помощник пишет черновик с учётом обсуждения. Проверьте и отредактируйте ответ.",
     "writing.demo.insertHint": "Черновик вставлен в поле ответа. Проверьте его и отправьте самостоятельно.",
 
-    ...localTranslationRussianMessages,
     "settings.requestLimits.modelTitle": "Ограничения модели",
     "settings.requestLimits.globalTitle": "Ограничения запросов",
     "settings.requestLimits.globalHelp": "Сервисы и модели без отдельных настроек используют эти общие ограничения.",

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {options, getMultilingualTargetLanguageLabel} from '@/src/core/config/catalog';
 import {normalizeConfig} from '@/src/core/config/model';
-import {WRITING_LANGUAGES, normalizeWritingPreferences, resolveWritingLanguage} from '@/src/core/config/writing';
 
 vi.mock('@/src/services/config/store', () => ({
     config: {
@@ -72,26 +71,21 @@ describe('翻译请求语言隔离', () => {
 });
 
 describe('扩展翻译语言目录', () => {
-    it('源语言、目标语言、输入框和写作共用无重复的完整目录', () => {
+    it('源语言与目标语言共用无重复的完整目录', () => {
         const targets = options.to.map(item => item.value);
         expect(targets).toHaveLength(52);
         expect(new Set(targets).size).toBe(targets.length);
         expect(options.from.map(item => item.value)).toEqual(['auto', ...targets]);
-        expect(options.inputBoxTranslationTarget.map(item => item.value)).toEqual(targets);
-        expect(WRITING_LANGUAGES.map(item => item.value)).toEqual(['target', ...targets]);
         expect(targets).toEqual(expect.arrayContaining(['ar', 'hi', 'vi', 'th', 'de', 'pt', 'it', 'uk', 'sw', 'fil']));
     });
 
-    it('新增语言在七种界面中有名称，保存后仍用于写作和翻译请求', () => {
+    it('新增语言在七种界面中有名称，保存后仍用于翻译请求', () => {
         for (const {value} of options.to) {
             for (const locale of ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES']) {
                 expect(getMultilingualTargetLanguageLabel(value, 'missing', locale)).not.toBe('missing');
             }
-            const saved = normalizeConfig({from: value, to: value, inputBoxTranslationTarget: value});
-            expect(saved).toMatchObject({from: value, to: value, inputBoxTranslationTarget: value});
-            expect(normalizeWritingPreferences({language: value, referenceLanguage: value}))
-                .toMatchObject({language: value, referenceLanguage: value});
-            expect(resolveWritingLanguage('target', saved.to)).toBe(value);
+            const saved = normalizeConfig({from: value, to: value});
+            expect(saved).toMatchObject({from: value, to: value});
             expect(getTranslationLanguages({sourceLanguage: value, targetLanguage: value}))
                 .toEqual({sourceLanguage: value, targetLanguage: value});
         }

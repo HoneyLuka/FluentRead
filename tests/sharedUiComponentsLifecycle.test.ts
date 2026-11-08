@@ -1,6 +1,4 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-const sidebarPreview = vi.hoisted(() => ({available: false}));
-vi.mock('@/src/platform/browser/translationSidepanel', () => ({canOpenTranslationSidepanel: () => sidebarPreview.available}));
 // 实际 runtime-dom 客户端装配。Element Plus 与界面翻译是受控 UI ports；
 // SFC、Vue 生命周期、DOM、核心颜色/高亮/预览与排序模块保持真实。
 const dom = await vi.hoisted(async () => {
@@ -126,13 +124,11 @@ import SettingsItem from '@/src/features/settings/ui/components/SettingsItem.vue
 import TranslationColorField from '@/src/features/settings/ui/components/TranslationColorField.vue';
 import TranslationStylePreview from '@/src/features/settings/ui/components/TranslationStylePreview.vue';
 import SentenceHighlightStyleSettings from '@/src/features/settings/ui/SentenceHighlightStyleSettings.vue';
-import WritingStylePreview from '@/src/features/settings/ui/components/WritingStylePreview.vue';
 import SegmentedControl from '@/src/features/settings/ui/components/SegmentedControl.vue';
 import {usePopupLayoutReorder} from '@/src/features/settings/ui/usePopupLayoutReorder';
 import {interfaceSkinOptions} from '@/src/core/config/interfaceAppearance';
 import {translationLoadingStyleOptions, type TranslationLoadingStyle} from '@/src/core/config/translationLoadingStyle';
 import brandPaths from '@/src/ui/assets/serviceBrandPaths.json';
-import {writingPreviewParagraphs} from '@/src/core/config/writingPreview';
 import {provide, shallowRef, type Ref} from 'vue';
 import {localeContextKey, useLocale, useGlobalConfig, useGlobalComponentSettings} from 'element-plus';
 import type {Language, TranslatePair} from 'element-plus/es/locale';
@@ -200,7 +196,7 @@ function layoutProps() {return {skin: skin(), skinLabel: 'Default', editScope: '
   {id: 'translation', label: 'Translate', visible: true}, {id: 'siteRule', label: 'Site', visible: true},
   {id: 'quickFeatures', label: 'Features', visible: true}, {id: 'footer', label: 'Footer', visible: true}],
   moduleOrder: ['translation', 'siteRule', 'quickFeatures', 'footer'], quickFeatureItems: [
-    {id: 'hover', label: 'Hover', visible: true}, {id: 'image', label: 'Image', visible: true}], quickFeatureOrder: ['hover', 'image']};}
+    {id: 'hover', label: 'Hover', visible: true}, {id: 'selection', label: 'Selection', visible: true}], quickFeatureOrder: ['hover', 'selection']};}
 function colorProps() {return {modelValue: '', fieldId: 'color-a', label: 'Color', swatches: swatches.map(swatch => ({...swatch}))};}
 function shareduiAuditSegmentProps() {return {modelValue: 'a' as string | number, label: 'Display', options: [
   {value: 'a' as string | number, label: 'Alpha', disabled: false}, {value: 'b' as string | number, label: 'Blocked', disabled: true}, {value: 3 as string | number, label: 'Three', disabled: false}]};}
@@ -208,9 +204,9 @@ beforeEach(() => {dom.document.body.replaceChildren(); dom.frames.clear(); ports
 afterEach(async () => {for (const app of apps) app.unmount(); apps.clear(); await settle(); dom.frames.clear(); vi.restoreAllMocks();});
 
 describe('shared UI actual client SFC lifecycle', () => {
-  it('loads all seventeen actual SFC client render functions without any server render replacement', () => {
+  it('loads all sixteen actual SFC client render functions without any server render replacement', () => {
     for (const component of [UiSelect, GlossaryLibrarySelect, ServiceIcon, TranslationLoadingPreview, UiIcon, FeatureEnableCard, FieldHelp,
-      InterfaceSkinPreview, PopupLayoutPreview, PopupLayoutPreviewItem, SettingsGroup, SettingsDisclosure, SettingsItem, TranslationColorField, TranslationStylePreview, WritingStylePreview, SegmentedControl]) {
+      InterfaceSkinPreview, PopupLayoutPreview, PopupLayoutPreviewItem, SettingsGroup, SettingsDisclosure, SettingsItem, TranslationColorField, TranslationStylePreview, SegmentedControl]) {
       expect((component as any).render).toBeTypeOf('function');expect((component as any).ssrRender).toBeUndefined();
     }
   });
@@ -559,7 +555,7 @@ describe('shared UI actual client SFC lifecycle', () => {
     key(mounted.root.querySelector('[data-preview-popup-module="translation"] > button')!, 'ArrowDown');await settle();expect(moduleUpdate).toHaveBeenLastCalledWith(['siteRule', 'translation', 'quickFeatures', 'footer']);
     expect(mounted.root.querySelector('[aria-live="polite"]')!.textContent).toContain('"position":2');
     event(mounted.root.querySelector('[data-preview-action]')!, 'click');expect(edit).toHaveBeenCalledWith('quickFeature');mounted.props.editScope = 'quickFeature';await settle();
-    key(mounted.root.querySelector('[data-preview-quick-feature="hover"] > button')!, 'ArrowRight');await settle();expect(featureUpdate).toHaveBeenLastCalledWith(['image', 'hover']);
+    key(mounted.root.querySelector('[data-preview-quick-feature="hover"] > button')!, 'ArrowRight');await settle();expect(featureUpdate).toHaveBeenLastCalledWith(['selection', 'hover']);
     mounted.props.quickFeatureItems = mounted.props.quickFeatureItems.map((item: any) => ({...item, visible: false}));await settle();expect(mounted.root.querySelector('[data-preview-popup-module="quickFeatures"]')).toBeNull();
   });
   it('announces the module ID when the real parent synchronously removes the moved module in place', async () => {
@@ -585,9 +581,9 @@ describe('shared UI actual client SFC lifecycle', () => {
     mounted = await mount(PopupLayoutPreview, {...layoutProps(), editScope: 'quickFeature'}, {listeners: {'onUpdate:quickFeatureOrder': update}});
     const items = mounted.props.quickFeatureItems;
     key(mounted.root.querySelector('[data-preview-quick-feature="hover"] > button')!, 'ArrowRight');await settle();
-    expect(update).toHaveBeenCalledOnce();expect(update).toHaveBeenLastCalledWith(['image', 'hover']);expect(mounted.props.quickFeatureItems).toBe(items);
+    expect(update).toHaveBeenCalledOnce();expect(update).toHaveBeenLastCalledWith(['selection', 'hover']);expect(mounted.props.quickFeatureItems).toBe(items);
     expect(mounted.root.querySelector('[data-preview-quick-feature="hover"]')).toBeNull();
-    expect(mounted.root.querySelector('[data-preview-quick-feature="image"]')).not.toBeNull();
+    expect(mounted.root.querySelector('[data-preview-quick-feature="selection"]')).not.toBeNull();
     expect(mounted.root.querySelector('[aria-live="polite"]')!.textContent).toBe('settings.interface.popupLayout.moved{"label":"hover","position":0}');
   });
   it('projects hidden, missing-order and nested modules without mutating input arrays across skins', async () => {
@@ -865,23 +861,12 @@ describe('shared UI actual client SFC lifecycle', () => {
     const mounted = await mount(InterfaceSkinPreview, {skin: skin(), previewLabel: 'Preview'});
     for (const chosen of interfaceSkinOptions) {mounted.props.skin = chosen;mounted.props.previewLabel = chosen.label;await settle();const section = mounted.root.querySelector('section')!;expect(section.getAttribute('data-preview-skin')).toBe(chosen.value);expect(section.getAttribute('aria-label')).toBe(chosen.label);expect(section.style.getPropertyValue('--interface-popup-width')).toBe(`${chosen.popupWidth}px`);expect(section.querySelector('.preview-popup')!.getAttribute('data-preview-skin')).toBe(chosen.value);expect(mounted.root.querySelectorAll('button,input')).toHaveLength(0);}
   });
-  it('previews the compact coffee and sidebar icons in their real order when the browser supports a sidebar', async () => {
-    sidebarPreview.available = true;
-    const supported = await mount(InterfaceSkinPreview, {skin: skin(), previewLabel: 'Preview'});
-    const actions = [...supported.root.querySelectorAll('.preview-header-actions > span')];
-    expect(actions).toHaveLength(3);
+  it('previews the compact coffee and settings icons in their real order', async () => {
+    const mounted = await mount(InterfaceSkinPreview, {skin: skin(), previewLabel: 'Preview'});
+    const actions = [...mounted.root.querySelectorAll('.preview-header-actions > span')];
+    expect(actions).toHaveLength(2);
     expect(actions[0].textContent).toBe('');expect(actions[0].querySelector('svg')).not.toBeNull();
-    expect(actions[1].textContent).toBe('');expect(actions[1].querySelector('svg rect')).not.toBeNull();
-    expect(actions[2].textContent).toContain('设置');
-    sidebarPreview.available = false;
-    const unsupported = await mount(InterfaceSkinPreview, {skin: skin(), previewLabel: 'Preview'});
-    expect(unsupported.root.querySelectorAll('.preview-header-actions > span')).toHaveLength(2);
-  });
-  it('updates writing examples and all custom fallback notes using the actual pure preview module', async () => {
-    const mounted = await mount(WritingStylePreview, {length: 'short', style: 'auto', tone: 'natural', role: 'auto', animated: false});
-    for (const length of ['short', 'standard', 'detailed']) {mounted.props.length = length;await settle();expect([...mounted.root.querySelectorAll('.preview-body p')].map(item => item.textContent)).toEqual(writingPreviewParagraphs({length: length as any, style: 'auto', tone: 'natural', role: 'auto'}).map(item => item.text));expect(dom.frames.size).toBe(0);}
-    for (const [tone, role, note] of [['custom', 'auto', '自定义语气会'], ['natural', 'custom', '自定义角色会'], ['custom', 'custom', '自定义语气和角色会']]) {mounted.props.tone = tone;mounted.props.role = role;await settle();expect(mounted.root.textContent).toContain(note);}
-    mounted.props.referenceLabel = 'English';mounted.props.animated = true;await settle();expect(mounted.root.textContent).toContain('English');ports.locale.value = 'localized:';await settle();expect(mounted.root.querySelector('.preview-scenario')!.textContent).toContain('localized:');
+    expect(actions[1].textContent).toContain('设置');
   });
 });
 

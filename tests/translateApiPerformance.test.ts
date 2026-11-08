@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
   config: {
     glossaryEnabled: false,
     glossaryLibraries: [] as GlossaryLibrary[],
-    videoGlossaryIds: null as string[] | null,
     count: 0,
     maxConcurrentTranslations: 6,
     translationMaxRetries: 3,
@@ -33,7 +32,6 @@ const mocks = vi.hoisted(() => ({
     useCache: true,
     enableAIContext: false,
     nativeBatchTranslationEnabled: {} as Record<string, boolean>,
-    videoService: 'mock',
     compositeTranslationProviders: [] as CompositeTranslationProvider[],
     aiRequestTimeoutMs: undefined as number | undefined,
   },
@@ -66,7 +64,7 @@ vi.mock('@/src/core/config/catalog', async (importOriginal) => {
 vi.mock('@/src/services/translation/context', () => ({getPageTranslationContext: mocks.getPageTranslationContext}));
 vi.mock('@/src/core/config/validation', () => ({getMissingCredentialMessage: mocks.getMissingCredentialMessage}));
 
-import {cancelAllTranslations, getTranslationTimeout, translateText, translateTextBatch, translateVideoText} from '@/src/services/translation/client';
+import {cancelAllTranslations, getTranslationTimeout, translateText, translateTextBatch} from '@/src/services/translation/client';
 import {
   createTranslationCancelHandler,
   createTranslationRequestFallback,
@@ -93,21 +91,19 @@ async function flushMicrotasks(times = 8): Promise<void> {
   for (let index = 0; index < times; index += 1) await Promise.resolve();
 }
 
-type ContextClient = 'single' | 'batch' | 'video';
+type ContextClient = 'single' | 'batch';
 
 function contextGateRequest(
   kind: ContextClient,
   signal?: AbortSignal,
   contextOptions: {pageContext?: string; enableAIContext?: boolean} = {},
 ): Promise<string | string[]> {
-  return kind === 'video' ? translateVideoText('Context gate source', signal)
-    : kind === 'batch' ? translateTextBatch(['Context gate source'], 'Page', {signal, maxRetries: 0, ...contextOptions})
-      : translateText('Context gate source', 'Page', {signal, maxRetries: 0, ...contextOptions});
+  return kind === 'batch' ? translateTextBatch(['Context gate source'], 'Page', {signal, maxRetries: 0, ...contextOptions})
+    : translateText('Context gate source', 'Page', {signal, maxRetries: 0, ...contextOptions});
 }
 
 function enableContextGate(): void {
   mocks.config.service = 'mock-ai';
-  mocks.config.videoService = 'mock-ai';
   mocks.config.enableAIContext = true;
 }
 
@@ -121,10 +117,10 @@ describe('translation API request lifecycle performance', () => {
     await flushMicrotasks(); options.subtitleContext = 'changed after awaiting'; context.resolve('page context'); await pending;
     expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({subtitleContext: 'a'.repeat(1200), glossaryContext: 'document'}));
   });
-  it.each(['single', 'batch', 'video'] as const)('rejects disabled %s requests before context, credentials, transport and accounting, then allows re-enable', async kind => {
+  it.each(['single', 'batch'] as const)('rejects disabled %s requests before context, credentials, transport and accounting, then allows re-enable', async kind => {
     mocks.config.disabledTranslationServices = ['mock'];
     const run = () => kind === 'batch' ? translateTextBatch(['Source'], 'Page')
-      : kind === 'video' ? translateVideoText('Source') : translateText('Source', 'Page');
+      : translateText('Source', 'Page');
     await expect(run()).rejects.toMatchObject({kind: 'bad-request', retryable: false, code: 'TRANSLATION_SERVICE_DISABLED'});
     expect(mocks.sendMessage).not.toHaveBeenCalled(); expect(mocks.getPageTranslationContext).not.toHaveBeenCalled();
     expect(mocks.getMissingCredentialMessage).not.toHaveBeenCalled(); expect(mocks.persistCountIncrement).not.toHaveBeenCalled();
@@ -142,7 +138,6 @@ describe('translation API request lifecycle performance', () => {
     mocks.config.count = 0;
     mocks.config.glossaryEnabled = false;
     mocks.config.glossaryLibraries = [];
-    mocks.config.videoGlossaryIds = null;
     mocks.config.maxConcurrentTranslations = 6;
     mocks.config.translationMaxRetries = 3;
     mocks.config.translationBackoffBaseMs = 1000;
@@ -151,7 +146,6 @@ describe('translation API request lifecycle performance', () => {
     mocks.config.nativeBatchTranslationEnabled = {};
     mocks.config.service = 'mock';
     mocks.config.disabledTranslationServices = [];
-    mocks.config.videoService = 'mock';
     mocks.config.compositeTranslationProviders = [];
     mocks.config.aiRequestTimeoutMs = undefined;
     mocks.config.from = 'en';
@@ -161,7 +155,7 @@ describe('translation API request lifecycle performance', () => {
     mocks.config.model['mock-ai'] = 'mock-ai-model';
     mocks.config.model.chromeTranslator = 'chrome-built-in';
     Object.defineProperty(globalThis, 'document', {
-      value: {title: 'Fixture video title'},
+      value: {title: 'Fixture page title'},
       configurable: true,
     });
     Object.defineProperty(globalThis, 'location', {
@@ -201,10 +195,9 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.sendMessage.mock.calls[0][0]).toMatchObject({requestTimeoutMs: timeout});
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s AI 默认允许超过 45 秒响应，并完整提供 120 秒后台预算', async kind => {
+  it.each(['single', 'batch'] as const)('%s AI 默认允许超过 45 秒响应，并完整提供 120 秒后台预算', async kind => {
     mocks.config.service = 'mock-ai';
-    mocks.config.videoService = 'mock-ai';
-    const transport = deferred<string | string[]>();
+      const transport = deferred<string | string[]>();
     mocks.sendMessage.mockReturnValue(transport.promise);
     const request = contextGateRequest(kind);
     await flushMicrotasks();
@@ -214,10 +207,9 @@ describe('translation API request lifecycle performance', () => {
     await expect(request).resolves.toEqual(kind === 'batch' ? ['缓慢模型译文'] : '缓慢模型译文');
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s AI 在等待前冻结用户预算，外层只增加一秒收取后台结果', async kind => {
+  it.each(['single', 'batch'] as const)('%s AI 在等待前冻结用户预算，外层只增加一秒收取后台结果', async kind => {
     mocks.config.service = 'mock-ai';
-    mocks.config.videoService = 'mock-ai';
-    mocks.config.translationMaxRetries = 0;
+      mocks.config.translationMaxRetries = 0;
     mocks.config.aiRequestTimeoutMs = 180_000;
     mocks.config.enableAIContext = true;
     const context = deferred<string>();
@@ -256,34 +248,31 @@ describe('translation API request lifecycle performance', () => {
     transport.resolve(kind === 'batch' ? ['迟到译文'] : '迟到译文');
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 机器翻译保持原默认预算', async kind => {
+  it.each(['single', 'batch'] as const)('%s 机器翻译保持原默认预算', async kind => {
     mocks.config.aiRequestTimeoutMs = 600_000;
     mocks.sendMessage.mockResolvedValue(kind === 'batch' ? ['机器译文'] : '机器译文');
     await contextGateRequest(kind);
-    expect(mocks.sendMessage.mock.calls[0][0]).toMatchObject({requestTimeoutMs: kind === 'video' ? 19_000 : 44_000});
+    expect(mocks.sendMessage.mock.calls[0][0]).toMatchObject({requestTimeoutMs: 44_000});
   });
 
-  it.each(['single', 'batch', 'video'] as const)('术语版本和选择在 %s 的上下文提取前冻结', async kind => {
+  it.each(['single', 'batch'] as const)('术语版本和选择在 %s 的上下文提取前冻结', async kind => {
     mocks.config.service = 'mock-ai';
-    mocks.config.videoService = 'mock-ai';
-    mocks.config.enableAIContext = true;
+      mocks.config.enableAIContext = true;
     mocks.config.glossaryEnabled = true;
     mocks.config.glossaryLibraries = [{id: 'technical', name: 'Technical', enabled: true,
       sourceLanguage: '', targetLanguage: '', domains: [], entries: [{id: 'term', source: 'agent', target: '智能体', caseSensitive: false}]}];
     const ids = ['technical'];
-    mocks.config.videoGlossaryIds = ids;
     const revision = buildGlossaryRevision(mocks.config.glossaryLibraries, true);
     const context = deferred<string>();
     mocks.getPageTranslationContext.mockReturnValue(context.promise);
     mocks.sendMessage.mockResolvedValue(kind === 'batch' ? ['译文'] : '译文');
     const request = kind === 'single' ? translateText('agent', 'Page', {glossaryIds: ids})
-      : kind === 'batch' ? translateTextBatch(['agent'], 'Page', {glossaryIds: ids}) : translateVideoText('agent');
+      : translateTextBatch(['agent'], 'Page', {glossaryIds: ids});
     ids.push('changed');
     mocks.config.glossaryLibraries[0].entries[0].target = '代理人';
     context.resolve('page context');
     await request;
-    expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({glossaryIds: ['technical'], glossaryRevision: revision,
-      ...(kind === 'video' ? {glossaryContext: 'video'} : {})}));
+    expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({glossaryIds: ['technical'], glossaryRevision: revision}));
   });
 
   it('重试保持术语快照，版本更新错误不进行自动重试', async () => {
@@ -420,7 +409,8 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.config.model['mock-ai']).toBe('mock-ai-model');
   });
 
-  it.each(['chromeTranslator', 'localTranslation'])('仅为本地 %s auto 转发纯检测样本', async (service) => {
+  it('仅为本地 chromeTranslator auto 转发纯检测样本', async () => {
+    const service = 'chromeTranslator';
     mocks.sendMessage.mockResolvedValue('译文');
     const markedText = '___FLUENTREAD_test_0_BEGIN___\nBonjour\n___FLUENTREAD_test_0_END___';
 
@@ -452,26 +442,25 @@ describe('translation API request lifecycle performance', () => {
       serviceOverride: service,
       sourceLanguage: 'auto',
       sourceLanguageDetectionText: 'Bonjour',
-      requestTimeoutMs: service === 'chromeTranslator' ? 299_000 : 44_000,
+      requestTimeoutMs: 299_000,
     });
     expect(chromeExplicit).not.toHaveProperty('sourceLanguageDetectionText');
     expect(cloudAuto).not.toHaveProperty('sourceLanguageDetectionText');
-    expect(chromeExplicit).toMatchObject({requestTimeoutMs: service === 'chromeTranslator' ? 299_000 : 44_000});
+    expect(chromeExplicit).toMatchObject({requestTimeoutMs: 299_000});
     expect(cloudAuto).toMatchObject({requestTimeoutMs: 44_000});
   });
 
-  it.each(['single', 'batch', 'video'] as const)('原生合批偏好在 %s 入队前冻结，服务设置变更只影响新调用', async kind => {
+  it.each(['single', 'batch'] as const)('原生合批偏好在 %s 入队前冻结，服务设置变更只影响新调用', async kind => {
     mocks.config.maxConcurrentTranslations = 1;
     mocks.config.service = 'google';
-    mocks.config.videoService = 'google';
     mocks.config.nativeBatchTranslationEnabled = {google: false};
     const blocker = deferred<string>();
     mocks.sendMessage.mockImplementation(({origin}: {origin: string | string[]}) => origin === 'Blocking source'
       ? blocker.promise : Promise.resolve(Array.isArray(origin) ? origin.map(() => '译文') : '译文'));
     const first = translateText('Blocking source');
     await vi.waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledOnce());
-    const queued = kind === 'single' ? translateText('Queued source') : kind === 'batch'
-      ? translateTextBatch(['Queued source']) : translateVideoText('Queued source');
+    const queued = kind === 'single' ? translateText('Queued source')
+      : translateTextBatch(['Queued source']);
     mocks.config.nativeBatchTranslationEnabled.google = true;
     blocker.resolve('阻塞译文');
     await first;
@@ -520,41 +509,6 @@ describe('translation API request lifecycle performance', () => {
         targetLanguage: 'zh-Hans',
       }),
     ]);
-  });
-
-  it('视频请求在排队前冻结视频服务、模型与语言', async () => {
-    mocks.config.maxConcurrentTranslations = 1;
-    const blocker = deferred<string>();
-    mocks.sendMessage
-      .mockImplementationOnce(() => blocker.promise)
-      .mockResolvedValueOnce('字幕译文');
-
-    const first = translateText('Blocking source', 'Context', {maxRetries: 0});
-    await vi.waitFor(() => expect(mocks.sendMessage).toHaveBeenCalledTimes(1));
-    mocks.config.videoService = 'mock-ai';
-    mocks.config.model['mock-ai'] = 'video-model';
-    mocks.config.from = 'en';
-    mocks.config.to = 'ja';
-    const video = translateVideoText('Queued subtitle');
-    await Promise.resolve();
-
-    mocks.config.videoService = 'mock';
-    mocks.config.model['mock-ai'] = 'changed-video-model';
-    mocks.config.from = 'de';
-    mocks.config.to = 'fr';
-    mocks.config.useCache = false;
-    blocker.resolve('阻塞请求译文');
-
-    await expect(first).resolves.toBe('阻塞请求译文');
-    await expect(video).resolves.toBe('字幕译文');
-    expect(mocks.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
-      origin: 'Queued subtitle',
-      serviceOverride: 'mock-ai',
-      modelOverride: 'video-model',
-      sourceLanguage: 'en',
-      targetLanguage: 'ja',
-      useCache: true,
-    }));
   });
 
   it('lets migrated AI SDK services own retries and restores structured error details', async () => {
@@ -611,14 +565,12 @@ describe('translation API request lifecycle performance', () => {
   });
 
   it.each(['freeTranslation', 'google'].flatMap(service =>
-    ['single', 'batch', 'video'].map(kind => ({service, kind})),
+    ['single', 'batch'].map(kind => ({service, kind})),
   ))('$service 的 $kind 内部换线后不再重跑候选池', async ({service, kind}) => {
     mocks.config.service = service;
-    mocks.config.videoService = service;
     mocks.sendMessage.mockRejectedValue(new Error('candidate pool exhausted'));
     const request = kind === 'single' ? translateText('Readable source', 'Context', {maxRetries: 3})
-      : kind === 'batch' ? translateTextBatch(['First source', 'Second source'], 'Context', {maxRetries: 3})
-      : translateVideoText('Readable subtitle');
+      : translateTextBatch(['First source', 'Second source'], 'Context', {maxRetries: 3});
     await expect(request).rejects.toThrow('candidate pool exhausted');
     await vi.advanceTimersByTimeAsync(30_000);
     expect(mocks.sendMessage).toHaveBeenCalledOnce();
@@ -683,7 +635,7 @@ describe('translation API request lifecycle performance', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s abort immediately rejects queued work before transport starts', async kind => {
+  it.each(['single', 'batch'] as const)('%s abort immediately rejects queued work before transport starts', async kind => {
     mocks.config.maxConcurrentTranslations = 1;
     const gate = deferred<string>();
     mocks.sendMessage.mockReturnValueOnce(gate.promise);
@@ -728,7 +680,7 @@ describe('translation API request lifecycle performance', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(['single', 'batch', 'video'].flatMap(kind => (
+  it.each(['single', 'batch'].flatMap(kind => (
     ['success', 'failure'].map(late => ({kind: kind as ContextClient, late}))
   )))('$kind 在自动上下文 gate 尚未放行时立即取消，并观察迟到的 $late', async ({kind, late}) => {
     enableContextGate();
@@ -773,7 +725,7 @@ describe('translation API request lifecycle performance', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 的 context gate 取消不影响共享 gate 的另一 caller', async kind => {
+  it.each(['single', 'batch'] as const)('%s 的 context gate 取消不影响共享 gate 的另一 caller', async kind => {
     enableContextGate();
     mocks.config.maxConcurrentTranslations = 1;
     const gate = deferred<string>();
@@ -807,7 +759,7 @@ describe('translation API request lifecycle performance', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 的提前取消不提取自动上下文或发送消息', async kind => {
+  it.each(['single', 'batch'] as const)('%s 的提前取消不提取自动上下文或发送消息', async kind => {
     enableContextGate();
     const controller = new AbortController();
     controller.abort();
@@ -850,7 +802,7 @@ describe('translation API request lifecycle performance', () => {
     }
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 无 signal 的自动上下文仍正常等待与完成', async kind => {
+  it.each(['single', 'batch'] as const)('%s 无 signal 的自动上下文仍正常等待与完成', async kind => {
     enableContextGate();
     const gate = deferred<string>();
     mocks.getPageTranslationContext.mockReturnValue(gate.promise);
@@ -870,7 +822,7 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({pageContext: 'Uncancelled page context'}));
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 不支持 AI 上下文的服务不启动 gate', async kind => {
+  it.each(['single', 'batch'] as const)('%s 不支持 AI 上下文的服务不启动 gate', async kind => {
     mocks.config.enableAIContext = true;
     const gate = deferred<string>();
     mocks.getPageTranslationContext.mockReturnValue(gate.promise);
@@ -887,7 +839,7 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({pageContext: undefined}));
   });
 
-  it.each(['single', 'batch', 'video'].flatMap(kind => (
+  it.each(['single', 'batch'].flatMap(kind => (
     ['abort-first', 'context-first'].flatMap(order => (
       ['success', 'failure'].map(settlement => ({kind: kind as ContextClient, order, settlement}))
     ))
@@ -920,7 +872,7 @@ describe('translation API request lifecycle performance', () => {
     }
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 的 context extractor 同步取消后返回的 promise 仍观察迟到失败', async kind => {
+  it.each(['single', 'batch'] as const)('%s 的 context extractor 同步取消后返回的 promise 仍观察迟到失败', async kind => {
     enableContextGate();
     const gate = deferred<string>();
     const controller = new AbortController();
@@ -1010,7 +962,7 @@ describe('translation API request lifecycle performance', () => {
     }
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 在本地队列等待时取消立即结束且不发送后台消息', async kind => {
+  it.each(['single', 'batch'] as const)('%s 在本地队列等待时取消立即结束且不发送后台消息', async kind => {
     mocks.config.maxConcurrentTranslations = 1;
     const blocker = deferred<string>();
     mocks.sendMessage.mockReturnValue(blocker.promise);
@@ -1018,9 +970,8 @@ describe('translation API request lifecycle performance', () => {
     await flushMicrotasks(40);
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     const controller = new AbortController();
-    const pending = kind === 'video' ? translateVideoText('Queued readable source', controller.signal)
-      : kind === 'batch' ? translateTextBatch(['Queued readable source'], 'Page', {signal: controller.signal, maxRetries: 0, skipLanguageDetection: true})
-        : translateText('Queued readable source', 'Page', {signal: controller.signal, maxRetries: 0, skipLanguageDetection: true});
+    const pending = kind === 'batch' ? translateTextBatch(['Queued readable source'], 'Page', {signal: controller.signal, maxRetries: 0, skipLanguageDetection: true})
+      : translateText('Queued readable source', 'Page', {signal: controller.signal, maxRetries: 0, skipLanguageDetection: true});
     const observed = vi.fn();
     const outcome = pending.then(value => observed('resolved', value), error => observed('rejected', error));
     try {
@@ -1036,7 +987,7 @@ describe('translation API request lifecycle performance', () => {
     }
   });
 
-  it.each(['chrome-text', 'text', 'batch', 'video'])('%s abort 发送精确 cancel，中止后台 broker signal 并及时释放前台队列', async (client) => {
+  it.each(['chrome-text', 'text', 'batch'])('%s abort 发送精确 cancel，中止后台 broker signal 并及时释放前台队列', async (client) => {
     mocks.config.maxConcurrentTranslations = 1;
     const registry = createTranslationRequestRegistry();
     const cancel = createTranslationCancelHandler(registry);
@@ -1063,8 +1014,7 @@ describe('translation API request lifecycle performance', () => {
     ));
     const controller = new AbortController();
     const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
-    const first = client === 'video' ? translateVideoText('First readable source', controller.signal)
-      : client === 'batch' ? translateTextBatch(['First readable source'], 'Context', {signal: controller.signal, maxRetries: 0})
+    const first = client === 'batch' ? translateTextBatch(['First readable source'], 'Context', {signal: controller.signal, maxRetries: 0})
       : translateText('First readable source', 'Context', {
       signal: controller.signal,
       maxRetries: 0,
@@ -1083,7 +1033,7 @@ describe('translation API request lifecycle performance', () => {
       clientRequestId: firstRequest.clientRequestId,
     });
 
-    const second = client === 'video' ? translateVideoText('Second readable source') : translateText('Second readable source', 'Context', {maxRetries: 0});
+    const second = translateText('Second readable source', 'Context', {maxRetries: 0});
     await expect(second).resolves.toBe('第二段译文');
     expect(translate).toHaveBeenCalledTimes(2);
   });
@@ -1198,10 +1148,9 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.config.enableAIContext).toBe(true);
   });
 
-  it.each(['single', 'batch', 'video'] as const)('%s 组合中的通用 AI 成员保留页面上下文，纯机器组合不提取', async kind => {
+  it.each(['single', 'batch'] as const)('%s 组合中的通用 AI 成员保留页面上下文，纯机器组合不提取', async kind => {
     mocks.config.enableAIContext = true;
     mocks.config.service = 'composite:context';
-    mocks.config.videoService = 'composite:context';
     mocks.config.compositeTranslationProviders = [{id: 'composite:context', name: '上下文组合', strategy: 'sequential', services: ['mock', 'mock-ai'], timeoutMs: 12_000}];
     mocks.getPageTranslationContext.mockResolvedValue('Combined page context');
     mocks.sendMessage.mockImplementation(({origin}: {origin: string | string[]}) => Promise.resolve(Array.isArray(origin) ? ['译文'] : '译文'));
@@ -1245,57 +1194,9 @@ describe('translation API request lifecycle performance', () => {
   });
 
 
-  it('video requests inherit the current webpage service and model while preserving an explicit override', async () => {
-    mocks.config.videoService = '';
-    mocks.config.service = 'mock-ai';
-    mocks.sendMessage.mockResolvedValue('字幕译文');
-    await translateVideoText('Inherited subtitle source');
-    expect(mocks.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({serviceOverride: 'mock-ai', modelOverride: 'mock-ai-model'}));
-    mocks.config.service = 'mock';
-    mocks.config.videoService = 'mock-ai';
-    await translateVideoText('Independent subtitle source');
-    expect(mocks.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({serviceOverride: 'mock-ai', modelOverride: 'mock-ai-model'}));
-  });
-
-  it('uses independent video source language without changing webpage language', async () => {
-    mocks.sendMessage.mockResolvedValue('今天是个好日子。');
-    await expect(translateVideoText('오늘은 좋은 날입니다.', undefined, 'auto')).resolves.toBe('今天是个好日子。');
-    expect(mocks.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({sourceLanguage: 'auto', origin: '오늘은 좋은 날입니다.'}));
-    await translateVideoText('안녕하세요.', undefined, 'ko');
-    expect(mocks.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({sourceLanguage: 'ko'}));
-    expect(mocks.config.from).toBe('en');
-  });
-
-  it('uses the video AI service when resolving and sending page context', async () => {
-    mocks.config.enableAIContext = true;
-    mocks.config.videoService = 'mock-ai';
-    const pageContext = 'Page title: Fixture video title\nReadable page context for subtitle terminology.';
-    mocks.getPageTranslationContext.mockResolvedValue(pageContext);
-    mocks.sendMessage.mockResolvedValue('字幕译文');
-
-    await expect(translateVideoText('A subtitle source')).resolves.toBe('字幕译文');
-
-    expect(mocks.getPageTranslationContext).toHaveBeenCalledTimes(1);
-    expect(mocks.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      context: '视频字幕：Fixture video title',
-      pageContext,
-      origin: 'A subtitle source',
-      useCache: true,
-      serviceOverride: 'mock-ai',
-      modelOverride: 'mock-ai-model',
-      thinkingOverride: false,
-      sourceLanguage: 'en',
-      targetLanguage: 'zh-Hans',
-      requestTimeoutMs: 120_000,
-    }));
-    expect(mocks.sendMessage.mock.calls[0]?.[0].clientRequestId).toEqual(expect.any(String));
-  });
-
   it('空来源及空批次保持本地结果，不启动消息或完成计数', async () => {
     await expect(translateText(undefined as never)).resolves.toBe('');
     await expect(translateTextBatch([])).resolves.toEqual([]);
-    await expect(translateVideoText(undefined as never)).resolves.toBe('');
-    await expect(translateVideoText(' 	')).resolves.toBe(' 	');
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     expect(mocks.persistCountIncrement).not.toHaveBeenCalled();
   });
@@ -1378,35 +1279,6 @@ describe('translation API request lifecycle performance', () => {
     expect(mocks.sendMessage.mock.calls[0][0].pageContext).toBeUndefined();
   });
 
-  it('视频请求在无document环境仍保留字幕与语言，短暂故障按统一策略重试', async () => {
-    Object.defineProperty(globalThis, 'document', {value: undefined, configurable: true});
-    mocks.sendMessage.mockRejectedValueOnce(new Error('temporary network failure')).mockResolvedValueOnce('字幕译文');
-    const request = translateVideoText('Subtitle source');
-    await flushMicrotasks();
-    expect(mocks.sendMessage).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(1000);
-    await expect(request).resolves.toBe('字幕译文');
-    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
-    expect(mocks.sendMessage.mock.calls[1][0]).toMatchObject({context: '视频字幕：', origin: 'Subtitle source', sourceLanguage: 'en'});
-  });
-
-  it('视频完成计数写入失败后复用操作身份恢复，不使已完成翻译失败', async () => {
-    const error = new Error('storage temporarily unavailable');
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      mocks.sendMessage.mockResolvedValue('字幕译文');
-      mocks.persistCountIncrement.mockRejectedValueOnce(error).mockResolvedValue(1);
-      await expect(translateVideoText('Subtitle source')).resolves.toBe('字幕译文');
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(log).toHaveBeenCalledWith('[FluentRead] 保存视频翻译计数失败:', error);
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(mocks.persistCountIncrement).toHaveBeenCalledTimes(2);
-      expect(mocks.persistCountIncrement.mock.calls[0][2]).toBe(mocks.persistCountIncrement.mock.calls[1][2]);
-    } finally {
-      log.mockRestore();
-    }
-  });
-
   it.each(['random-throws', 'crypto-missing', 'uuid-missing'] as const)('随机API %s 时请求身份仍唯一，取消沿用各自身份', async mode => {
     const originalCrypto = globalThis.crypto;
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -1426,7 +1298,7 @@ describe('translation API request lifecycle performance', () => {
       await flushMicrotasks();
       await vi.advanceTimersByTimeAsync(0);
       await expect(first).resolves.toBe('译文');
-      await client.translateVideoText('Second fallback source');
+      await client.translateText('Second fallback source', 'Page', {signal: new AbortController().signal, maxRetries: 0});
       const requestIds = mocks.sendMessage.mock.calls.map(([message]) => message.clientRequestId);
       expect(requestIds).toHaveLength(3);
       expect(new Set(requestIds).size).toBe(3);

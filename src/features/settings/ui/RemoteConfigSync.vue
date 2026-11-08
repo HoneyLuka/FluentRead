@@ -1,13 +1,13 @@
 <!--
 @file src/features/settings/ui/RemoteConfigSync.vue
-文件职责：用清晰的保存、恢复与逐项合并流程完成Google Drive 与 WebDAV 共用的配置云备份。
+文件职责：用清晰的保存、恢复与逐项合并流程完成 Google Drive 配置云备份。
 主要内容：以同级选项展示始终同步且不可关闭的基础配置与默认关闭的敏感配置；敏感配置须明确同意，选择在本机持续保存直到手动关闭。
 预览说明旧备份范围和恢复保护，不在选项区重复展示范围摘要与恢复提示。
 风险确认集中展示存储方式、泄露风险与持续生效的选择；删除确认将云端删除范围、本机保留说明与加粗的确认词合入同一个提示块，输入框紧接其后；次要说明在独立浮层展示，避免展开时改变弹窗与按钮位置。
 删除前须输入本次界面语言的确认文本，再点击确认；只删除已核验版本的备份文件，并保留本机配置。
 删除入口在核验和删除请求期间显示加载动画，完成或失败后恢复；同步操作不触发删除动画。
 通过左侧操作插槽集中显示同步与连接设置，右侧记录插槽统一显示账号和时间，窄屏改为上下排列；预览顶部一行显示本次账号、同步范围标签（说明收在悬停提示里）和更换账号入口；按两步流程说明影响范围，
-先选择操作再确认影响，确认页把方向、差异数量与一句影响说明合并在标题下，没有差异时不显示展开按钮和空列表，只有存在被隐藏内容的条目才提示“已隐藏”；WebDAV 内容核验兼容模式提示避免多设备同时同步，仍保留只读供应商的恢复限制；默认展示差异与连接变更类别，小屏保留操作区。
+先选择操作再确认影响，确认页把方向、差异数量与一句影响说明合并在标题下，没有差异时不显示展开按钮和空列表，只有存在被隐藏内容的条目才提示“已隐藏”；默认展示差异与连接变更类别，小屏保留操作区。
 Drive 已上传但未完成核验时单独显示警示，不误报未上传，也不更新成功记录。
 模块边界：只消费后台脱敏预览和同步记录；不获取完整配置、令牌或用户口令，由父级提供存储方式和客户端。
 -->
@@ -42,7 +42,7 @@ Drive 已上传但未完成核验时单独显示警示，不误报未上传，�
     <div v-if="status?.available" class="cloud-delete-entry"><el-button link type="danger" :loading="deleting" :aria-busy="deleting" :disabled="busy || previewVisible || consentVisible || deleteVisible" :data-testid="`${kind}-delete-backup`" @click="prepareDeletion"><el-icon v-if="!deleting"><Delete /></el-icon>{{ t('settings.cloud.deleteBackup') }}</el-button></div>
     <el-dialog v-model="deleteVisible" class="cloud-delete-dialog cloud-compact-dialog fluentread-cloud-sync-dialog" :title="t(deletion?.hasRemote ? 'settings.cloud.deleteTitle' : 'settings.cloud.deleteAbsent')" width="min(480px, calc(100vw - 24px))" :close-on-click-modal="!busy" :close-on-press-escape="!busy" :show-close="!busy" :before-close="cancelDeletion" destroy-on-close @closed="deletion = null">
       <template v-if="deletion">
-        <div class="cloud-delete-account"><div class="cloud-delete-target"><strong><slot name="delete-account">{{ deletion.account.email || t('settings.cloud.selectedAccount') }}</slot></strong><slot name="delete-location" /></div><el-button v-if="kind === 'google-drive'" link :disabled="busy" data-testid="google-drive-delete-switch-account" @click="changeDeletionAccount">{{ t('settings.cloud.changeAccount') }}</el-button></div>
+        <div class="cloud-delete-account"><div class="cloud-delete-target"><strong><slot name="delete-account">{{ deletion.account.email || t('settings.cloud.selectedAccount') }}</slot></strong><slot name="delete-location" /></div><el-button link :disabled="busy" data-testid="google-drive-delete-switch-account" @click="changeDeletionAccount">{{ t('settings.cloud.changeAccount') }}</el-button></div>
         <div v-if="deletion.hasRemote" class="cloud-delete-impact" data-testid="cloud-delete-impact">
           <el-icon><Warning /></el-icon>
           <div class="cloud-delete-impact-content">
@@ -54,8 +54,7 @@ Drive 已上传但未完成核验时单独显示警示，不误报未上传，�
         <div v-if="deletion.hasRemote && deletion.canDelete" class="cloud-delete-verification" data-testid="cloud-delete-verification">
           <el-input :id="`${kind}-delete-verification`" v-model="deleteConfirmation" :placeholder="t('settings.cloud.deleteVerification', {phrase: t('settings.cloud.deletePhrase')})" :aria-label="t('settings.cloud.deleteVerification', {phrase: t('settings.cloud.deletePhrase')})" :aria-describedby="`${kind}-delete-instruction`" :disabled="busy" :maxlength="64" autocomplete="off" :spellcheck="false" @keydown.enter.prevent />
         </div>
-        <el-alert v-if="deletion.hasRemote && !deletion.canDelete" :title="t('settings.cloud.deleteUnsupported')" :description="t(kind === 'google-drive' ? 'settings.cloud.deleteManualDrive' : 'settings.cloud.deleteManualWebDav')" type="warning" :closable="false" show-icon data-testid="cloud-delete-unsupported" />
-        <el-alert v-else-if="deletion.requiresExclusiveAccess" :title="t('settings.webdav.concurrentWarning')" type="warning" :closable="false" show-icon data-testid="webdav-delete-compatibility" />
+        <el-alert v-if="deletion.hasRemote && !deletion.canDelete" :title="t('settings.cloud.deleteUnsupported')" :description="t('settings.cloud.deleteManualDrive')" type="warning" :closable="false" show-icon data-testid="cloud-delete-unsupported" />
       </template>
       <template #footer><div class="cloud-delete-footer">
         <el-popover v-if="deletion?.hasRemote" v-model:visible="deleteDetailsVisible" role="dialog" :title="t('settings.cloud.deleteDetails')" trigger="click" placement="top-start" width="min(320px, calc(100vw - 40px))" :persistent="false" :hide-after="0" popper-class="fluentread-cloud-delete-help">
@@ -77,13 +76,12 @@ Drive 已上传但未完成核验时单独显示警示，不误报未上传，�
           <el-icon class="drive-account-icon"><User /></el-icon>
           <p>{{ preview.account.email ? t('settings.drive.account', {email: preview.account.email}) : t('settings.drive.selectedAccount') }}</p>
           <span class="cloud-preview-scope" role="status" data-testid="cloud-preview-scope" :title="t(preview.includeSensitive ? 'settings.cloud.previewSensitive' : 'settings.cloud.preserveLocal')" :aria-label="`${t(preview.includeSensitive ? 'settings.cloud.scopeSensitive' : 'settings.cloud.scopeSettings')}：${t(preview.includeSensitive ? 'settings.cloud.previewSensitive' : 'settings.cloud.preserveLocal')}`"><strong>{{ t(preview.includeSensitive ? 'settings.cloud.scopeSensitive' : 'settings.cloud.scopeSettings') }}</strong></span>
-          <el-button v-if="kind === 'google-drive'" link :loading="switchingAccount" :disabled="busy" :data-testid="`${kind}-switch-account`" @click="switchAccount">{{ t('settings.drive.switchAccount') }}</el-button>
+          <el-button link :loading="switchingAccount" :disabled="busy" :data-testid="`${kind}-switch-account`" @click="switchAccount">{{ t('settings.drive.switchAccount') }}</el-button>
         </div>
         <el-alert v-if="preview.remoteIncludesSensitive && !preview.includeSensitive" :title="t('settings.cloud.legacySensitive')" type="warning" :closable="false" show-icon class="drive-error drive-preview-notice" data-testid="cloud-legacy-sensitive" />
         <el-alert v-else-if="preview.hasRemote && preview.includeSensitive && !preview.remoteIncludesSensitive" :title="t('settings.cloud.remoteSettingsOnly')" type="info" :closable="false" show-icon class="drive-error drive-preview-notice" />
         <el-alert v-if="error" :title="error" :type="uploadUnverified ? 'warning' : 'error'" :closable="false" show-icon class="drive-error drive-preview-notice" />
         <el-alert v-if="preview.canUpload === false" :title="t('settings.cloud.restoreOnly')" type="warning" :closable="false" show-icon class="drive-error drive-preview-notice" :data-testid="`${kind}-restore-only`" />
-        <el-alert v-else-if="preview.requiresExclusiveAccess" :title="t('settings.webdav.concurrentWarning')" type="warning" :closable="false" show-icon class="drive-error drive-preview-notice" data-testid="webdav-sync-compatibility" />
 
         <ol v-if="preview.hasRemote && !identical && preview.canUpload !== false" class="drive-steps" :aria-label="t('settings.drive.stepsLabel')">
           <li :class="{'is-current': step === 'choose'}" :aria-current="step === 'choose' ? 'step' : undefined"><span>1</span>{{ t('settings.drive.chooseStep') }}</li>
@@ -185,7 +183,7 @@ import type {DriveChoice} from '@/src/core/config/driveSync';
 import type {DriveSyncDirection, DriveSyncPreview, DriveSyncStatus} from '@/src/services/config/googleDriveSync';
 import type {CloudBackupDeletePreview} from '@/src/services/config/remoteConfigSync';
 
-const props = defineProps<{client: Pick<ReturnType<typeof createCloudBackupClient>, 'status' | 'prepare' | 'commit' | 'cancel' | 'prepareDelete' | 'commitDelete'>; provider: string; kind: 'google-drive' | 'webdav'}>();
+const props = defineProps<{client: Pick<ReturnType<typeof createCloudBackupClient>, 'status' | 'prepare' | 'commit' | 'cancel' | 'prepareDelete' | 'commitDelete'>; provider: string; kind: 'google-drive'}>();
 const emit = defineEmits<{busy: [value: boolean]}>();
 const {t: baseT, translateLegacy, language} = useUiI18n();
 const client = props.client;

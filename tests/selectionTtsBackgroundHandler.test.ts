@@ -682,7 +682,7 @@ describe('selection TTS background handlers', () => {
             text: 'hello',
             language: 'en-US',
             clientRequestId: 'google-page-unavailable',
-        }, {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-vocabulary'}})).resolves.toEqual({
+        }, {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-selection'}})).resolves.toEqual({
             handled: true,
             response: {success: false, error: '扩展页面 Google TTS 不可用'},
         });
@@ -704,7 +704,7 @@ describe('selection TTS background handlers', () => {
         });
         const {router, dependencies} = createSubject({fetchPageAudio});
         await expect(router.dispatch({type: SELECTION_TTS_GOOGLE_MESSAGE_TYPE, text: 'hello', language: 'en-US', clientRequestId: 'google-page'},
-            {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-vocabulary'}})).resolves.toEqual({
+            {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-selection'}})).resolves.toEqual({
                 handled: true,
                 response: {success: true, transport: 'page', audioBase64: 'BAUG', contentType: 'audio/mpeg', voice: 'Google TTS'},
             });
@@ -716,7 +716,7 @@ describe('selection TTS background handlers', () => {
         const fetchPageAudio = vi.fn(async () => {throw new Error('Google TTS failed: 503 Service Unavailable');});
         const {router} = createSubject({fetchPageAudio});
         await expect(router.dispatch({type: SELECTION_TTS_GOOGLE_MESSAGE_TYPE, text: 'hello', language: 'en-US', clientRequestId: 'google-page-error'},
-            {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-vocabulary'}})).resolves.toEqual({
+            {sender: {url: 'chrome-extension://controlled-extension/options.html#settings-selection'}})).resolves.toEqual({
                 handled: true,
                 response: {success: false, error: 'Google TTS failed: 503 Service Unavailable'},
             });
@@ -724,7 +724,7 @@ describe('selection TTS background handlers', () => {
     });
 
     it('Google TTS 扩展页面请求途中被停止时丢弃迟到的音频', async () => {
-        const pageUrl = 'chrome-extension://controlled-extension/options.html#settings-vocabulary';
+        const pageUrl = 'chrome-extension://controlled-extension/options.html#settings-selection';
         const fetchPageAudio = vi.fn(() => page.promise);
         const page = deferred<{audio: ArrayBuffer; contentType: string}>();
         const {router} = createSubject({fetchPageAudio});
@@ -801,24 +801,22 @@ describe('selection TTS metadata and progress routing', () => {
 
     it.each([
         ['missing', undefined], ['empty', []], ['timed', timings],
-    ] as const)('forwards trimmed text and %s local timings through the synthesis policy into playback', async (_kind, cues) => {
-        const local = vi.fn(async () => ({
+    ] as const)('forwards trimmed text and %s online timings through the synthesis policy into playback', async (_kind, cues) => {
+        const online = vi.fn(async () => ({
             audio: new Uint8Array([1, 2, 3]).buffer,
             contentType: 'audio/wav' as const,
             voice: 'zf_001',
             ...(cues === undefined ? {} : {timings: [...cues]}),
         }));
-        const online = vi.fn(async () => audio());
         const synthesize = createSelectionTtsSynthesizer({
-            getMode: () => 'local-only', getLocalVoice: () => 'zf_001', getOnlineVoices: () => [],
-            synthesizeLocal: local, synthesizeOnline: online,
+            getOnlineVoices: () => [],
+            synthesizeOnline: online,
         });
         const {dependencies, router} = createSubject({synthesize});
         await expect(router.dispatch(playMessage, context)).resolves.toEqual({
             handled: true, response: {success: true, transport: 'offscreen', voice: 'zf_001'},
         });
-        expect(local).toHaveBeenCalledWith('hello', 'en-US', 'zf_001', expect.any(AbortSignal));
-        expect(online).not.toHaveBeenCalled();
+        expect(online).toHaveBeenCalledWith('hello', 'en-US', [], expect.any(AbortSignal));
         expect(dependencies.playWithOffscreen).toHaveBeenCalledWith({
             audioBase64: 'AQID', text: 'hello', contentType: 'audio/wav', ...originalRoute,
             ...(cues === undefined ? {} : {timings: [...cues]}),

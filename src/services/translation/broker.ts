@@ -62,7 +62,6 @@ import {resolveTranslationRequestModel} from '@/src/core/config/requestModel';
 import {isValidInlineCodeSource, isValidInlineCodeTranslation} from '@/src/core/translation/inlineCodeMarkers';
 import {getServiceApiKeys} from '@/src/core/config/apiKeys';
 import {isModelThinkingEnabled} from '@/src/core/config/modelThinking';
-import {supportsVisionTransport} from '@/src/core/config/vision';
 import {
     normalizeFreeTranslationOrder,
     normalizeFreeTranslationTimeoutMs,
@@ -1720,9 +1719,7 @@ export function createTranslationBroker(deps: TranslationBrokerDependencies): Tr
         if (imageInput && Array.isArray(message.origin) && message.origin.length > 0) {
             throw new Error('图片识别请求必须使用单条原文');
         }
-        const selectedModel = getSelectedModel(current, selectedService, message.modelOverride);
-        if (imageInput && (!deps.serviceTypes.isAI(selectedService)
-            || !supportsVisionTransport(selectedService, selectedModel))) {
+        if (imageInput && !deps.serviceTypes.isAI(selectedService)) {
             throw new Error('图片识别需要支持视觉输入的 AI 翻译服务');
         }
         const {sourceLanguage, targetLanguage} = deps.getTranslationLanguages({
@@ -1836,9 +1833,9 @@ export function createTranslationBroker(deps: TranslationBrokerDependencies): Tr
             : summarizedPageContext;
         const remainingProviderBudget = getRemainingDeadlineMs(providerDeadline);
 
-        // 步骤 3：检测样本只属于本地翻译 auto；即使其他扩展页面手工构造该字段，
+        // 步骤 3：检测样本只属于浏览器内置翻译 auto；即使其他扩展页面手工构造该字段，
         // 也不能让重复正文扩散到任何云端 provider。
-        const shouldCarryDetectionText = (selectedService === 'chromeTranslator' || selectedService === 'localTranslation')
+        const shouldCarryDetectionText = selectedService === 'chromeTranslator'
             && sourceLanguage === 'auto'
             && Boolean(message.sourceLanguageDetectionText?.trim());
         const {discourseContext: _rawDiscourse, subtitleContext: _rawSubtitle, ...withoutDiscourse} = message;

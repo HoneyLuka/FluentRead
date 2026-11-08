@@ -21,9 +21,7 @@ const { fetchMock, mockConfig } = vi.hoisted(() => ({
 vi.mock('@/src/services/config/store', () => ({ config: mockConfig }));
 
 import {translateWithOpenAICompatibleAiSdk} from '@/src/providers/translation/ai-sdk/openai-compatible';
-import {getFeatureModel, featureServiceDefinitions} from '@/src/core/config/featureServices';
 import {normalizeConfig} from '@/src/core/config/model';
-import {translateWithOpenAICompatibleAiSdk as standalone} from '@/userscript/openaiCompatible';
 import {customModelString, services } from '@/src/core/config/catalog';
 
 function successResponse() {
@@ -98,24 +96,18 @@ describe('MiMo 退役编号最终请求回归', () => {
         ['mimo-v2.5-pro', 'mimo-v2.6-pro'],
     ] as const;
 
-    it.each(retired)('历史自定义 %s 在网页和文档请求中更新，持久配置保持幂等', async (oldModel, nextModel) => {
+    it.each(retired)('历史自定义 %s 在网页请求中更新，持久配置保持幂等', async (oldModel, nextModel) => {
         const saved = normalizeConfig({
-            service: services.mimo, documentService: services.mimo,
+            service: services.mimo,
             model: {mimo: customModelString}, customModel: {mimo: oldModel},
-            documentModel: {mimo: customModelString}, documentCustomModel: {mimo: oldModel},
             customModels: {mimo: [oldModel]}, modelThinking: {mimo: {[oldModel]: true}},
             customBody: {mimo: JSON.stringify({thinking: {type: 'enabled'}, max_completion_tokens: 512})},
         });
         const original = JSON.stringify(saved);
-        for (const document of [false, true]) {
-            const modelOverride = document
-                ? getFeatureModel(saved, featureServiceDefinitions.find(feature => feature.id === 'document')!)
-                : undefined;
-            await translateWithOpenAICompatibleAiSdk(withProviderSnapshot({origin: 'hello', modelOverride}, saved));
-            expect(JSON.parse(fetchMock.mock.lastCall![1].body)).toMatchObject({
-                model: nextModel, thinking: {type: 'enabled'}, max_completion_tokens: 512,
-            });
-        }
+        await translateWithOpenAICompatibleAiSdk(withProviderSnapshot({origin: 'hello'}, saved));
+        expect(JSON.parse(fetchMock.mock.lastCall![1].body)).toMatchObject({
+            model: nextModel, thinking: {type: 'enabled'}, max_completion_tokens: 512,
+        });
         expect(JSON.stringify(saved)).toBe(original);
         expect(normalizeConfig(saved)).toEqual(saved);
     });
@@ -130,9 +122,8 @@ describe('MiMo 退役编号最终请求回归', () => {
         expect(JSON.parse(fetchMock.mock.lastCall![1].body)).toMatchObject({model: 'mimo-v2.6-pro', temperature: 0.4});
     });
 
-    it.each([['SDK', translateWithOpenAICompatibleAiSdk], ['standalone', standalone]] as const)
-    ('%s 自定义 OpenAI 服务直连官方时，覆盖模型也经过最终映射', async (_name, translate) => {
-        await translate(withProviderSnapshot({origin: 'hello', modelOverride: 'mimo-v2.5-pro'}, {
+    it('自定义 OpenAI 服务直连官方时，覆盖模型也经过最终映射', async () => {
+        await translateWithOpenAICompatibleAiSdk(withProviderSnapshot({origin: 'hello', modelOverride: 'mimo-v2.5-pro'}, {
             ...mockConfig, service: services.custom, custom: 'https://api.xiaomimimo.com/v1',
             model: {custom: 'mimo-v2.6-pro'}, customBody: {custom: '{"model":"mimo-v2.5"}'},
         }));
@@ -154,7 +145,7 @@ describe('MiMo 退役编号最终请求回归', () => {
 
     it.each(['mimo-v2.6-flash', 'mimo-v2.6-pro', 'private-mimo-v2.5', 'mimo-v2.5-preview'])
     ('官方端点不猜测其他模型 %s 的替代编号', async model => {
-        await standalone(withProviderSnapshot({origin: 'hello'}, {
+        await translateWithOpenAICompatibleAiSdk(withProviderSnapshot({origin: 'hello'}, {
             ...mockConfig, service: services.mimo, proxy: {},
             model: {mimo: customModelString}, customModel: {mimo: model},
         }));

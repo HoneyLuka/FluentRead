@@ -55,7 +55,6 @@ const runtime = vi.hoisted(() => ({
     retryCallbacks: [] as Array<() => void>,
     config: {
         on: true,
-        personalCorrectionsEnabled: false,
         service: "microsoft",
         hoverTranslationService: "",
         model: {microsoft: "microsoft-default", freeTranslation: "free-default"} as Record<string, string>,
@@ -98,12 +97,11 @@ vi.mock("@/src/core/config/catalog", async (importOriginal) => ({
         microsoft: "microsoft",
         freeTranslation: "freeTranslation",
         chromeTranslator: "chromeTranslator",
-        localTranslation: "localTranslation",
     },
     servicesType: {
         isUseAIContext: (service: string, model?: string) => service === 'ai' && model !== 'mt-only',
         isAI: (service: string) => service === 'ai',
-        isMachine: (service: string) => ['google', 'microsoft', 'freeTranslation', 'bilibili', 'chromeTranslator', 'localTranslation', 'youdao', 'deepL', 'azureTranslator', 'googleCloudTranslation'].includes(service),
+        isMachine: (service: string) => ['google', 'microsoft', 'freeTranslation', 'bilibili', 'chromeTranslator', 'youdao', 'deepL', 'azureTranslator', 'googleCloudTranslation'].includes(service),
     },
     resolveConfiguredModel: (selected?: string, custom?: string) => selected === 'custom'
         ? custom || ''
@@ -363,9 +361,7 @@ import {
 } from "@/src/features/full-page-translation/content/runtime";
 import {beginTranslation, getTranslationState} from "@/src/features/full-page-translation/content/state";
 import {resolveFullPageVisibilityAnchor} from '@/src/features/full-page-translation/content/visibilityAnchor';
-import * as personalCorrectionRuntime from '@/src/features/full-page-translation/content/personalCorrections';
 import * as hoverRemountRecovery from '@/src/features/full-page-translation/content/hoverRemountRecovery';
-import {personalCorrections} from '@/src/services/personal-corrections/public';
 import {syncPageTranslationDisplayMode} from '@/src/features/full-page-translation/content/displayMode';
 import {toggleTranslationSection} from '@/src/features/full-page-translation/content/sectionTranslation';
 import {createBilingualRemountCapitulationRegistry} from '@/src/features/full-page-translation/content/bilingualRemount';
@@ -566,7 +562,6 @@ describe("全文翻译可见性锚点", () => {
         runtime.cancelQueue.mockReset();
         runtime.retryCallbacks = [];
         runtime.config.on = true;
-        runtime.config.personalCorrectionsEnabled = false;
         runtime.config.service = "microsoft";
         runtime.config.model = {microsoft: "microsoft-default", freeTranslation: "free-default"};
         runtime.config.customModel = {};
@@ -2576,52 +2571,6 @@ describe("全文翻译可见性锚点", () => {
         } finally { spy.mockRestore(); }
     });
 
-    it.each(['changed', 'removed', 'context-only', 'cancelled'] as const)('重挂时个人校订 %s：新 owner 重查，取消不重试', async action => {
-        runtime.config.display = 1;
-        runtime.config.personalCorrectionsEnabled = true;
-        runtime.realSourceSnapshots = true;
-        replaceGlobal('location', {href: 'https://x.com/user/status/123'});
-        replaceGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0));
-        replaceGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
-        document.body.innerHTML = '<main><h2>Context heading</h2><article><p id="old">The original sentence stays the same.</p></article></main>';
-        const old = document.querySelector<HTMLElement>('#old')!;
-        setLayoutBox(old, 300, 40);
-        const replacement = old.cloneNode(true) as HTMLElement;
-        const candidate = {element: old, kind: 'content' as const, reason: 'post', scope: 'content' as const};
-        const replacementCandidate = {...candidate, element: replacement};
-        runtime.pointCandidate = candidate; runtime.candidates = [candidate];
-        const pending = deferred<Awaited<ReturnType<typeof personalCorrections.lookup>>>();
-        const previous = {exact: {id: 'old-correction', revision: 1, translation: '旧校订'}};
-        const updated = {exact: {id: 'new-correction', revision: 2, translation: '新校订'}};
-        const lookup = vi.spyOn(personalCorrections, 'lookup')
-            .mockResolvedValueOnce(previous as never)
-            .mockReturnValueOnce(pending.promise)
-            .mockResolvedValue((action === 'changed' ? updated : action === 'context-only' ? previous : {}) as never);
-        const track = vi.spyOn(hoverRemountRecovery, 'trackXHoverRemount').mockImplementation((_candidate, _x, _y, _current, onCancel) => ({
-            cancel: () => onCancel?.(), ownsOwner: element => element === old || element === replacement, waitForReplacement: async () => true,
-            finish: stale => stale ? replacementCandidate : null,
-        }));
-        try {
-            handleTranslation(20, 20, {inputSource: 'mouse-shortcut'});
-            for (let count = 0; count < 30 && lookup.mock.calls.length < 2; count++) await vi.advanceTimersByTimeAsync(1);
-            expect(lookup).toHaveBeenCalledTimes(2);
-            old.replaceWith(replacement); setLayoutBox(replacement, 300, 40);
-            runtime.pointCandidate = replacementCandidate; runtime.candidates = [replacementCandidate];
-            if (action === 'cancelled') restoreTranslationOwner(old);
-            pending.resolve((action === 'changed' ? updated : action === 'removed' ? {} : previous) as never);
-            await finishScheduledWork();
-            if (action === 'cancelled') {
-                expect(lookup).toHaveBeenCalledTimes(2);
-                expect(replacement.querySelector('.fluent-read-bilingual-content')).toBeNull();
-            } else {
-                expect(lookup.mock.calls.length).toBeGreaterThanOrEqual(3);
-                expect(lookup.mock.calls[2]![0].context).toBe('Context heading');
-                expect(replacement.querySelector('.fluent-read-bilingual-content')?.textContent)
-                    .toBe(action === 'changed' ? '新校订' : action === 'context-only' ? '旧校订' : '译:The original sentence stays the same.');
-            }
-        } finally {track.mockRestore(); lookup.mockRestore();}
-    });
-
     it.each(['accept', 'abort-rejection', 'other-owner', 'reason', 'scope', 'nodes', 'visualRange', 'manualChunk', 'sourceLine', 'applicationShellPolicyId', 'existing-state'] as const)(
         '布局脱离后有界等待并复核重挂候选：%s', async variant => {
             runtime.config.display = 1;
@@ -2677,55 +2626,6 @@ describe("全文翻译可见性锚点", () => {
                     if (other) expect(other.querySelector('.fluent-read-bilingual-content')).toBeNull();
                 }
             } finally { track.mockRestore(); }
-        },
-    );
-
-    it.each(['replacement', 'restore', 'reconnected'] as const)(
-        '校订复验挂起时布局中止：%s 不等待旧校订或误用旧 owner', async action => {
-            runtime.config.display = 1;
-            replaceGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0));
-            replaceGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
-            document.body.innerHTML = '<article><p id="old">A pending correction must not pin a replaced paragraph.</p></article>';
-            const old = document.querySelector<HTMLElement>('#old')!;
-            const replacement = old.cloneNode(true) as HTMLElement;
-            setLayoutBox(old, 300, 40); setLayoutBox(replacement, 300, 40);
-            const candidate = {element: old, kind: 'content' as const, reason: 'post', scope: 'content' as const};
-            const replacementCandidate = {...candidate, element: replacement};
-            runtime.pointCandidate = candidate; runtime.candidates = [candidate];
-            const pendingCheck = deferred<boolean>();
-            const guard = vi.spyOn(personalCorrectionRuntime, 'personalCorrectionIsCurrent')
-                .mockImplementationOnce(() => pendingCheck.promise).mockResolvedValue(true);
-            const finish = vi.fn((stale: boolean) => stale ? replacementCandidate : null);
-            const track = vi.spyOn(hoverRemountRecovery, 'trackXHoverRemount').mockImplementation((_candidate, _x, _y, _current, onCancel) => ({
-                cancel: () => onCancel?.(), ownsOwner: element => element === old || element === replacement,
-                waitForReplacement: async () => true, finish,
-            }));
-            try {
-                handleTranslation(20, 20, {inputSource: 'mouse-shortcut'});
-                for (let i = 0; i < 30 && guard.mock.calls.length === 0; i++) await vi.advanceTimersByTimeAsync(1);
-                expect(guard).toHaveBeenCalledOnce();
-                const oldState = getTranslationState(old)!;
-                old.replaceWith(replacement);
-                runtime.pointCandidate = replacementCandidate; runtime.candidates = [replacementCandidate];
-                if (action === 'restore') restoreTranslationOwner(old);
-                if (action === 'reconnected') replacement.replaceWith(old);
-                if (action !== 'restore') {oldState.layoutDetachedDiscard = true; oldState.controller.abort();}
-                await finishScheduledWork();
-                if (action === 'replacement') {
-                    expect(finish).toHaveBeenCalledWith(true);
-                    expect(replacement.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-                    expect(guard).toHaveBeenCalledTimes(2);
-                } else {
-                    expect(replacement.querySelector('.fluent-read-bilingual-content')).toBeNull();
-                    expect(old.querySelector('.fluent-read-bilingual-content')).toBeNull();
-                    expect(guard).toHaveBeenCalledOnce();
-                    if (action === 'reconnected') expect(finish).toHaveBeenCalledWith(false);
-                    else expect(finish).not.toHaveBeenCalled();
-                }
-                pendingCheck.reject(new Error('obsolete correction check'));
-                await finishScheduledWork();
-                expect(replacement.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(action === 'replacement' ? 1 : 0);
-            } finally { pendingCheck.resolve(true); guard.mockRestore(); track.mockRestore(); }
         },
     );
 
@@ -4374,21 +4274,6 @@ describe("全文翻译可见性锚点", () => {
             .toBe(getTranslationInvocationIdentity(baseline));
     });
 
-    it.each(['auto', 'en'])('本地模型逐槽翻译短链接，以段落检测语言且尊重显式 %s', async (sourceLanguage) => {
-        const origins = ['When switching between different filaments for printing, the printer flushes the remaining material. ', 'Reduce Waste during Filament Change'];
-        await expect(translateTextSlots(origins, translationSnapshot({
-            service: 'localTranslation', sourceLanguage,
-        }))).resolves.toEqual(origins.map((text) => `译:${text}`));
-        expect(runtime.requests).toHaveBeenCalledTimes(2);
-        for (const options of runtime.requestOptions) {
-            if (sourceLanguage === 'auto') {
-                expect(options).toMatchObject({sourceLanguageDetectionText: origins.join('\n')});
-            } else {
-                expect(options).not.toHaveProperty('sourceLanguageDetectionText');
-            }
-        }
-    });
-
     it('Chrome auto 逐槽翻译只借用纯文本整段检测来源，不发送槽标记', async () => {
         const origins = ['Bonjour ', 'le monde.'];
         runtime.parsedSlots = ['你好，', '世界。'];
@@ -5288,7 +5173,7 @@ describe("全文翻译可见性锚点", () => {
         expect(runtime.requests).toHaveBeenCalledWith(['Foreign source']);
     });
 
-    it('本地 auto 逐槽翻译只构造一次整段语言检测样本，所有工作者使用相同来源', async () => {
+    it('Chrome auto 逐槽翻译只构造一次整段语言检测样本，所有工作者使用相同来源', async () => {
         const origins = Array.from({length: 200}, (_, index) => `Local batch source ${index}.`);
         const sample = origins.join('\n');
         const originalJoin = Array.prototype.join;
@@ -5299,7 +5184,7 @@ describe("全文翻译可见性锚点", () => {
         });
         let translations: string[];
         try {
-            translations = await translateTextSlots(origins, translationSnapshot({service: 'localTranslation', sourceLanguage: 'auto'}));
+            translations = await translateTextSlots(origins, translationSnapshot({service: 'chromeTranslator', sourceLanguage: 'auto'}));
         } finally {
             join.mockRestore();
         }
@@ -10837,47 +10722,6 @@ describe("悬停重挂请求与 synthetic 提交回归", () => {
         } finally { runtime.config.hoverTranslationService = ''; }
     });
 
-    it.each([
-        {action: 'route', late: 'resolve'}, {action: 'route', late: 'reject'},
-        {action: 'restore', late: 'resolve'}, {action: 'restore', late: 'reject'},
-    ] as const)('$action 取消校订初查后接受迟到 $late，新手势不等待旧查询', async ({action, late}) => {
-        runtime.config.display = 1;
-        runtime.realSourceSnapshots = true;
-        Object.assign(runtime.config, {personalCorrectionsEnabled: true});
-        replaceGlobal('location', {href: 'https://example.test/article'});
-        const source = 'A previous correction lookup must not block a new translation.';
-        document.body.innerHTML = `<p id="initial-correction-route">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#initial-correction-route')!;
-        const candidate = {element: owner, kind: 'content' as const, reason: 'paragraph'};
-        runtime.candidates = [candidate]; runtime.pointCandidate = candidate;
-        const oldLookup = deferred<undefined>();
-        const lookup = vi.spyOn(personalCorrectionRuntime, 'lookupPersonalCorrection')
-            .mockImplementationOnce(() => oldLookup.promise).mockResolvedValue(undefined);
-        try {
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            for (let i = 0; i < 30 && lookup.mock.calls.length === 0; i++) await Promise.resolve();
-            expect(lookup).toHaveBeenCalledTimes(1);
-            const oldState = getTranslationState(owner)!;
-            expect(oldState.phase).toBe('loading');
-            expect(runtime.requests).not.toHaveBeenCalled();
-            if (action === 'route') resetFullPageTranslationRouteState();
-            else restoreOriginalContent();
-            for (let i = 0; i < 20; i++) await Promise.resolve();
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            expect(oldState.controller.signal.aborted).toBe(true);
-            expect(runtime.requests).toHaveBeenCalledTimes(1);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            if (late === 'reject') oldLookup.reject(new Error('late initial correction failure'));
-            else oldLookup.resolve(undefined);
-            await finishScheduledWork();
-            expect(runtime.requests).toHaveBeenCalledTimes(1);
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { lookup.mockRestore(); oldLookup.resolve(undefined); runtime.realSourceSnapshots = false;
-            Object.assign(runtime.config, {personalCorrectionsEnabled: false}); }
-    });
-
     it('开始时会话已取消仍经异步清理，之后的新会话可翻译同一节点', async () => {
         const source = 'An already cancelled session must release its attempted owner.';
         document.body.innerHTML = `<p id="already-cancelled">${source}</p>`;
@@ -10894,165 +10738,6 @@ describe("悬停重挂请求与 synthetic 提交回归", () => {
         handleTranslation(20, 20, {continuous: true});
         await vi.advanceTimersByTimeAsync(0);
         expect(getTranslationState(owner)?.phase).toBe('translated');
-    });
-
-    it('校订初查同步切换路由时清理节点及监听，并消费迟到拒绝', async () => {
-        runtime.config.display = 1;
-        runtime.realSourceSnapshots = true;
-        Object.assign(runtime.config, {personalCorrectionsEnabled: true});
-        replaceGlobal('location', {href: 'https://example.test/article'});
-        const source = 'A lookup can synchronously cancel the old translation.';
-        document.body.innerHTML = `<p id="sync-cancel-initial">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#sync-cancel-initial')!;
-        const candidate = {element: owner, kind: 'content' as const, reason: 'paragraph'};
-        runtime.candidates = [candidate]; runtime.pointCandidate = candidate;
-        const oldLookup = deferred<undefined>();
-        let oldSignal!: AbortSignal;
-        const lookup = vi.spyOn(personalCorrectionRuntime, 'lookupPersonalCorrection')
-            .mockImplementationOnce(() => {
-                oldSignal = getTranslationState(owner)!.controller.signal;
-                resetFullPageTranslationRouteState();
-                return oldLookup.promise;
-            }).mockResolvedValue(undefined);
-        try {
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            for (let i = 0; i < 30 && lookup.mock.calls.length === 0; i++) await Promise.resolve();
-            expect(lookup).toHaveBeenCalledTimes(1);
-            for (let i = 0; i < 30; i++) await Promise.resolve();
-            expect(oldSignal.aborted).toBe(true);
-            expect(getTranslationState(owner)).toBeUndefined();
-            expect(getEventListeners(oldSignal, 'abort')).toHaveLength(0);
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            oldLookup.reject(new Error('late initial correction rejection'));
-            await finishScheduledWork();
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { lookup.mockRestore(); oldLookup.resolve(undefined); runtime.realSourceSnapshots = false;
-            Object.assign(runtime.config, {personalCorrectionsEnabled: false}); }
-    });
-
-    it('全文会话路由切换取消挂起的校订初查，原节点由新代请求完成', async () => {
-        runtime.config.display = 1;
-        runtime.config.fullPageTranslationMode = 'all';
-        runtime.realSourceSnapshots = true;
-        Object.assign(runtime.config, {personalCorrectionsEnabled: true});
-        replaceGlobal('location', {href: 'https://example.test/article'});
-        const source = 'The page must not wait for the obsolete correction lookup.';
-        document.body.innerHTML = `<p id="initial-full-correction-route">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#initial-full-correction-route')!;
-        setLayoutBox(owner, 620, 96);
-        runtime.candidates = [{element: owner, kind: 'content', reason: 'paragraph'}];
-        const oldLookup = deferred<undefined>();
-        const lookup = vi.spyOn(personalCorrectionRuntime, 'lookupPersonalCorrection')
-            .mockImplementationOnce(() => oldLookup.promise).mockResolvedValue(undefined);
-        try {
-            autoTranslateEnglishPage();
-            await vi.advanceTimersByTimeAsync(50);
-            for (let i = 0; i < 30 && lookup.mock.calls.length === 0; i++) await vi.advanceTimersByTimeAsync(1);
-            expect(lookup).toHaveBeenCalledTimes(1);
-            const oldState = getTranslationState(owner)!;
-            resetFullPageTranslationRouteState();
-            await finishScheduledWork();
-            expect(oldState.controller.signal.aborted).toBe(true);
-            expect(runtime.requests).toHaveBeenCalledTimes(1);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            oldLookup.reject(new Error('late initial correction failure'));
-            await finishScheduledWork();
-            expect(runtime.requests).toHaveBeenCalledTimes(1);
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { lookup.mockRestore(); oldLookup.resolve(undefined); runtime.realSourceSnapshots = false;
-            Object.assign(runtime.config, {personalCorrectionsEnabled: false}); }
-    });
-
-    it.each(['route', 'restore'] as const)('%s 取消提交前挂起的校订复验，新手势不等待旧读取', async (action) => {
-        runtime.config.display = 1;
-        const source = 'The correction lookup must not pin the previous route.';
-        document.body.innerHTML = `<p id="correction-route">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#correction-route')!;
-        const candidate = {element: owner, kind: 'content' as const, reason: 'paragraph'};
-        runtime.candidates = [candidate]; runtime.pointCandidate = candidate;
-        const oldCheck = deferred<boolean>();
-        const guard = vi.spyOn(personalCorrectionRuntime, 'personalCorrectionIsCurrent')
-            .mockImplementationOnce(() => oldCheck.promise).mockResolvedValue(true);
-        try {
-            handleTranslation(20, 20, {continuous: true});
-            await waitForRequestCount(1);
-            for (let i = 0; i < 30 && guard.mock.calls.length === 0; i++) await Promise.resolve();
-            expect(guard).toHaveBeenCalledTimes(1);
-            const oldState = getTranslationState(owner)!;
-            expect(oldState.phase).toBe('loading');
-            if (action === 'route') resetFullPageTranslationRouteState();
-            else restoreOriginalContent();
-            await Promise.resolve(); await Promise.resolve();
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            await Promise.resolve();
-            expect(oldState.controller.signal.aborted).toBe(true);
-            expect(runtime.requests).toHaveBeenCalledTimes(2);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            oldCheck.resolve(true);
-            await finishScheduledWork();
-            expect(owner.textContent).toContain(`译:${source}`);
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { guard.mockRestore(); oldCheck.resolve(true); }
-    });
-
-    it('全文会话路由切换时取消挂起的校订复验，原节点由新代请求完成', async () => {
-        runtime.config.display = 1;
-        runtime.config.fullPageTranslationMode = 'all';
-        const source = 'The current route must not wait for an obsolete correction check.';
-        document.body.innerHTML = `<p id="full-correction-route">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#full-correction-route')!;
-        setLayoutBox(owner, 620, 96);
-        runtime.candidates = [{element: owner, kind: 'content', reason: 'paragraph'}];
-        const oldCheck = deferred<boolean>();
-        const guard = vi.spyOn(personalCorrectionRuntime, 'personalCorrectionIsCurrent')
-            .mockImplementationOnce(() => oldCheck.promise).mockResolvedValue(true);
-        try {
-            autoTranslateEnglishPage();
-            await vi.advanceTimersByTimeAsync(50);
-            for (let i = 0; i < 30 && guard.mock.calls.length === 0; i++) await vi.advanceTimersByTimeAsync(1);
-            expect(guard).toHaveBeenCalledTimes(1);
-            const oldState = getTranslationState(owner)!;
-            resetFullPageTranslationRouteState();
-            await finishScheduledWork();
-            expect(oldState.controller.signal.aborted).toBe(true);
-            expect(runtime.requests).toHaveBeenCalledTimes(2);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            oldCheck.resolve(true);
-            await finishScheduledWork();
-            expect(owner.textContent).toContain(`译:${source}`);
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { guard.mockRestore(); oldCheck.resolve(true); }
-    });
-
-    it('校订复验创建时同步切换路由，迟到拒绝被消费且新翻译可完成', async () => {
-        runtime.config.display = 1;
-        const source = 'A correction check can synchronously invalidate its route.';
-        document.body.innerHTML = `<p id="correction-reentrant">${source}</p>`;
-        const owner = document.querySelector<HTMLElement>('#correction-reentrant')!;
-        const candidate = {element: owner, kind: 'content' as const, reason: 'paragraph'};
-        runtime.candidates = [candidate]; runtime.pointCandidate = candidate;
-        const oldCheck = deferred<boolean>();
-        const guard = vi.spyOn(personalCorrectionRuntime, 'personalCorrectionIsCurrent')
-            .mockImplementationOnce(() => { resetFullPageTranslationRouteState(); return oldCheck.promise; })
-            .mockResolvedValue(true);
-        try {
-            handleTranslation(20, 20, {continuous: true});
-            await waitForRequestCount(1);
-            for (let i = 0; i < 30 && guard.mock.calls.length === 0; i++) await Promise.resolve();
-            expect(guard).toHaveBeenCalledTimes(1);
-            await Promise.resolve(); await Promise.resolve();
-            handleTranslation(20, 20, {continuous: true});
-            await vi.advanceTimersByTimeAsync(0);
-            expect(runtime.requests).toHaveBeenCalledTimes(2);
-            expect(getTranslationState(owner)?.phase).toBe('translated');
-            oldCheck.reject(new Error('late correction failure'));
-            await finishScheduledWork();
-            expect(owner.querySelectorAll('.fluent-read-bilingual-content')).toHaveLength(1);
-        } finally { guard.mockRestore(); oldCheck.resolve(true); }
     });
 
     it('route reset 立即撤销旧路由 loading，旧 provider 未回复时同一 owner 可由新手势翻译', async () => {

@@ -76,11 +76,11 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn(() => { fullPageActive = true; });
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => true,
-            isVideoPage: () => false, getPageIdentity: () => href,
+            getPageIdentity: () => href,
             shouldAutomaticallyTranslate: () => automatic,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: vi.fn(), activatePageFeatures: vi.fn(async () => undefined),
-            disposePageFeatures: vi.fn(), mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            disposePageFeatures: vi.fn(), autoTranslate,
         });
         runtime.refreshAutoTranslation();
         expect(autoTranslate).toHaveBeenCalledOnce();
@@ -124,12 +124,12 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const dispose = vi.fn(() => { featuresActive = false; fullPageActive = false; });
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => enabled, isPageFeaturesActive: () => featuresActive,
-            isVideoPage: () => false, getPageIdentity: () => href,
+            getPageIdentity: () => href,
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: vi.fn(),
             activatePageFeatures: async () => { featuresActive = true; await activation.promise; },
-            disposePageFeatures: dispose, mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            disposePageFeatures: dispose, autoTranslate,
         });
         const pending = runtime.reconcile();
         await Promise.resolve();
@@ -157,10 +157,10 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn(() => { fullPageActive = true; });
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => active,
-            isVideoPage: () => false, shouldAutomaticallyTranslate,
+            shouldAutomaticallyTranslate,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: setBridges, activatePageFeatures: activate,
-            disposePageFeatures: vi.fn(), mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            disposePageFeatures: vi.fn(), autoTranslate,
         });
 
         const batch = Array.from({length: 100}, () => runtime.reconcile());
@@ -186,10 +186,10 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn(() => { fullPageActive = true; });
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => active,
-            isVideoPage: () => false, shouldAutomaticallyTranslate: () => true,
+            shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: setBridges, activatePageFeatures: activate,
-            disposePageFeatures: vi.fn(), mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            disposePageFeatures: vi.fn(), autoTranslate,
         });
 
         const initial = runtime.reconcile();
@@ -214,8 +214,8 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const dispose = vi.fn(() => { active = false; fullPageActive = false; });
         const autoTranslate = vi.fn(() => { fullPageActive = true; });
         const runtime = createContentPageAvailabilityRuntime({
-            isEnabled: () => enabled, isPageFeaturesActive: () => active,
-            isVideoPage: () => {
+            isEnabled: () => enabled,
+            isPageFeaturesActive: () => {
                 if (!flipQueued) {
                     flipQueued = true;
                     queueMicrotask(() => {
@@ -227,19 +227,19 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
                         reentrantRequests.push(runtime.reconcile());
                     });
                 }
-                return false;
+                return active;
             },
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: vi.fn(), activatePageFeatures: activate,
-            disposePageFeatures: dispose, mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            disposePageFeatures: dispose, autoTranslate,
         });
 
         const initial = runtime.reconcile();
         await initial;
         expect(reentrantRequests).toEqual([initial, initial]);
         expect(dispose).toHaveBeenCalledOnce();
-        expect(activate).toHaveBeenCalledTimes(2);
+        expect(activate).toHaveBeenCalledTimes(3);
         expect(active).toBe(true);
         expect(fullPageActive).toBe(true);
         expect(autoTranslate).toHaveBeenCalledTimes(2);
@@ -256,10 +256,10 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn();
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => active,
-            isVideoPage: () => false, shouldAutomaticallyTranslate: () => true,
+            shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false, setMainWorldBridgesEnabled: vi.fn(),
             activatePageFeatures: activate, disposePageFeatures: dispose,
-            mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            autoTranslate,
         });
         await Promise.all(Array.from({length: 100}, () => runtime.reconcile()));
         expect(activate).toHaveBeenCalledTimes(2);
@@ -279,10 +279,10 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn();
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => active,
-            isVideoPage: () => false, shouldAutomaticallyTranslate: () => true,
+            shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false, setMainWorldBridgesEnabled: vi.fn(),
             activatePageFeatures: activate, disposePageFeatures: vi.fn(),
-            mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            autoTranslate,
         });
 
         await expect(runtime.reconcile()).rejects.toThrow('transient feature activation');
@@ -301,10 +301,10 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const autoTranslate = vi.fn();
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => true, isPageFeaturesActive: () => active,
-            isVideoPage: () => false, shouldAutomaticallyTranslate: () => true,
+            shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false, setMainWorldBridgesEnabled: vi.fn(),
             activatePageFeatures: activate, disposePageFeatures: vi.fn(),
-            mountVideoSubtitle: () => vi.fn(), autoTranslate,
+            autoTranslate,
         });
 
         const results = await Promise.allSettled(Array.from({length: 100}, () => runtime.reconcile()));
@@ -332,13 +332,11 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => enabled,
             isPageFeaturesActive: () => pageFeaturesActive,
-            isVideoPage: () => false,
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false,
             setMainWorldBridgesEnabled: setBridges,
             activatePageFeatures: activate,
             disposePageFeatures: dispose,
-            mountVideoSubtitle: () => vi.fn(),
             autoTranslate,
         });
 
@@ -371,13 +369,11 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => enabled,
             isPageFeaturesActive: () => false,
-            isVideoPage: () => false,
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => fullPageActive,
             setMainWorldBridgesEnabled: vi.fn(),
             activatePageFeatures: () => activation.promise,
             disposePageFeatures: vi.fn(),
-            mountVideoSubtitle: () => vi.fn(),
             autoTranslate,
         });
         const pending = runtime.reconcile();
@@ -392,45 +388,16 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         expect(autoTranslate).not.toHaveBeenCalled();
     });
 
-    it('进入 watch/shorts 才挂载字幕，离开播放页立即卸载且重复路由幂等', () => {
-        let videoPage = false;
-        const unmount = vi.fn();
-        const mount = vi.fn(() => unmount);
-        const runtime = createContentPageAvailabilityRuntime({
-            isEnabled: () => true,
-            isPageFeaturesActive: () => true,
-            isVideoPage: () => videoPage,
-            shouldAutomaticallyTranslate: () => false,
-            isFullPageTranslationActive: () => false,
-            setMainWorldBridgesEnabled: vi.fn(),
-            activatePageFeatures: vi.fn(async () => undefined),
-            disposePageFeatures: vi.fn(),
-            mountVideoSubtitle: mount,
-            autoTranslate: vi.fn(),
-        });
 
-        runtime.syncVideoSubtitlePage();
-        expect(mount).not.toHaveBeenCalled();
-        videoPage = true;
-        runtime.syncVideoSubtitlePage();
-        runtime.syncVideoSubtitlePage();
-        expect(mount).toHaveBeenCalledOnce();
-        videoPage = false;
-        runtime.syncVideoSubtitlePage();
-        expect(unmount).toHaveBeenCalledOnce();
-    });
-
-    it('总开关在 deferred activation 中关闭会立即回收 bridge、视频和页面功能', async () => {
+    it('总开关在 deferred activation 中关闭会立即回收 bridge 和页面功能', async () => {
         let enabled = true;
         let active = false;
         const activation = deferred<void>();
         const setBridges = vi.fn();
-        const disposeVideo = vi.fn();
         const disposeFeatures = vi.fn(() => { active = false; });
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => enabled,
             isPageFeaturesActive: () => active,
-            isVideoPage: () => true,
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false,
             setMainWorldBridgesEnabled: setBridges,
@@ -439,7 +406,6 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
                 await activation.promise;
             }),
             disposePageFeatures: disposeFeatures,
-            mountVideoSubtitle: () => disposeVideo,
             autoTranslate: vi.fn(),
         });
 
@@ -450,7 +416,6 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         expect(active).toBe(false);
         expect(setBridges).toHaveBeenLastCalledWith(false);
         expect(disposeFeatures).toHaveBeenCalled();
-        expect(disposeVideo).not.toHaveBeenCalled();
 
         activation.resolve();
         await Promise.all([activating, disabling]);
@@ -467,7 +432,6 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => !siteDisabled,
             isPageFeaturesActive: () => active,
-            isVideoPage: () => false,
             shouldAutomaticallyTranslate: () => false,
             isFullPageTranslationActive: () => false,
             setMainWorldBridgesEnabled: setBridges,
@@ -476,7 +440,6 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
                 await activation.promise;
             }),
             disposePageFeatures: disposeFeatures,
-            mountVideoSubtitle: () => vi.fn(),
             autoTranslate: vi.fn(),
         });
 
@@ -508,13 +471,11 @@ describe('content 页面总开关与 SPA 路由生命周期', () => {
         const runtime = createContentPageAvailabilityRuntime({
             isEnabled: () => enabled,
             isPageFeaturesActive: () => active,
-            isVideoPage: () => false,
             shouldAutomaticallyTranslate: () => true,
             isFullPageTranslationActive: () => false,
             setMainWorldBridgesEnabled: setBridges,
             activatePageFeatures: activate,
             disposePageFeatures: disposeFeatures,
-            mountVideoSubtitle: () => vi.fn(),
             autoTranslate,
         });
 
@@ -547,7 +508,6 @@ describe('content 路由协调边界', () => {
             pageAvailability: {
                 needsLifecycleReconcile: () => needsReconcile,
                 reconcile: vi.fn(async () => undefined), refreshAutoTranslation: vi.fn(),
-                syncVideoSubtitlePage: vi.fn(), disposeVideoSubtitlePage: vi.fn(),
             },
         };
         const changed = createContentRouteChangeHandler(dependencies);

@@ -1,7 +1,6 @@
-import {isReactive, nextTick, reactive, ref, toRaw, watch} from 'vue';
+import {nextTick, reactive, ref, toRaw, watch} from 'vue';
 import {describe, expect, it, vi} from 'vitest';
 import {Config, normalizeConfig} from '@/src/core/config/model';
-import {customModelString} from '@/src/core/config/catalog';
 import {createConfigEditor} from '@/src/services/config/editor';
 import {useConfigEditor} from '@/src/features/settings/model/useConfigEditor';
 
@@ -24,10 +23,10 @@ describe('configuration editing session', () => {
     it('hydrates an independent draft, ignores pre-ready/duplicate edits and stops after disposal', async () => {
         const f = fixture();
         f.draft.to = 'fr'; await f.editor.save(); expect(f.saveDraft).not.toHaveBeenCalled();
-        const authority = normalizeConfig({to: 'en', harness: {enabled: true}});
+        const authority = normalizeConfig({to: 'en', theme: 'dark'});
         f.editor.hydrate(authority); expect(f.editor.ready).toBe(false);
         f.editor.initialize(authority); expect(f.editor.ready).toBe(true);
-        f.draft.harness.enabled = false; expect(authority.harness.enabled).toBe(true);
+        f.draft.theme = 'light'; expect(authority.theme).toBe('dark');
         await f.editor.save(); await f.editor.save(); expect(f.saveDraft).toHaveBeenCalledOnce();
         expect(f.onSaved).toHaveBeenCalledOnce(); expect(f.onEdited).toHaveBeenCalledOnce();
         f.editor.dispose(); expect(f.editor.ready).toBe(false);
@@ -169,11 +168,11 @@ describe('Vue configuration editor adapter', () => {
 
     it('coalesces post edits atomically and protects same-tick local fields from an external snapshot', async () => {
         const f = vueFixture('post', Promise.resolve(), false); await settle();
-        f.draft.documentModel.deepseek = customModelString; f.draft.documentCustomModel.deepseek = 'local-model'; f.draft.to = 'fr';
+        f.draft.customBody.deepseek = '{"temperature":0.1}'; f.draft.to = 'fr';
         f.notify({to: 'en', theme: 'dark'}); expect(f.draft.to).toBe('fr'); expect(f.draft.theme).toBe('dark');
         // Hydration rebuilds dependencies under its guard; explicitly saving retains the unpublished dirty fields.
         await f.editor.save();
-        expect(f.saveDraft).toHaveBeenCalledOnce(); expect(f.saveDraft.mock.calls[0][0]).toMatchObject({to: 'fr', documentCustomModel: {deepseek: 'local-model'}});
+        expect(f.saveDraft).toHaveBeenCalledOnce(); expect(f.saveDraft.mock.calls[0][0]).toMatchObject({to: 'fr', customBody: {deepseek: '{"temperature":0.1}'}});
         f.editor.dispose();
     });
 
@@ -262,22 +261,4 @@ describe('Vue configuration editor adapter', () => {
         expect(k.onReadyError).toHaveBeenCalledWith(expect.any(Error)); k.editor.dispose();
     });
 
-    it('recovers its reactive watcher when a hydration getter throws once', async () => {
-        const f = vueFixture('sync'); await settle();
-        const stringify = JSON.stringify, previousHarness = toRaw(f.draft.harness); let failed = false;
-        const warn = vi.spyOn(console, 'warn').mockImplementationOnce(() => {});
-        const spy = vi.spyOn(JSON, 'stringify').mockImplementation((value, replacer, space) => {
-            if (value && typeof value === 'object' && isReactive(value) && toRaw(value) !== previousHarness && 'hoverDelay' in value && !failed) {failed = true; throw new Error('draft getter');}
-            return stringify(value, replacer, space);
-        });
-        try {
-            expect(() => f.notify({to: 'ja'})).toThrow('draft getter');
-            expect(f.editor.applying).toBe(false); spy.mockRestore();
-            expect(warn).toHaveBeenCalledOnce();
-            expect(warn).toHaveBeenCalledWith('[Vue warn]: Unhandled error during execution of watcher getter');
-            f.draft.to = 'fr'; expect(f.saveDraft).toHaveBeenCalledOnce();
-        } finally {
-            spy.mockRestore(); warn.mockRestore(); f.editor.dispose();
-        }
-    });
 });

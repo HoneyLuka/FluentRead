@@ -59,8 +59,7 @@ describe('实际翻译 composition 的水合与总截止时间', () => {
     it.each([
         ['chrome', 'chrome-extension:', true], ['firefox', 'moz-extension:', true],
         ['safari', 'safari-web-extension:', true], ['chrome', 'https:', false],
-        ['chrome', undefined, false], ['userscript', 'https:', false],
-        ['userscript', 'chrome-extension:', false],
+        ['chrome', undefined, false],
     ] as const)('%s / %s 只在实际扩展入口持有统计仓库', async (browser, protocol, records) => {
         vi.stubEnv('BROWSER', browser); vi.stubGlobal('location', protocol ? {protocol} : undefined);
         const f = await runtimeFixture('gemini');
@@ -132,68 +131,4 @@ describe('实际翻译 composition 的水合与总截止时间', () => {
         expect(f.provider).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(0);
     });
-});
-
-describe('实际 Vite 翻译组合根的统计可达性', () => {
-    it.each([
-        ['compact', '0', 'userscript', false, false],
-        ['standalone', '1', 'userscript', true, false],
-        ['extension', '0', 'chrome', true, true],
-    ] as const)('%s 仅打包实际消费的统计仓库', async (_mode, standalone, browser, hasUsage, hasStats) => {
-        vi.useRealTimers();
-        vi.stubEnv('FLUENTREAD_USERSCRIPT_STANDALONE', standalone);
-        vi.stubEnv('FLUENTREAD_USERSCRIPT_GREASYFORK_SOURCE', '0');
-        const {mkdtempSync, realpathSync, writeFileSync, rmSync} = await import('node:fs');
-        const {tmpdir} = await import('node:os');
-        const {resolve, isAbsolute} = await import('node:path');
-        const {build} = await import('vite');
-        const {default: configuration} = await import('@/userscript/vite.config');
-        const config = configuration as import('vite').UserConfig;
-        const root = process.cwd();
-        const fixture = realpathSync(mkdtempSync(resolve(tmpdir(), 'fluentread-stats-build-')));
-        const runtime = resolve(root, 'src/app/translation/runtime.ts');
-        const platformFull = resolve(root, 'userscript/platformFull.ts');
-        const usage = resolve(root, 'src/platform/storage/modelUsageRepository.ts');
-        const stats = resolve(root, 'src/platform/storage/translationStatsRepository.ts');
-        const usageAggregation = resolve(root, 'src/services/model-usage/aggregation.ts');
-        const statsAggregation = resolve(root, 'src/services/translation-stats/aggregation.ts');
-        // 数据库、聚合、handler 和组合根使用真实源码；网络/配置等无关端口外置，避免此构建测试启动页面。
-        const owned = new Set([runtime, platformFull, usage, stats, usageAggregation, statsAggregation,
-            resolve(root, 'src/services/model-usage/types.ts'), resolve(root, 'src/services/translation-stats/types.ts'),
-            resolve(root, 'src/app/background/handlers/modelUsage.ts')]);
-        const similar = resolve(fixture, 'modelUsageRepository.ts');
-        const rawUsage = usage + '?raw';
-        const entry = resolve(fixture, 'entry.ts');
-        writeFileSync(similar, 'export const marker = "similarly-named-owner";');
-        writeFileSync(entry, `import {translateWithCache} from ${JSON.stringify(runtime)};
-            import {marker} from ${JSON.stringify(similar)};
-            import source from ${JSON.stringify(rawUsage)};
-            ${standalone === '1' ? `import {createPlatformMessageHandler} from ${JSON.stringify(platformFull)};` : ''}
-            globalThis.statsBuildFixture = {translateWithCache, marker, source${standalone === '1' ? ', createPlatformMessageHandler' : ''}};`);
-        try {
-            const result = await build({root, configFile: false, publicDir: false, logLevel: 'silent',
-                resolve: config.resolve, define: {...config.define, 'import.meta.env.BROWSER': JSON.stringify(browser)},
-                build: {write: false, minify: false, lib: {entry, formats: ['es']},
-                    rollupOptions: {external(source, importer) {
-                        if (!importer) return false;
-                        if (source === entry || source === similar || source === rawUsage) return false;
-                        const normalized = source.startsWith('@/') ? resolve(root, source.slice(2)) : source;
-                        if (isAbsolute(normalized) && (owned.has(normalized) || owned.has(normalized + '.ts'))) return false;
-                        return true;
-                    }}}});
-            const outputs = Array.isArray(result) ? result : [result];
-            if (outputs.length !== 1 || !('output' in outputs[0])) throw new Error('Expected one actual Vite output');
-            const chunks = outputs[0].output.filter(item => item.type === 'chunk');
-            const moduleIds = chunks.flatMap(chunk => chunk.moduleIds);
-            expect(moduleIds).toContain(runtime);
-            expect(moduleIds.includes(usage)).toBe(hasUsage);
-            expect(moduleIds.includes(usageAggregation)).toBe(hasUsage);
-            expect(moduleIds.includes(stats)).toBe(hasStats);
-            expect(moduleIds.includes(statsAggregation)).toBe(hasStats);
-            expect(moduleIds.includes(platformFull)).toBe(standalone === '1');
-            if (standalone === '1') expect(moduleIds).toContain(resolve(root, 'src/app/background/handlers/modelUsage.ts'));
-            expect(moduleIds).toContain(similar); expect(moduleIds).toContain(rawUsage);
-            expect(chunks.map(chunk => chunk.code).join('\n')).toContain('similarly-named-owner');
-        } finally { rmSync(fixture, {recursive: true, force: true}); }
-    }, 30_000);
 });

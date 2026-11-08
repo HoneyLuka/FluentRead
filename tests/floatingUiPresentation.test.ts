@@ -106,7 +106,7 @@ describe('低干扰悬浮 UI', () => {
     // 悬停延迟只推迟展开；拖动中到期的计时器不得把菜单弹回来。
     expect(expandBall).toContain('isAlwaysExpanded.value) return');
     expect(expandBall).toContain('Math.max(0, presentation.value.hoverDelay)');
-    expect(expandBall).toContain('if (!isDragging.value) {isExpanded.value = true; scheduleMangaCollapse();}');
+    expect(expandBall).toContain('if (!isDragging.value) {isExpanded.value = true;}');
     expect(floatingBall).toContain('clearExpandTimer();');
     expect(floatingBall).toContain('onBeforeUnmount');
     // 未越过拖动阈值才触发点击行为，'none' 保留纯拖动手柄。

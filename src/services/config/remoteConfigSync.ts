@@ -1,6 +1,6 @@
 /**
  * @file src/services/config/remoteConfigSync.ts
- * 文件职责：编排 Google Drive 与 WebDAV 共用的范围化云备份和单次用户确认事务。
+ * 文件职责：编排 Google Drive 的范围化云备份和单次用户确认事务。
  * 主要内容：单次授权、账号绑定、上次成功同步的账号记录、密文基线、三方合并、
  * 掩码预览、可安全中断读取的预览取消、只读恢复与内容核验兼容能力、绑定账号与文件版本的删除确认、过期检查与授权缓存清理；清理失败独立提示。
  * 模块边界：通过端口读写配置与云端存储；不持久化口令，不向设置页面传递完整配置。
@@ -21,7 +21,7 @@ export interface DriveSyncState {
     prepared?: {id: string; expiresAt: number; content: string; tabId?: number; clientId?: string; format?: 2; scope?: 'settings' | 'complete'; remote?: DriveRemote | null; operation?: 'delete'; deletion?: {account: DriveAccount; remote: DriveRemote | null}};
 }
 export interface DriveSyncStatus {available: boolean; reason: string; account: DriveAccount | null; lastSyncedAt: number | null; cleanupPending?: true}
-export interface CloudBackupDeletePreview {id: string; account: DriveAccount; hasRemote: boolean; canDelete: boolean; requiresExclusiveAccess?: true; expiresAt: number}
+export interface CloudBackupDeletePreview {id: string; account: DriveAccount; hasRemote: boolean; canDelete: boolean; expiresAt: number}
 export interface CloudBackupDeleteResult extends DriveSyncStatus {deleted: boolean}
 export interface DriveSyncPreview {
     id: string;
@@ -31,7 +31,6 @@ export interface DriveSyncPreview {
     remoteIncludesSensitive: boolean;
     hasBaseline: boolean;
     canUpload?: false;
-    requiresExclusiveAccess?: true;
     changes: DriveSyncDiff['changes'];
     expiresAt: number;
 }
@@ -44,7 +43,7 @@ export interface DriveSyncPorts<Session extends DriveSession = DriveSession> {
     readState(): Promise<unknown>;
     writeState(state: DriveSyncState): Promise<void>;
     now(): number;
-    accountChangedError?: string;
+    accountChangedError: string;
     /** 仅在认证及读取端口可在取消后阻止后续带凭据请求时启用。 */
 }
 interface Pending {
@@ -85,7 +84,6 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
             const abort = () => { signal.removeEventListener('abort', abort); reject(signal.reason); };
             signal.addEventListener('abort', abort, {once: true});
             operation.then(value => {signal.removeEventListener('abort', abort); resolve(value);}, error => {signal.removeEventListener('abort', abort); reject(error);});
-            if (signal.aborted) abort();
         });
     };
     const cancelPreparing = (tabId?: number, clientId?: string) => {
@@ -142,7 +140,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
         signal.throwIfAborted();
         const remote = await waitForReadOnly(ports.api.read(session, signal), signal);
         signal.throwIfAborted();
-        const preview = {id: crypto.randomUUID(), account: session.account, hasRemote: Boolean(remote), canDelete: !remote || canMutateCloudFile(remote.file), ...(remote?.file.contentGuard ? {requiresExclusiveAccess: true as const} : {}), expiresAt: ports.now() + 10 * 60_000};
+        const preview = {id: crypto.randomUUID(), account: session.account, hasRemote: Boolean(remote), canDelete: !remote || canMutateCloudFile(remote.file), expiresAt: ports.now() + 10 * 60_000};
         // 不设置 scope：旧客户端不能把删除事务误认为同步同意。MV3 重启后仍能核对同一账号及版本。
         signal.throwIfAborted();
         await ports.writeState({...state, connected: true, prepared: {id: preview.id, expiresAt: preview.expiresAt, content: '', operation: 'delete', tabId, clientId, deletion: {account: session.account, remote}}});
@@ -198,7 +196,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
             } catch {baseline = null;}
         }
         const diff = remoteConfig ? buildDriveSyncDiff(baseline, projectDriveSyncConfig(local, sensitiveDiff), remoteConfig) : null;
-        const preview: DriveSyncPreview = {id: crypto.randomUUID(), account: session.account, hasRemote: Boolean(remote), includeSensitive, remoteIncludesSensitive, hasBaseline: Boolean(baseline), ...(remote?.file.readOnly ? {canUpload: false as const} : {}), ...(remote?.file.contentGuard ? {requiresExclusiveAccess: true as const} : {}), changes: diff?.changes ?? [], expiresAt: ports.now() + 10 * 60_000};
+        const preview: DriveSyncPreview = {id: crypto.randomUUID(), account: session.account, hasRemote: Boolean(remote), includeSensitive, remoteIncludesSensitive, hasBaseline: Boolean(baseline), ...(remote?.file.readOnly ? {canUpload: false as const} : {}), changes: diff?.changes ?? [], expiresAt: ports.now() + 10 * 60_000};
         pending = {preview, local, originalLocal, remote, remoteConfig, diff, proof: await proof(preview.id, passphrase)};
         // MV3 休眠后的授权范围同时保存在密文与事务元数据中；完整原始本机快照供检测与回滚。
         const content = await encryptDrivePreview({preview: {...preview, changes: []}, local: originalLocal, proof: pending.proof}, passphrase);
@@ -235,7 +233,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
         if (await proof(id, passphrase) !== current.proof) throw new CloudSyncError('同步口令已修改，请重新生成预览。');
         if (!state.connected) throw new CloudSyncError('本次同步授权已结束，请重新生成预览。');
         const session = await ports.auth.open(false);
-        if (session.account.id !== current.preview.account.id) throw new CloudSyncError(ports.accountChangedError ?? '同步连接已变化，请重新生成预览。');
+        if (session.account.id !== current.preview.account.id) throw new CloudSyncError(ports.accountChangedError);
         if (!driveValuesEqual(await ports.snapshot(), current.originalLocal)) throw new CloudSyncError('本机配置已变化，请重新生成同步预览。');
         const sensitiveDiff = current.preview.includeSensitive && current.preview.remoteIncludesSensitive;
         let next: DriveSyncConfig;

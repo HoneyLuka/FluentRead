@@ -9,12 +9,10 @@ import {
 } from '@/src/services/translation/broker';
 import type {TranslationConfigSource, TranslationModelUsageRecord} from '@/src/services/translation/types';
 import {Config} from '@/src/core/config/model';
-import {createInputBoxTranslationHandler} from '@/src/features/input-translation/background/handler';
 import {resolveTranslationLanguages} from '@/src/core/translation/languages';
 import {isDefinitePageContextLeak, isLikelyPageContextLeak} from '@/src/core/translation/prompts';
 import {isClearlyWrongLanguageResponse, isLikelyUntranslatedResponse} from '@/src/core/translation/resultValidation';
 import {NativeBatchResponseError} from '@/src/core/translation/nativeBatch';
-import {createImageTranslationBackgroundHandlers, IMAGE_TRANSLATE_TEXTS_MESSAGE_TYPE} from '@/src/features/image-translation/background/handlers';
 import {serializeTranslationSlots} from '@/src/core/translation/slotProtocol';
 import {sha256Hex} from '@/src/shared/function/sha256';
 import {currentModelIds, services, customModelString} from '@/src/core/config/catalog';
@@ -75,7 +73,6 @@ const mocks = vi.hoisted(() => {
         aiSdk: service,
         azureOpenai: service,
         chromeTranslator: service,
-        localTranslation: service,
         brokenAiSdk: service,
         custom: service,
         deeplx: service,
@@ -1132,23 +1129,6 @@ describe('translation broker', () => {
         expect(translationCacheIdentities().at(-1)?.model).toBe('next-model');
     });
 
-    it('真实输入框 handler → broker 仅保留入口必要的一次完整快照复制', async () => {
-        const measured = measuredProviderConfig();
-        const {current, entryCount} = measured;
-        installBroker(undefined, Promise.resolve(), true, undefined, current);
-        mocks.service.mockResolvedValue('输入框译文');
-        const handler = createInputBoxTranslationHandler({ready: Promise.resolve(), getConfig: () => current, translate: translateWithCache});
-        await expect(handler.handle({type: 'inputBoxTranslation', text: 'Input source', targetLang: 'zh-Hans'}))
-            .resolves.toEqual({success: true, translatedText: '输入框译文'});
-        console.info(JSON.stringify({lazyFallbackOperationEvidence: 'input-handler-to-broker', entries: entryCount,
-            entryCopies: measured.reads(), providerCalls: mocks.service.mock.calls.length}));
-        expect(measured.reads()).toBe(entryCount);
-        expect(mocks.service).toHaveBeenCalledOnce();
-        const used = getTranslationProviderConfig(mocks.service.mock.calls[0][0], current);
-        expect(used.model.mock).toBe('frozen-count-model');expect(used.token.mock).toBe('fixture-count-key');
-        expect(translationCacheIdentities().at(-1)).toMatchObject({model: used.model.mock, sourceText: 'Input source'});
-    });
-
     it.each([false, true])('ready 等待中取消不会构造 fallback 或执行 provider，附着=%s', async attached => {
         const measured = measuredProviderConfig();
         const {current} = measured;
@@ -1197,37 +1177,6 @@ describe('translation broker', () => {
         await expect(translateWithCache({origin: 'Empty'})).rejects.toMatchObject({code: 'TRANSLATION_SLOT_RESPONSE_INVALID'});
 
         expect(mocks.cacheSet).not.toHaveBeenCalled();
-    });
-
-    it.each([
-        {service: 'mock', batch: false},
-        {service: 'google', batch: true},
-        {service: 'ai', batch: true},
-    ])('图片文字经真实 broker 使用 $service 时接受原文，保留其他译文与重复位置并复用缓存', async ({service, batch}) => {
-        const origin = 'This English sentence still needs a Chinese translation.';
-        const changed = 'Please read the complete instructions before you start the application.';
-        const translated = '启动应用前，请阅读完整说明。';
-        mocks.machineServices.add(service);
-        mocks.config.enableAIContext = false;
-        mocks.service.mockImplementation(async (request: {origin: string | string[]}) => {
-            const translate = (text: string) => text === origin ? `  ${origin}\u200b  ` : translated;
-            return Array.isArray(request.origin) ? request.origin.map(translate) : translate(request.origin);
-        });
-        const handler = createImageTranslationBackgroundHandlers({
-            assertLanguagesDownloaded: async () => {}, translateImage: async () => ({}), fetchImage: async () => '',
-            getTranslationService: () => service, supportsBatchTranslation: () => batch,
-            translateTexts: request => translateWithCache(request),
-            downloadLanguages: async () => {}, markLanguagesDownloaded: async () => [],
-        }).find(handler => handler.type === IMAGE_TRANSLATE_TEXTS_MESSAGE_TYPE)!;
-        const message = {type: IMAGE_TRANSLATE_TEXTS_MESSAGE_TYPE, texts: [origin, changed, origin]};
-        const expected = {success: true, translations: [`  ${origin}\u200b  `, translated, `  ${origin}\u200b  `]};
-        await expect(handler.handle(message)).resolves.toEqual(expected);
-        expect(mocks.service).toHaveBeenCalledTimes(batch ? 1 : 2);
-        await flushMicrotasks();
-        expect(translationCacheIdentities().every(identity => identity.unchangedResultPolicy === 1)).toBe(true);
-        mocks.service.mockClear();
-        await expect(handler.handle(message)).resolves.toEqual(expected);
-        expect(mocks.service).not.toHaveBeenCalled();
     });
 
     it('图片原样结果的缓存不改变普通翻译判定，公开同名字段不能放宽校验', async () => {
@@ -4580,7 +4529,7 @@ describe('translation broker', () => {
         ]));
     });
 
-    it.each(['chromeTranslator', 'localTranslation'])('%s auto 检测样本进入缓存与 pending 身份，显式源语言则不分裂缓存', async (service) => {
+    it.each(['chromeTranslator'])('%s auto 检测样本进入缓存与 pending 身份，显式源语言则不分裂缓存', async (service) => {
         mocks.config.service = service;
         mocks.service.mockImplementation(async (message: {sourceLanguageDetectionText?: string}) =>
             `译:${message.sourceLanguageDetectionText || 'explicit'}`);
@@ -4630,7 +4579,7 @@ describe('translation broker', () => {
         ]));
     });
 
-    it.each(['chromeTranslator', 'localTranslation'])('%s auto 无缓存并发请求以检测样本区分 pending，并合并相同样本', async (service) => {
+    it.each(['chromeTranslator'])('%s auto 无缓存并发请求以检测样本区分 pending，并合并相同样本', async (service) => {
         mocks.config.service = service;
         const frenchProvider = deferred<string>();
         const japaneseProvider = deferred<string>();

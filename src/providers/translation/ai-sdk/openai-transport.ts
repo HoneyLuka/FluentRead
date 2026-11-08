@@ -19,7 +19,6 @@ import {
   type ResolvedOpenAICompatibleEndpoint,
 } from './endpoints';
 import {LlmTransportError} from './transport-errors';
-import {createImageInputHttpError} from '@/src/platform/http/errors';
 import {cancelUnreadResponseBody, runtimeFetch} from '@/src/platform/http/runtime';
 import {boundErrorResponse, OPENAI_ERROR_BODY_LIMIT} from './boundedErrorResponse';
 import type {TranslationRequestLease} from '@/src/services/translation/requestScheduler';
@@ -266,13 +265,6 @@ function compatibilityFetch(
       outcome: response.status === 408 ? 'timeout' : response.ok ? 'success' : 'error',
       statusCode: response.status,
     });
-    if (!response.ok && getTranslationImageInput(request)) {
-      const error = await createImageInputHttpError(response);
-      if ((error as {imageInputUnsupported?: boolean}).imageInputUnsupported) {
-        cancelUnreadResponseBody(response);
-        throw error;
-      }
-    }
     return normalized.response;
   };
 }
@@ -334,7 +326,7 @@ async function runPreparedRequest(
     if (!text) throw new LlmTransportError('翻译服务已响应，但没有返回有效译文。', {kind: 'response', retryable: false});
     return text;
   } catch (error) {
-    throw error instanceof LlmTransportError || (error as {imageInputUnsupported?: boolean})?.imageInputUnsupported
+    throw error instanceof LlmTransportError
       ? error : execution.normalizeError(service, error, secrets, callerAborted());
   }
 }

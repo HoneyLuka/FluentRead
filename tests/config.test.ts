@@ -46,40 +46,6 @@ describe('浏览器默认译文字体配置', () => {
         }
     });
 });
-describe('单图本地识别方式配置', () => {
-    it('新配置、缺失和非法值默认 PaddleOCR，显式引擎选择可往返且不改变漫画开关', () => {
-        expect(new Config().imageTranslationOcrEngine).toBe('paddle');
-        expect(normalizeConfig({} as never).imageTranslationOcrEngine).toBe('paddle');
-        for(const value of [undefined,null,'unknown',{},true])expect(normalizeConfig({imageTranslationOcrEngine:value} as never).imageTranslationOcrEngine).toBe('paddle');
-        for (const engine of ['paddle', 'tesseract'] as const) {
-            const original={imageTranslationOcrEngine:engine,imageTranslationMangaEnabled:false};
-            const value=normalizeConfig(original);expect(value.imageTranslationOcrEngine).toBe(engine);
-            expect(normalizeConfig(JSON.parse(JSON.stringify(value))).imageTranslationOcrEngine).toBe(engine);
-            expect(value.imageTranslationMangaEnabled).toBe(false);expect(original).toEqual({imageTranslationOcrEngine:engine,imageTranslationMangaEnabled:false});
-        }
-    });
-});
-describe('多语种视频模型配置兼容', () => {
-    it('新配置、已有缺失字段和非法选择统一使用 Small 默认', () => {
-        expect(new Config().videoLocalModel).toBe('small');
-        expect(normalizeConfig(undefined).videoLocalModel).toBe('small');
-        expect(normalizeConfig({}).videoLocalModel).toBe('small');
-        expect(normalizeConfig({on: true}).videoLocalModel).toBe('small');
-        for (const videoLocalModel of [undefined, null, '', 'large', {}, [], true, 1]) {
-            expect(normalizeConfig({videoLocalModel}).videoLocalModel).toBe('small');
-        }
-    });
-    it('保留三种用户选择及导入导出，不把已下载的轻量偏好迁移到质量模型', () => {
-        for (const videoLocalModel of ['tiny', 'base', 'small'] as const) {
-            const source = {videoLocalModel, videoSourceLanguage: 'auto', videoTranslationEnabled: true};
-            const normalized = normalizeConfig(source);
-            expect(normalized.videoLocalModel).toBe(videoLocalModel);
-            expect(normalizeConfig(JSON.parse(JSON.stringify(normalized))).videoLocalModel).toBe(videoLocalModel);
-            expect(source.videoLocalModel).toBe(videoLocalModel);
-            expect(normalized.videoSourceLanguage).toBe('auto');
-        }
-    });
-});
 import { sanitizeConfigCredentials } from '@/src/core/config/credentials';
 import { customModelString, services } from '@/src/core/config/catalog';
 
@@ -543,164 +509,17 @@ describe('统一配置存储', () => {
         expect((history.entries[1].config as unknown as Record<string, unknown>).__fluentConfigRevision).toBeUndefined();
     });
 
-    it('旧配置保持图片和圈选开关，并为圈选补齐标准翻译和跟随服务', async () => {
-        const configStore = await loadConfigModule({...storedConfig, selectionAreaEnabled: true, disableImageTranslator: true});
-        await configStore.configReady;
-        expect(configStore.config).toMatchObject({
-            selectionAreaEnabled: true, disableImageTranslator: true,
-            areaTranslationMode: 'standard', areaTranslationService: '',
-        });
-        expect(configStore.config.popupQuickFeatureOrder.filter(id => id === 'image')).toHaveLength(1);
-        expect(configStore.config.popupQuickFeatureVisibility.image).toBe(true);
-        await configStore.saveConfig({...configStore.config, areaTranslationMode: 'ai', areaTranslationService: 'openai'});
-        expect(storageState.get('local:config')).toMatchObject({areaTranslationMode: 'ai', areaTranslationService: 'openai'});
-    });
 
-    it('翻译卡片提示词经过保存与重载保持，占位符和用户空白不被改写', async () => {
-        const store = await loadConfigModule(storedConfig);
-        await store.configReady;
-        const harness = {...store.config.harness, systemPrompt: 'Use {{to}}', actionPrompts: {...store.config.harness.actionPrompts, grammar: '  Custom {{learningLevel}}  '}};
-        await store.saveConfig({...store.config, harness});
-        const reopened = await loadConfigModule(storageState.get('local:config'));
-        await reopened.configReady;
-        expect(reopened.config.harness).toMatchObject({systemPrompt: 'Use {{to}}', actionPrompts: {grammar: '  Custom {{learningLevel}}  '}});
-    });
 
-    it('保留用户关闭视频、图片和圈选的选择，保存后重新加载仍关闭', async () => {
-        const disabled = {videoTranslationEnabled: false, videoMeetingAutoEnabled: false, videoPreferHumanSubtitles: false, selectionAreaEnabled: false, disableImageTranslator: true};
-        const store = await loadConfigModule({...storedConfig, ...disabled});
-        await store.configReady;
-        expect(store.config).toMatchObject(disabled);
-        await store.saveConfig({...store.config, to: 'en'});
-        const reopened = await loadConfigModule(storageState.get('local:config'));
-        await reopened.configReady;
-        expect(reopened.config).toMatchObject(disabled);
-    });
 
-    it('保留用户已开启的图片翻译，保存后重新加载仍开启', async () => {
-        const store = await loadConfigModule({...storedConfig, disableImageTranslator: false});
-        await store.configReady;
-        expect(store.config.disableImageTranslator).toBe(false);
-        await store.saveConfig({...store.config, to: 'en'});
-        const reopened = await loadConfigModule(storageState.get('local:config'));
-        await reopened.configReady;
-        expect(reopened.config.disableImageTranslator).toBe(false);
-    });
 
-    it('独立圈选服务接受机器翻译和已配置AI，拒绝畸形模式或孤立服务', () => {
-        for (const service of ['microsoft', 'openai', 'deeplx', '']) {
-            expect(normalizeConfig({areaTranslationService: service}).areaTranslationService).toBe(service);
-        }
-        for (const areaTranslationMode of [undefined, null, false, 'unknown', 'standard']) {
-            expect(normalizeConfig({areaTranslationMode}).areaTranslationMode).toBe('standard');
-        }
-        expect(normalizeConfig({areaTranslationMode: 'ai'}).areaTranslationMode).toBe('ai');
-        for (const areaTranslationService of [null, false, 12, 'unknown', 'custom:removed']) {
-            expect(normalizeConfig({areaTranslationService}).areaTranslationService).toBe('');
-        }
-        const customOpenAIProviders = [{id: 'custom:area', name: 'Area AI', endpoint: 'https://example.com/v1/chat/completions', models: ['vision-or-text-model']}];
-        expect(normalizeConfig({areaTranslationService: 'custom:area', customOpenAIProviders}).areaTranslationService).toBe('custom:area');
-        expect(normalizeConfig({areaTranslationService: 'custom'}).customOpenAIProviders.some(provider => provider.id === 'custom')).toBe(true);
-        const layout = normalizeConfig({popupQuickFeatureOrder: ['image', 'selection', 'area', 'area', 'unknown'], popupQuickFeatureVisibility: {image: false, area: false}});
-        expect(layout.popupQuickFeatureOrder.filter(id => id === 'image')).toHaveLength(1);
-        expect(layout.popupQuickFeatureVisibility).toMatchObject({image: false});
-    });
 
-    it('为旧配置默认关闭图片、开启视频和圈选，并补齐视频服务和字号', async () => {
-        const configStore = await loadConfigModule(storedConfig);
 
-        await configStore.configReady;
 
-        expect(configStore.config.videoTranslationEnabled).toBe(true);
-        expect(configStore.config.selectionAreaEnabled).toBe(true);
-        expect(configStore.config.disableImageTranslator).toBe(true);
-        expect(configStore.config.videoService).toBe('');
-        expect(configStore.config.videoLocalModel).toBe('small');
-        expect(configStore.config.videoSubtitleVisible).toBe(true);
-        expect(configStore.config.videoSubtitleDisplayMode).toBe('bilingual');
-        expect(configStore.config.videoSubtitleFontSize).toBe(100);
-        expect(configStore.config.fullPageTranslationMode).toBe('viewport');
-    });
 
-    it('为文档翻译补齐独立服务和模型，并保留网页模型选择', async () => {
-        const configStore = await loadConfigModule({
-            ...storedConfig,
-            service: 'openai',
-            model: {openai: 'web-model'},
-            documentService: 'openai',
-            documentModel: {openai: 'document-model'},
-        });
 
-        await configStore.configReady;
 
-        expect(configStore.config.documentService).toBe('openai');
-        expect(configStore.config.documentModel.openai).toBe(customModelString);
-        expect(configStore.config.documentCustomModel.openai).toBe('document-model');
-        expect(configStore.config.model.openai).toBe(customModelString);
-        expect(configStore.config.customModel.openai).toBe('web-model');
-        expect(configStore.config.customModels.openai).toEqual(expect.arrayContaining([
-            'web-model',
-            'document-model',
-        ]));
-    });
 
-    it('文档翻译遇到未知服务时回退到跟随默认', async () => {
-        const configStore = await loadConfigModule({...storedConfig, documentService: 'unknown-service'});
-
-        await configStore.configReady;
-
-        expect(configStore.config.documentService).toBe('');
-    });
-
-    it('保留用户选择的视频 AI 服务，并将未知服务回退到跟随默认', async () => {
-        const aiConfigStore = await loadConfigModule({ ...storedConfig, videoService: 'openai' });
-
-        await aiConfigStore.configReady;
-
-        expect(aiConfigStore.config.videoService).toBe('openai');
-
-        const invalidConfigStore = await loadConfigModule({ ...storedConfig, videoService: 'not-a-service' });
-
-        await invalidConfigStore.configReady;
-
-        expect(invalidConfigStore.config.videoService).toBe('');
-    });
-
-    it('把早期 Beta 写入的 DeepLX 默认值一次迁移为跟随默认', async () => {
-        const configStore = await loadConfigModule({ ...storedConfig, videoService: 'deeplx' });
-
-        await configStore.configReady;
-
-        expect(configStore.config.videoService).toBe('');
-        expect(configStore.config.videoServiceDefaultMigrated).toBe(true);
-        expect(storageMock.setItem).toHaveBeenCalledWith(
-            'local:config',
-            expect.objectContaining({ videoService: '', videoServiceDefaultMigrated: true }),
-        );
-    });
-
-    it('非法的视频字幕显示配置回退到双语和显示状态', async () => {
-        const configStore = await loadConfigModule({
-            ...storedConfig,
-            videoSubtitleVisible: 'yes',
-            videoSubtitleDisplayMode: 'side-by-side',
-            videoSubtitleFontSize: 'huge',
-        });
-
-        await configStore.configReady;
-
-        expect(configStore.config.videoSubtitleVisible).toBe(true);
-        expect(configStore.config.videoSubtitleDisplayMode).toBe('bilingual');
-        expect(configStore.config.videoSubtitleFontSize).toBe(100);
-    });
-
-    it('非法的本地视频 Whisper 模型回退到 Small', async () => {
-        const configStore = await loadConfigModule({ ...storedConfig, videoLocalModel: 'large' });
-
-        await configStore.configReady;
-
-        expect(configStore.config.videoLocalModel).toBe('small');
-    });
 
     it('存储内容损坏时回退到默认配置，并保持初始化 Promise 可用', async () => {
         const configStore = await loadConfigModule('{not-json');
@@ -1886,7 +1705,6 @@ describe('统一配置存储', () => {
             extra: {zhipu: {jwt: 'derived-secret'}},
             persistCredentials: true,
             count: 42,
-            videoServiceDefaultMigrated: true,
         });
         const contentSnapshot = normalizeConfig({
             ...current,
@@ -1897,7 +1715,6 @@ describe('统一配置存储', () => {
             extra: {},
             persistCredentials: false,
             count: 1,
-            videoServiceDefaultMigrated: false,
         });
 
         const prepared = configStore.prepareConfigSaveRequest(contentSnapshot, current, false);
@@ -1908,14 +1725,12 @@ describe('统一配置存储', () => {
             token: {openai: 'background-session-secret'},
             extra: {zhipu: {jwt: 'derived-secret'}},
             count: 42,
-            videoServiceDefaultMigrated: true,
         });
         expect(prepared).not.toHaveProperty('persistCredentials');
         expect(extensionPrepared.token).toEqual({});
         expect(extensionPrepared.extra).toEqual({});
         expect(extensionPrepared).not.toHaveProperty('persistCredentials');
         expect(extensionPrepared.count).toBe(42);
-        expect(extensionPrepared.videoServiceDefaultMigrated).toBe(true);
     });
 
     it('公共单字段补丁复用大型术语基线，保留公共归一化与结果嵌套隔离', async () => {
@@ -1941,10 +1756,10 @@ describe('统一配置存储', () => {
             expect(untrusted.glossaryLibraries[0].entries[0].target).toBe('target-0-0');
             current.glossaryLibraries[1].entries[0].target = 'edited-source';
             expect(trusted.glossaryLibraries[1].entries[0].target).toBe('target-1-0');
-            const malformedCurrent = {...current, videoSubtitleVisible: 'invalid-boolean'};
-            const normalizedPublicInput = configStore.prepareConfigPatchRequest({videoSubtitleVisible: false}, {videoSubtitleVisible: true}, malformedCurrent, false);
-            expect(normalizedPublicInput.videoSubtitleVisible).toBe(false);
-            expect(malformedCurrent.videoSubtitleVisible).toBe('invalid-boolean');
+            const malformedCurrent = {...current, pageTitleTranslationEnabled: 'invalid-boolean'};
+            const normalizedPublicInput = configStore.prepareConfigPatchRequest({pageTitleTranslationEnabled: false}, {pageTitleTranslationEnabled: true}, malformedCurrent, false);
+            expect(normalizedPublicInput.pageTitleTranslationEnabled).toBe(false);
+            expect(malformedCurrent.pageTitleTranslationEnabled).toBe('invalid-boolean');
         } finally {
             normalize.mockRestore();
         }
@@ -2004,21 +1819,20 @@ describe('统一配置存储', () => {
             ...configStore.config,
             to: 'ja',
             theme: 'dark',
-            videoTranslationEnabled: true,
-            videoSubtitleVisible: true,
+            pageTitleTranslationEnabled: true,
+            autoTranslate: true,
             count: 42,
             token: {openai: 'background-secret'},
             futureNonSensitiveSetting: {enabled: true},
         });
 
         const contentPrepared = configStore.prepareConfigPatchRequest({
-            videoSubtitleVisible: false,
+            autoTranslate: false,
             count: 0,
-            videoServiceDefaultMigrated: false,
             token: {openai: 'content-stale-secret'},
             unknownFutureToggle: true,
         }, {
-            videoSubtitleVisible: true,
+            autoTranslate: true,
         }, current, false);
         const extensionPrepared = configStore.prepareConfigPatchRequest({
             token: {openai: 'new-extension-secret'},
@@ -2029,10 +1843,9 @@ describe('统一配置存储', () => {
         expect(contentPrepared).toMatchObject({
             to: 'ja',
             theme: 'dark',
-            videoTranslationEnabled: true,
-            videoSubtitleVisible: false,
+            pageTitleTranslationEnabled: true,
+            autoTranslate: false,
             count: 42,
-            videoServiceDefaultMigrated: true,
             token: {openai: 'background-secret'},
         });
         expect(contentPrepared).not.toHaveProperty('unknownFutureToggle');
@@ -2040,15 +1853,15 @@ describe('统一配置存储', () => {
         expect(extensionPrepared.token).toEqual({openai: 'new-extension-secret'});
         expect(extensionPrepared.count).toBe(42);
         expect(() => configStore.prepareConfigPatchRequest({
-            videoSubtitleVisible: false,
+            autoTranslate: false,
         }, {
-            videoSubtitleVisible: false,
-        }, current, false)).toThrow('videoSubtitleVisible');
+            autoTranslate: false,
+        }, current, false)).toThrow('autoTranslate');
         expect(() => configStore.prepareConfigPatchRequest({
-            videoSubtitleVisible: true,
+            autoTranslate: true,
         }, {
-            videoSubtitleVisible: false,
-        }, current, false)).toThrow('videoSubtitleVisible');
+            autoTranslate: false,
+        }, current, false)).toThrow('autoTranslate');
     });
 
     it('endpoint/proxy patch 按真实目的地解绑旧 token，并让 proxy 遮蔽的 endpoint 编辑保留凭据', async () => {
@@ -2065,7 +1878,6 @@ describe('统一配置存储', () => {
             ...configStore.config,
             customOpenAIProviders: [provider],
             model: {...configStore.config.model, [service]: 'model-a'},
-            documentModel: {...configStore.config.documentModel, [service]: 'model-a'},
             token: {[service]: 'old-destination-secret'},
             proxy: {},
         });
@@ -2353,7 +2165,7 @@ describe('统一配置存储', () => {
     it('字段补丁先乐观更新，后台失败后回读权威快照并自动回滚', async () => {
         const canonical = sanitizeConfigCredentials(normalizeConfig({
             ...storedConfig,
-            videoTranslationEnabled: false,
+            pageTitleTranslationEnabled: false,
         }));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
@@ -2363,22 +2175,22 @@ describe('统一配置存储', () => {
             expected?: Config;
             baseRevision: number;
         }) => {
-            expect(configStore.config.videoTranslationEnabled).toBe(true);
+            expect(configStore.config.pageTitleTranslationEnabled).toBe(true);
             expect(message).toMatchObject({
                 mode: 'patch',
-                config: {videoTranslationEnabled: true},
-                expected: {videoTranslationEnabled: false},
+                config: {pageTitleTranslationEnabled: true},
+                expected: {pageTitleTranslationEnabled: false},
                 baseRevision: 4,
             });
             return {success: false, error: 'patch failed'};
         });
 
         await expect(configStore.requestConfigPatch({
-            videoTranslationEnabled: true,
+            pageTitleTranslationEnabled: true,
             unknownFutureToggle: true,
         }, sendMessage)).rejects.toThrow('patch failed');
 
-        expect(configStore.config.videoTranslationEnabled).toBe(false);
+        expect(configStore.config.pageTitleTranslationEnabled).toBe(false);
         expect(configStore.getConfigRevision()).toBe(4);
         expect(configStore.config).not.toHaveProperty('unknownFutureToggle');
     });
@@ -2386,7 +2198,7 @@ describe('统一配置存储', () => {
     it('字段补丁确认回声不重复 apply 或通知订阅者', async () => {
         const canonical = sanitizeConfigCredentials(normalizeConfig({
             ...storedConfig,
-            videoTranslationEnabled: false,
+            pageTitleTranslationEnabled: false,
         }));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
@@ -2394,11 +2206,11 @@ describe('统一配置存储', () => {
         const unsubscribe = configStore.subscribeConfig(listener);
         listener.mockClear();
         const sendMessage = vi.fn(async () => {
-            expect(configStore.config.videoTranslationEnabled).toBe(true);
+            expect(configStore.config.pageTitleTranslationEnabled).toBe(true);
             expect(listener).toHaveBeenCalledOnce();
             const committed = {
                 ...canonical,
-                videoTranslationEnabled: true,
+                pageTitleTranslationEnabled: true,
                 __fluentConfigRevision: 5,
             };
             storageState.set('local:config', committed);
@@ -2406,9 +2218,9 @@ describe('统一配置存储', () => {
             return {success: true, revision: 5};
         });
 
-        await configStore.requestConfigPatch({videoTranslationEnabled: true}, sendMessage);
+        await configStore.requestConfigPatch({pageTitleTranslationEnabled: true}, sendMessage);
 
-        expect(configStore.config.videoTranslationEnabled).toBe(true);
+        expect(configStore.config.pageTitleTranslationEnabled).toBe(true);
         expect(configStore.getConfigRevision()).toBe(5);
         expect(listener).toHaveBeenCalledOnce();
         unsubscribe();
@@ -2641,7 +2453,6 @@ describe('统一配置存储', () => {
             ...configStore.config,
             token: {openai: secret},
             count: 1,
-            videoServiceDefaultMigrated: true,
             to: 'ja',
         }, {recordHistory: true, immediateHistory: true});
 
@@ -2651,12 +2462,10 @@ describe('统一配置存储', () => {
         expect(configStore.config.token.openai).toBe(secret);
         expect(configStore.config).not.toHaveProperty('persistCredentials');
         expect(configStore.config.count).toBe(42);
-        expect(configStore.config.videoServiceDefaultMigrated).toBe(true);
         expect(JSON.stringify(configStore.getConfigHistorySnapshot())).not.toContain(secret);
         expect(configStore.getConfigHistorySnapshot().entries.every((entry) => (
             !('count' in entry.config)
             && !('persistCredentials' in entry.config)
-            && !('videoServiceDefaultMigrated' in entry.config)
         ))).toBe(true);
     });
 
@@ -2789,8 +2598,8 @@ describe('统一配置存储', () => {
         expect(batchSender).not.toHaveBeenCalled();
     });
 
-    it('设置页真实退出函数同步交接首 ACK 在途的 Harness 最后编辑，重复退出不重写', async () => {
-        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, harness: {enabled: false, contextMode: 'paragraph'}}));
+    it('设置页真实退出函数同步交接首 ACK 在途的最后编辑，重复退出不重写', async () => {
+        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, translationAppearance: {...new Config().translationAppearance, fontScale: 100}}));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
         const {createConfigPersistenceHandler, createConfigPersistenceBatchHandler} = await import(
@@ -2848,10 +2657,10 @@ describe('统一配置存储', () => {
         createExit(false)();
         expect(sender).not.toHaveBeenCalled();
 
-        draft.value.harness.enabled = true;
+        draft.value.translationAppearance = {...draft.value.translationAppearance, fontScale: 110};
         const first = configStore.requestConfigPatch(draft.value, sender);
-        await vi.waitFor(() => expect(backgroundConfig.harness.enabled).toBe(true));
-        draft.value.harness.contextMode = 'selection';
+        await vi.waitFor(() => expect(backgroundConfig.translationAppearance.fontScale).toBe(110));
+        draft.value.translationAppearance = {...draft.value.translationAppearance, fontScale: 120};
         const last = configStore.requestConfigPatch(draft.value, sender);
         const settled = Promise.allSettled([first, last]);
         expect(sender).toHaveBeenCalledOnce();
@@ -2861,12 +2670,12 @@ describe('统一配置存储', () => {
             // 关闭函数返回前已经交接，不能依赖尚未释放的页面 ACK 或之后的 microtask。
             expect(batches).toHaveLength(1);
             expect(batches[0]).toMatchObject({type: 'persistConfigBatch', patches: [
-                {sequence: 1, config: {harness: {enabled: true, contextMode: 'paragraph'}}},
-                {sequence: 2, config: {harness: {enabled: true, contextMode: 'selection'}}},
+                {sequence: 1, config: {translationAppearance: expect.objectContaining({fontScale: 110})}},
+                {sequence: 2, config: {translationAppearance: expect.objectContaining({fontScale: 120})}},
             ]});
             close();
             expect(batches).toHaveLength(1);
-            await vi.waitFor(() => expect(backgroundConfig.harness.contextMode).toBe('selection'));
+            await vi.waitFor(() => expect(backgroundConfig.translationAppearance.fontScale).toBe(120));
             expect(writes).toBe(2);
             expect(warnings.warn).not.toHaveBeenCalled();
         } finally {
@@ -2875,19 +2684,19 @@ describe('统一配置存储', () => {
         }
         expect(writes).toBe(2);
         // 同一页面若并未真正离开，后续新草稿必须允许下一轮退出交接。
-        draft.value.harness.contextMode = 'paragraph';
+        draft.value.translationAppearance = {...draft.value.translationAppearance, fontScale: 130};
         close.onDraftChange(JSON.stringify(draft.value));
         close();
         expect(batches).toHaveLength(2);
         await configStore.waitForConfigPersistenceQueue();
-        expect(backgroundConfig.harness.contextMode).toBe('paragraph');
+        expect(backgroundConfig.translationAppearance.fontScale).toBe(130);
         expect(writes).toBe(3);
         sender.mockClear();
         createExit(true)();
         await configStore.waitForConfigPersistenceQueue();
         expect(sender).not.toHaveBeenCalled();
         close.dispose();
-        draft.value.harness.contextMode = 'selection';
+        draft.value.translationAppearance = {...draft.value.translationAppearance, fontScale: 140};
         close.onDraftChange(JSON.stringify(draft.value));
         await configStore.waitForConfigPersistenceQueue();
         expect(sender).not.toHaveBeenCalled();
@@ -3011,7 +2820,7 @@ describe('统一配置存储', () => {
     });
 
     it('配置持久化 barrier 等待已排队及等待期间追加的请求', async () => {
-        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, videoTranslationEnabled: false}));
+        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, pageTitleTranslationEnabled: false}));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
         const configWatch = storageMock.watch.mock.calls[0][1];
@@ -3027,11 +2836,11 @@ describe('统一配置存储', () => {
             baseRevision: number;
         }) => {
             sent.push({mode: message.mode || 'replace', baseRevision: message.baseRevision});
-            if (message.mode === 'patch' && 'videoTranslationEnabled' in message.config) {
+            if (message.mode === 'patch' && 'pageTitleTranslationEnabled' in message.config) {
                 await firstPatchGate;
                 const committed = {
                     ...canonical,
-                    videoTranslationEnabled: true,
+                    pageTitleTranslationEnabled: true,
                     __fluentConfigRevision: 5,
                 };
                 storageState.set('local:config', committed);
@@ -3042,7 +2851,7 @@ describe('统一配置存储', () => {
                 await secondPatchGate;
                 const committed = {
                     ...canonical,
-                    videoTranslationEnabled: true,
+                    pageTitleTranslationEnabled: true,
                     theme: 'dark',
                     __fluentConfigRevision: 6,
                 };
@@ -3054,7 +2863,7 @@ describe('统一配置存储', () => {
             expect(message.baseRevision).toBe(6);
             const committed = {
                 ...canonical,
-                videoTranslationEnabled: true,
+                pageTitleTranslationEnabled: true,
                 theme: 'dark',
                 to: 'ja',
                 __fluentConfigRevision: 7,
@@ -3064,7 +2873,7 @@ describe('统一配置存储', () => {
             return {success: true, revision: 7};
         });
 
-        const firstPatch = configStore.requestConfigPatch({videoTranslationEnabled: true}, sendMessage);
+        const firstPatch = configStore.requestConfigPatch({pageTitleTranslationEnabled: true}, sendMessage);
         await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce());
         let barrierResolved = false;
         const barrier = configStore.waitForConfigPersistenceQueue().then(() => { barrierResolved = true; });
@@ -3090,7 +2899,7 @@ describe('统一配置存储', () => {
         expect(configStore.config).toMatchObject({
             to: 'ja',
             theme: 'dark',
-            videoTranslationEnabled: true,
+            pageTitleTranslationEnabled: true,
         });
         expect(configStore.getConfigRevision()).toBe(7);
     });
@@ -3192,7 +3001,7 @@ describe('统一配置存储', () => {
     });
 
     it('外部 revision 会取消混合队列中的旧 replace，但保留可做字段 CAS 的 patch', async () => {
-        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, videoTranslationEnabled: false}));
+        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, pageTitleTranslationEnabled: false}));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
         const configWatch = storageMock.watch.mock.calls[0][1];
@@ -3204,15 +3013,15 @@ describe('统一配置存储', () => {
         }) => {
             expect(message).toMatchObject({
                 mode: 'patch',
-                config: {videoTranslationEnabled: true},
-                expected: {videoTranslationEnabled: false},
+                config: {pageTitleTranslationEnabled: true},
+                expected: {pageTitleTranslationEnabled: false},
                 // patch 的 baseRevision 只是协议兼容字段，后台依赖 expected 做 CAS。
                 baseRevision: 4,
             });
             const committed = {
                 ...canonical,
                 to: 'ko',
-                videoTranslationEnabled: true,
+                pageTitleTranslationEnabled: true,
                 __fluentConfigRevision: 6,
             };
             storageState.set('local:config', committed);
@@ -3221,7 +3030,7 @@ describe('统一配置存储', () => {
         });
 
         const staleReplace = configStore.requestConfigSave({...configStore.config, to: 'en'}, sendMessage);
-        const patch = configStore.requestConfigPatch({videoTranslationEnabled: true}, sendMessage);
+        const patch = configStore.requestConfigPatch({pageTitleTranslationEnabled: true}, sendMessage);
         const external = {
             ...canonical,
             to: 'ko',
@@ -3236,13 +3045,13 @@ describe('统一配置存储', () => {
         expect(sendMessage).toHaveBeenCalledOnce();
         expect(configStore.config).toMatchObject({
             to: 'ko',
-            videoTranslationEnabled: true,
+            pageTitleTranslationEnabled: true,
         });
         expect(configStore.getConfigRevision()).toBe(6);
     });
 
     it('active replace 期间 deferred 的外部更新会取消所有旧 replace，但后续 patch 仍可 CAS', async () => {
-        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, videoTranslationEnabled: false}));
+        const canonical = sanitizeConfigCredentials(normalizeConfig({...storedConfig, pageTitleTranslationEnabled: false}));
         const configStore = await loadConfigModule({...canonical, __fluentConfigRevision: 4});
         await configStore.configReady;
         const configWatch = storageMock.watch.mock.calls[0][1];
@@ -3267,14 +3076,14 @@ describe('统一配置存储', () => {
 
             expect(message).toMatchObject({
                 mode: 'patch',
-                config: {videoTranslationEnabled: true},
-                expected: {videoTranslationEnabled: false},
+                config: {pageTitleTranslationEnabled: true},
+                expected: {pageTitleTranslationEnabled: false},
                 baseRevision: 4,
             });
             const committed = {
                 ...canonical,
                 to: 'ko',
-                videoTranslationEnabled: true,
+                pageTitleTranslationEnabled: true,
                 __fluentConfigRevision: 7,
             };
             storageState.set('local:config', committed);
@@ -3287,7 +3096,7 @@ describe('统一配置存储', () => {
             {mode: 'replace', to: 'en', baseRevision: 4},
         ]));
         const staleReplace = configStore.requestConfigSave({...configStore.config, to: 'ja'}, sendMessage);
-        const patch = configStore.requestConfigPatch({videoTranslationEnabled: true}, sendMessage);
+        const patch = configStore.requestConfigPatch({pageTitleTranslationEnabled: true}, sendMessage);
         const external = {
             ...canonical,
             to: 'ko',
@@ -3308,7 +3117,7 @@ describe('统一配置存储', () => {
         ]);
         expect(configStore.config).toMatchObject({
             to: 'ko',
-            videoTranslationEnabled: true,
+            pageTitleTranslationEnabled: true,
         });
         expect(configStore.getConfigRevision()).toBe(7);
     });
@@ -3548,17 +3357,14 @@ describe('统一配置存储', () => {
             ...configStore.config,
             count: 1,
             persistCredentials: true,
-            videoServiceDefaultMigrated: false,
         }, {recordHistory: true, immediateHistory: true});
 
         const history = configStore.getConfigHistorySnapshot();
         expect(history.entries).toHaveLength(1);
         expect(history.entries[0]?.config).not.toHaveProperty('count');
         expect(history.entries[0]?.config).not.toHaveProperty('persistCredentials');
-        expect(history.entries[0]?.config).not.toHaveProperty('videoServiceDefaultMigrated');
         expect(configStore.config).toMatchObject({
             count: 12,
-            videoServiceDefaultMigrated: true,
         });
         expect(configStore.config).not.toHaveProperty('persistCredentials');
     });

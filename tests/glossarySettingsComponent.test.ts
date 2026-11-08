@@ -7,8 +7,6 @@ import BuiltinGlossaries from '@/src/features/glossary/ui/BuiltinGlossaries.vue'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {translate} from '@/src/core/i18n';
 import {GLOSSARY_LIMITS, createGlossaryLibrary, normalizeGlossaryLibraries, type GlossaryLibrary} from '@/src/core/glossary';
-import {Config} from '@/src/core/config/model';
-import {createQuickTranslationProfile} from '@/src/core/config/quickTranslation';
 
 // 正常导入并渲染生产模板；只隔离配置、浏览器、原生对话框及第三方选择控件端口。
 const stateKey = '__fluentReadGlossarySettingsTest';
@@ -933,41 +931,6 @@ describe('Glossary integration and user-content boundaries', () => {
       expect(component).toContain(`:aria-label="t('${key}')"`);
       for (const language of ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) expect(translate(key, language)).not.toBe(key);
     }
-  });
-
-  it('distinguishes glossary-only profile overrides in the real collapsed summary and keeps inheritance unchanged', async () => {
-    const {default: component} = await import('@/src/features/settings/ui/QuickTranslationProfiles.vue');
-    app.unmount();
-    const profileConfig = runtime.reactive(Object.assign(new Config(), {glossaryLibraries: [fixture('技术'), fixture('产品')]}));
-    const profile = {...createQuickTranslationProfile('hover'), enabled: true, hotkey: 'Control+1'};
-    mountComponent(component, {config: profileConfig, action: 'hover', profiles: [profile]});
-    const summary = state;
-    for (const inherited of [profile, {...profile, glossaryIds: null}]) {
-      expect(summary.hasProfileOverrides(inherited)).toBe(false);
-      expect(summary.profileSummaryTitle(inherited)).toBe(translate('quickTranslation.useDefaults', 'zh-CN'));
-      expect(summary.profileSummaryDetail(inherited)).not.toContain('术语库');
-    }
-    const disabled = {...profile, glossaryIds: []};
-    expect(summary.hasProfileOverrides(disabled)).toBe(true);
-    expect(summary.profileSummaryTitle(disabled)).not.toBe(translate('quickTranslation.useDefaults', 'zh-CN'));
-    expect(summary.profileSummaryDetail(disabled)).toContain(translate('glossary.none', 'zh-CN'));
-    expect(summary.profileSummaryDetail({...profile, glossaryIds: ['技术']})).toContain('术语库: 技术');
-    expect(summary.profileSummaryDetail({...profile, glossaryIds: ['产品']})).toContain('术语库: 产品');
-    profileConfig.glossaryLibraries[0].name = '技术新版';
-    expect(summary.profileSummaryDetail({...profile, glossaryIds: ['技术', 'missing']})).toContain('术语库: 技术新版, missing');
-  });
-
-  it('reuses the branded three-state selector across profiles, documents, and subtitle settings', () => {
-    const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
-    for (const path of ['src/features/settings/ui/QuickTranslationProfiles.vue', 'src/app/document-translation/DocumentApp.vue', 'src/features/settings/ui/SettingsSections.vue']) {
-      expect(source(path)).toContain('GlossaryLibrarySelect');
-    }
-    const selector = source('src/ui/components/GlossaryLibrarySelect.vue');
-    expect(selector).toContain('<UiSelect'); expect(selector).toContain('type="checkbox"');
-    for (const mode of ['inherit', 'none', 'selected']) expect(selector).toContain(`value="${mode}"`);
-    expect(selector).not.toContain('<el-select');
-    expect(source('src/features/glossary/ui/GlossarySettings.vue')).toContain('data-i18n-ignore');
-    expect(source('src/features/glossary/ui/GlossarySettings.vue')).not.toContain('v-html');
   });
 });
 

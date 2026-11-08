@@ -18,7 +18,7 @@ export function removeConfiguredModel(config: Config, service: string, model: st
         config.customOpenAIProviders = normalizeCustomOpenAIProviders(config.customOpenAIProviders.map(item =>
             item.id === service ? {...item, models: remaining} : item,
         ));
-        for (const mapping of [config.model, config.documentModel]) {
+        for (const mapping of [config.model]) {
             if (mapping[service] !== model) continue;
             if (remaining.length) mapping[service] = remaining[0];
             else delete mapping[service];
@@ -27,7 +27,7 @@ export function removeConfiguredModel(config: Config, service: string, model: st
         const remaining = (config.customModels[service] || []).filter(item => item !== model);
         if (remaining.length) config.customModels[service] = remaining;
         else delete config.customModels[service];
-        for (const [mapping, custom] of [[config.model, config.customModel], [config.documentModel, config.documentCustomModel]]) {
+        for (const [mapping, custom] of [[config.model, config.customModel]]) {
             if (custom[service] !== model) continue;
             if (mapping[service] !== customModelString) delete custom[service];
             else if (remaining.length) {

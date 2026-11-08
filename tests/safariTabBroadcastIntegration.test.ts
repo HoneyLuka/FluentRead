@@ -10,25 +10,19 @@ const ports = vi.hoisted(() => {
         tabs: {query: vi.fn(), sendMessage: vi.fn(), onRemoved: {addListener: vi.fn((listener: (id: number) => void) => {removedListeners.push(listener);})}},
         storage: {session: {get: vi.fn(), set: vi.fn()}},
     };
-    return {watchers, removedListeners, browser, createProject: vi.fn(), config: {on: true, personalCorrectionsEnabled: true},
-        storage: {getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn(),
-            watch: vi.fn((key: string, callback: (value: unknown, previous?: unknown) => void) => {
-                watchers.set(key, callback); return () => {watchers.delete(key);};
-            })}};
+    const storage = {watch: vi.fn((key: string, callback: (value: unknown, previous?: unknown) => void) => {
+        watchers.set(key, callback); return () => {watchers.delete(key);};
+    })};
+    return {watchers, removedListeners, browser, storage, config: {on: true}};
 });
 vi.mock('webextension-polyfill', () => ({default: ports.browser}));
 vi.mock('@/src/services/config/store', () => ({config: ports.config}));
 vi.mock('@/src/platform/storage/configStorageRuntime', () => ({configStorage: ports.storage}));
-vi.mock('@/src/platform/storage/personalCorrectionRepository', () => ({PersonalCorrectionRepository: class {}}));
-vi.mock('@/src/services/personal-corrections/service', () => ({PersonalCorrectionService: class {createProject = ports.createProject;}}));
-import {createConfigImageOcrLanguageStorage, installBrowserConfigStorageBroadcast, installBrowserTabBroadcastRuntime} from '@/src/app/background/configStorageRuntime';
-import {createPersonalCorrectionRuntimeHandlers} from '@/src/app/background/personalCorrectionRuntime';
+import {installBrowserConfigStorageBroadcast, installBrowserTabBroadcastRuntime} from '@/src/app/background/configStorageRuntime';
 import {createConfigStorageReadHandler} from '@/src/app/background/handlers/configStorage';
 import {createTranslationCacheHandler, createTranslationCacheInvalidationBroadcaster} from '@/src/app/background/handlers/translationCache';
-import {createBrowserVocabularyBookChangedBroadcaster} from '@/src/features/vocabulary/background/handler';
 import {TAB_BROADCAST_SESSION_KEY} from '@/src/app/background/tabBroadcast';
 import {CONFIG_STORAGE_READ_MESSAGE} from '@/src/platform/storage/configStorage';
-import type {PersonalCorrectionMessage} from '@/src/services/personal-corrections/protocol';
 
 beforeEach(() => {
     vi.clearAllMocks(); ports.watchers.clear(); ports.removedListeners.length = 0;
@@ -38,12 +32,11 @@ beforeEach(() => {
     ports.browser.runtime.sendMessage.mockResolvedValue(undefined);
     ports.browser.storage.session.get.mockResolvedValue({});
     ports.browser.storage.session.set.mockResolvedValue(undefined);
-    ports.createProject.mockResolvedValue({id: 'project'});
 });
 afterEach(() => {vi.unstubAllGlobals(); vi.restoreAllMocks();});
 
 describe('真实后台广播工厂共享接收者适配器', () => {
-    it.each(['safari', 'chrome', 'firefox'])('%s 的四条实际广播沿共享策略投递', async browserName => {
+    it.each(['safari', 'chrome'])('%s 的实际广播沿共享策略投递', async browserName => {
         const tabBroadcast = installBrowserTabBroadcastRuntime(browserName);
         const handler = createConfigStorageReadHandler({
             ready: Promise.resolve(), read: async () => ({on: true}),
@@ -57,27 +50,17 @@ describe('真实后台广播工厂共享接收者适配器', () => {
         ports.watchers.get('local:config')?.({on: false});
         await vi.waitFor(() => expect(ports.browser.tabs.sendMessage).toHaveBeenCalledWith(7, {type: 'configStorageChanged', key: 'local:config'}));
         await createTranslationCacheInvalidationBroadcaster({...tabBroadcast, warn: vi.fn()})();
-        createBrowserVocabularyBookChangedBroadcaster({...tabBroadcast, sendRuntimeMessage: ports.browser.runtime.sendMessage})('note', 'opaque-entry');
-        const [correction] = createPersonalCorrectionRuntimeHandlers(tabBroadcast);
-        const projectMessage: PersonalCorrectionMessage = {type: 'fluentReadPersonalCorrections', action: 'createProject', label: 'Project'};
-        await expect(correction!.handle(projectMessage, {
-            sender: {id: 'fluentread', url: 'safari-web-extension://fluentread/options.html'},
-        })).resolves.toMatchObject({success: true});
-        await vi.waitFor(() => expect(ports.browser.tabs.sendMessage).toHaveBeenCalledWith(7, {type: 'fluentReadPersonalCorrectionsChanged'}));
-        await vi.waitFor(() => expect(ports.browser.tabs.sendMessage).toHaveBeenCalledWith(7, {
-            type: 'fluentReadVocabularyBookChanged', reason: 'note', entryId: 'opaque-entry',
-        }));
         const calls = ports.browser.tabs.sendMessage.mock.calls;
         expect(calls.filter(([id]) => id === 7).map(([, message]) => message.type).sort()).toEqual([
-            'configStorageChanged', 'fluentReadPersonalCorrectionsChanged', 'fluentReadVocabularyBookChanged', 'translationCacheCleared',
+            'configStorageChanged', 'translationCacheCleared',
         ]);
         if (browserName === 'safari') {
             expect(ports.browser.tabs.query).not.toHaveBeenCalled();
             expect(calls.every(([id]) => id === 7)).toBe(true);
             expect(ports.browser.storage.session.set).toHaveBeenLastCalledWith({[TAB_BROADCAST_SESSION_KEY]: [7]});
         } else {
-            expect(ports.browser.tabs.query).toHaveBeenCalledTimes(4);
-            expect(calls.filter(([id]) => id === 90)).toHaveLength(4);
+            expect(ports.browser.tabs.query).toHaveBeenCalledTimes(2);
+            expect(calls.filter(([id]) => id === 90)).toHaveLength(2);
             expect(ports.browser.storage.session.get).not.toHaveBeenCalled();
             expect(ports.browser.storage.session.set).not.toHaveBeenCalled();
         }
@@ -99,13 +82,12 @@ describe('真实后台广播工厂共享接收者适配器', () => {
         expect(ports.browser.tabs.query).not.toHaveBeenCalled();
     });
 
-    it('唯一后台入口把同一接收者实例接到四个工厂与配置读取', () => {
+    it('唯一后台入口把同一接收者实例接到广播工厂与配置读取', () => {
         const source = readFileSync(resolve(__dirname, '../src/app/background/messageRuntime.ts'), 'utf8');
         expect(source).toContain('const tabBroadcast = installBrowserTabBroadcastRuntime(capabilities.browser)');
-        expect(source).toContain('createPersonalCorrectionRuntimeHandlers<BackgroundRuntimeContext>(tabBroadcast)');
         expect(source).toContain('createConfigBackgroundHandlers<BackgroundRuntimeContext>(tabBroadcast.registerContentReceiver)');
         expect(source).toContain('installBrowserConfigStorageBroadcast(tabBroadcast)');
-        expect(source.match(/\.\.\.tabBroadcast/g)).toHaveLength(2);
+        expect(source.match(/\.\.\.tabBroadcast/g)).toHaveLength(1);
         expect(source).not.toContain('browser.tabs.query({})');
     });
 
@@ -125,15 +107,6 @@ describe('真实后台广播工厂共享接收者适配器', () => {
         expect(ports.browser.runtime.sendMessage).toHaveBeenCalledWith({type: 'configStorageChanged', key: 'local:config'});
     });
 
-    it('共享装配保留 OCR 元数据端口的原键映射', async () => {
-        ports.storage.getItem.mockResolvedValue({languages: ['en']});
-        ports.storage.setItem.mockResolvedValue(undefined);
-        const storage = createConfigImageOcrLanguageStorage();
-        await expect(storage.get('fluentReadImageOcrLanguages')).resolves.toEqual({fluentReadImageOcrLanguages: {languages: ['en']}});
-        await storage.set({fluentReadImageOcrLanguages: {languages: ['zh']}});
-        expect(ports.storage.getItem).toHaveBeenCalledWith('local:fluentReadImageOcrLanguages');
-        expect(ports.storage.setItem).toHaveBeenCalledWith('local:fluentReadImageOcrLanguages', {languages: ['zh']});
-    });
 
     it('扩展自身页面不登记为 Safari 网页接收者，真实网页仍能接收通知', async () => {
         const tabBroadcast = installBrowserTabBroadcastRuntime('safari');
@@ -145,18 +118,6 @@ describe('真实后台广播工厂共享接收者适配器', () => {
         expect(ports.browser.storage.session.set).toHaveBeenLastCalledWith({[TAB_BROADCAST_SESSION_KEY]: [7]});
     });
 
-    it('OCR 元数据持久化读写失败会传递错误，恢复后可以重试', async () => {
-        const storage = createConfigImageOcrLanguageStorage();
-        const failure = new Error('fixture storage failure');
-        ports.storage.getItem.mockRejectedValueOnce(failure).mockResolvedValueOnce({languages: ['en']});
-        await expect(storage.get('fluentReadImageOcrLanguages')).rejects.toBe(failure);
-        await expect(storage.get('fluentReadImageOcrLanguages')).resolves.toEqual({fluentReadImageOcrLanguages: {languages: ['en']}});
-        ports.storage.setItem.mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
-        await expect(storage.set({fluentReadImageOcrLanguages: {languages: ['zh']}})).rejects.toBe(failure);
-        await expect(storage.set({fluentReadImageOcrLanguages: {languages: ['zh']}})).resolves.toBeUndefined();
-        expect(ports.storage.setItem).toHaveBeenCalledTimes(2);
-        expect(ports.storage.setItem).toHaveBeenLastCalledWith('local:fluentReadImageOcrLanguages', {languages: ['zh']});
-    });
 
     it('真实会话故障只告警，配置读取仍能完成并在后续广播恢复', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -186,8 +147,6 @@ describe('真实后台广播工厂共享接收者适配器', () => {
         const cacheWarn = vi.fn();
         await createTranslationCacheInvalidationBroadcaster({...failed, warn: cacheWarn})();
         expect(cacheWarn).toHaveBeenCalledWith('[FluentRead] 翻译缓存清理完成广播失败', failure);
-        createBrowserVocabularyBookChangedBroadcaster({...failed, sendRuntimeMessage: ports.browser.runtime.sendMessage})('clear');
-        await vi.waitFor(() => expect(failed.broadcastTabMessage).toHaveBeenCalledWith({type: 'fluentReadVocabularyBookChanged', reason: 'clear'}));
         expect(ports.browser.tabs.query).not.toHaveBeenCalled();
         expect(ports.browser.tabs.sendMessage).not.toHaveBeenCalled();
         dispose();

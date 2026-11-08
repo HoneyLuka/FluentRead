@@ -125,8 +125,6 @@ describe('界面皮肤与栏目配置', () => {
       'hover',
       'selection',
       'appearance',
-      'image',
-      'document',
     ])
   })
 
@@ -158,59 +156,38 @@ describe('界面皮肤与栏目配置', () => {
 
   it('独立归一化快捷卡片的顺序和显隐，并以新对象更新单张卡片', () => {
     expect(normalizePopupQuickFeatureOrder([
-      'document',
       'hover',
-      'document',
+      'selection',
+      'hover',
       'futureFeature',
     ])).toEqual([
-      'document',
       'hover',
       'selection',
       'appearance',
-      'image',
     ])
     expect(normalizePopupQuickFeatureOrder(null)).toEqual(DEFAULT_POPUP_QUICK_FEATURE_ORDER)
 
     const sharedVisibility = {...DEFAULT_POPUP_QUICK_FEATURE_VISIBILITY}
-    const updated = withPopupQuickFeatureVisibility(sharedVisibility, 'image', false)
+    const updated = withPopupQuickFeatureVisibility(sharedVisibility, 'selection', false)
     expect(updated).not.toBe(sharedVisibility)
-    expect(sharedVisibility.image).toBe(true)
-    expect(updated.image).toBe(false)
-    expect(normalizePopupQuickFeatureVisibility({hover: false, image: 'false'})).toEqual({
+    expect(sharedVisibility.selection).toBe(true)
+    expect(updated.selection).toBe(false)
+    expect(normalizePopupQuickFeatureVisibility({hover: false, selection: 'false'})).toEqual({
       hover: false,
       selection: true,
       appearance: false,
-      image: true,
-      document: true,
     })
   })
 
-  it('合并旧圈选入口时保留排序、可见性和独立功能偏好', () => {
-    const migrated = normalizeConfig({popupQuickFeatureOrder: ['area', 'image', 'video', 'hover'], popupQuickFeatureVisibility: {image: false, area: true}, selectionAreaEnabled: true, disableImageTranslator: true, videoTranslationEnabled: true})
-    expect(migrated.popupQuickFeatureOrder).toEqual(['image', 'hover', 'selection', 'appearance', 'document'])
-    expect(migrated.popupQuickFeatureVisibility.image).toBe(true)
-    expect(migrated).toMatchObject({selectionAreaEnabled: true, disableImageTranslator: true, videoTranslationEnabled: true})
-    expect(normalizePopupQuickFeatureVisibility({image: false, area: false}).image).toBe(false)
-    expect(normalizeConfig(migrated)).toEqual(migrated)
-  })
 
-  it('默认保留四个入口，显式添加译文显示后仍持久保留', () => {
+  it('默认保留两个入口，显式添加译文显示后仍持久保留', () => {
     const initial = normalizeConfig({})
     expect(initial.popupQuickFeatureOrder.filter(id => initial.popupQuickFeatureVisibility[id]))
-      .toEqual(['hover', 'selection', 'image', 'document'])
+      .toEqual(['hover', 'selection'])
     const visible = withPopupQuickFeatureVisibility(initial.popupQuickFeatureVisibility, 'appearance', true)
     expect(normalizeConfig({...initial, popupQuickFeatureVisibility: visible}).popupQuickFeatureVisibility.appearance).toBe(true)
   })
 
-  it('清理历史信息高亮快捷入口的排序和显隐，保留独立阅读偏好', () => {
-    const informationHighlight = {mode: 'surprisal-local', density: 'high', color: 'mint', style: 'underline'}
-    const migrated = normalizeConfig({popupQuickFeatureOrder: ['highlight', 'image'], popupQuickFeatureVisibility: {highlight: true, image: false}, informationHighlight})
-    expect(migrated.popupQuickFeatureOrder).toEqual(['image', 'hover', 'selection', 'appearance', 'document'])
-    expect(migrated.popupQuickFeatureVisibility).not.toHaveProperty('highlight')
-    expect(migrated.popupQuickFeatureVisibility.image).toBe(false)
-    expect(migrated.informationHighlight).toEqual({enabled: false, hotkey: 'Alt+H', hotkeyEnabled: false, ...informationHighlight, model: 'qwen2.5-0.5b', intensity: 'standard'})
-    expect(normalizeConfig(migrated)).toEqual(migrated)
-  })
 
   it('每个快捷入口都有图标路径与色调，真实菜单栏和设置页预览共用同一份数据', () => {
     const ids = popupQuickFeatureOptions.map((item) => item.id).sort()
@@ -221,7 +198,7 @@ describe('界面皮肤与栏目配置', () => {
       expect(popupQuickFeatureIconPaths[id]).toMatch(/^M[\d\s.a-zA-Z-]+$/)
       expect(['rose', 'violet', 'amber', 'teal', 'blue']).toContain(popupQuickFeatureIconTones[id])
     }
-    expect(new Set(Object.values(popupQuickFeatureIconTones)).size).toBe(5)
+    expect(new Set(Object.values(popupQuickFeatureIconTones)).size).toBe(3)
   })
 
   it('只接受注册皮肤，并为升级旧配置补齐栏目开关', () => {
@@ -294,8 +271,8 @@ describe('界面皮肤与栏目配置', () => {
       interfaceSkin: 'zhuqing',
       interfaceVisibility: {popupQuickFeatures: false},
       popupModuleOrder: ['quickFeatures', 'translation', 'unknown', 'quickFeatures'],
-      popupQuickFeatureOrder: ['document', 'hover', 'unknown', 'document'],
-      popupQuickFeatureVisibility: {image: false},
+      popupQuickFeatureOrder: ['selection', 'hover', 'unknown', 'selection'],
+      popupQuickFeatureVisibility: {selection: false},
     })
 
     expect(normalized.interfaceSkin).toBe('zhuqing')
@@ -311,18 +288,14 @@ describe('界面皮肤与栏目配置', () => {
       'footer',
     ])
     expect(normalized.popupQuickFeatureOrder).toEqual([
-      'document',
-      'hover',
       'selection',
+      'hover',
       'appearance',
-      'image',
     ])
     expect(normalized.popupQuickFeatureVisibility).toEqual({
       hover: true,
-      selection: true,
+      selection: false,
       appearance: false,
-      image: false,
-      document: true,
     })
     expect(normalizeConfig({
       interfaceSkin: 'invalid',

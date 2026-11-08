@@ -25,8 +25,7 @@ const groups = [
 let scopes: EffectScope[];
 function mount() {
     const config = ref({floatingBallHotkey: 'Alt+Q', customFloatingBallHotkey: '', hotkey: 'Shift', customHotkey: '',
-        selectionTranslatorTrigger: 'hover', selectionTranslatorHotkey: 'none', customSelectionTranslatorHotkey: '',
-        inputBoxTranslationTrigger: 'ctrl_enter', quickTranslationProfiles: []} as unknown as Config);
+        selectionTranslatorTrigger: 'hover', selectionTranslatorHotkey: 'none', customSelectionTranslatorHotkey: ''} as unknown as Config);
     const active = ref(true);
     const scope = effectScope(); scopes.push(scope);
     // 可选的分区可见性约束必须保留旧单参数调用；旧实现忽略第二参数，因而能直接复现换页问题。
@@ -48,13 +47,19 @@ describe('快捷键设置草稿生命周期', () => {
         expect(config.value[group.custom]).toBe('');expect(state[group.visible].value).toBe(true);
         expect(notices.message.warning).toHaveBeenCalled();
     });
-    it('输入翻译和父级圈选开启校验同样保留点选组合，停用点选后允许设置', () => {
+    it('点选保留组合在父级开启校验与三类录制校验中都被拒绝，停用点选后允许设置', () => {
         const {state, config} = mount();
         Object.assign(config.value, {selectionTranslatorMode: 'bilingual', disableSelectionTranslator: false,
             selectionClickSelectEnabled: true, selectionClickSelectHotkey: 'Ctrl+Enter'});
-        config.value.inputBoxTranslationTrigger = 'none';state.handleInputBoxTranslationTriggerChange('ctrl_enter');
-        expect(config.value.inputBoxTranslationTrigger).toBe('none');expect(state.quickTranslationConflictMessage('Ctrl+Enter')).toContain('两点选取');
-        config.value.selectionClickSelectEnabled = false;state.handleInputBoxTranslationTriggerChange('ctrl_enter');expect(config.value.inputBoxTranslationTrigger).toBe('ctrl_enter');
+        for (const validate of [state.quickTranslationConflictMessage, state.validateCustomFullPageHotkey,
+            state.validateCustomMouseHotkey, state.validateCustomSelectionHotkey]) expect(validate('Ctrl+Enter')).toContain('两点选取');
+        state.handleHotkeyChange('Ctrl+Enter'); expect(config.value.floatingBallHotkey).toBe('Alt+Q');
+        state.handleMouseHotkeyChange('Ctrl+Enter'); expect(config.value.hotkey).toBe('Shift');
+        config.value.selectionClickSelectEnabled = false;
+        for (const validate of [state.quickTranslationConflictMessage, state.validateCustomFullPageHotkey,
+            state.validateCustomMouseHotkey, state.validateCustomSelectionHotkey]) expect(validate('Ctrl+Enter')).toBe('');
+        state.handleHotkeyChange('Ctrl+Enter'); expect(config.value.floatingBallHotkey).toBe('Ctrl+Enter');
+        state.handleMouseHotkeyChange('Alt+R'); expect(config.value.hotkey).toBe('Alt+R');
     });
     it.each(groups)('$name 快速改选不会让迟到弹窗重新打开或取消覆盖新选择', async group => {
         const {state, config} = mount();
@@ -91,15 +96,15 @@ describe('快捷键设置草稿生命周期', () => {
         expect(state[group.visible].value).toBe(false);
         state[group.cancel](); expect(JSON.stringify(config.value)).toBe(replacement);
     });
-    it('划词自定义快捷键确认和选择旧自定义值都拒绝已启用快捷方案冲突', () => {
+    it('划词自定义快捷键确认和选择旧自定义值都拒绝点选保留组合冲突', () => {
         const {state, config} = mount();
-        config.value.quickTranslationProfiles = [{id: 'section-ja', enabled: true, action: 'section', hotkey: 'F9',
-            service: '', model: '', targetLanguage: 'ja', displayMode: 'inherit', fullPageMode: 'inherit'}];
+        Object.assign(config.value, {selectionTranslatorMode: 'bilingual', disableSelectionTranslator: false,
+            selectionClickSelectEnabled: true, selectionClickSelectHotkey: 'Alt+F9'});
         state.handleSelectionTriggerChange('custom'); vi.advanceTimersByTime(100);
-        state.handleCustomSelectionHotkeyConfirm('F9');
+        state.handleCustomSelectionHotkeyConfirm('Alt+F9');
         expect(config.value.customSelectionTranslatorHotkey).toBe('');
         expect(state.showCustomSelectionHotkeyDialog.value).toBe(true);
-        state.handleCustomSelectionHotkeyCancel(); config.value.customSelectionTranslatorHotkey = 'F9';
+        state.handleCustomSelectionHotkeyCancel(); config.value.customSelectionTranslatorHotkey = 'Alt+F9';
         state.handleSelectionTriggerChange('custom'); expect(config.value.selectionTranslatorTrigger).toBe('hover');
         expect(notices.message.warning).toHaveBeenCalled();
     });
@@ -141,22 +146,9 @@ it.each(groups)('$name 关闭分区或卸载后的过期确认与打开入口不
     active.value = true; scope.stop(); state[group.open](); state[group.change]('custom'); state[group.confirm]('F10');
     expect(JSON.stringify(config.value)).toBe(saved); expect(state[group.visible].value).toBe(false);
 });
-it('三类录制校验和输入框触发检查都读取快捷方案动作，未占用的触发可直接设置', () => {
-    const {state, config, active} = mount();
-    for (const action of ['hover', 'full-page', 'section'] as const) {
-        config.value.quickTranslationProfiles = [{id: 'occupied', enabled: true, action, hotkey: 'Ctrl+Enter', service: '', model: '', targetLanguage: '', displayMode: 'inherit', fullPageMode: 'inherit'}];
-        for (const validate of [state.validateCustomFullPageHotkey, state.validateCustomMouseHotkey, state.validateCustomSelectionHotkey]) expect(validate('Ctrl+Enter')).toContain('quickTranslation.conflictProfile');
-        state.handleHotkeyChange('Ctrl+Enter'); expect(config.value.floatingBallHotkey).toBe('Alt+Q');
-        state.handleMouseHotkeyChange('Ctrl+Enter'); expect(config.value.hotkey).toBe('Shift');
-        state.handleInputBoxTranslationTriggerChange('ctrl_enter'); expect(notices.message.warning).toHaveBeenCalled();
-    }
-    state.handleInputBoxTranslationTriggerChange('triple_space'); expect(config.value.inputBoxTranslationTrigger).toBe('triple_space');
-    state.handleInputBoxTranslationTriggerChange('none'); expect(config.value.inputBoxTranslationTrigger).toBe('none');
-    active.value = false; state.handleInputBoxTranslationTriggerChange('triple_equal'); expect(config.value.inputBoxTranslationTrigger).toBe('none');
-});
 it('单参数旧调用仍可正常设置与取消，手动打开未保存的自定义模式也恢复默认', () => {
     const config = ref({floatingBallHotkey: 'custom', customFloatingBallHotkey: '', hotkey: 'custom', customHotkey: '',
-        selectionTranslatorTrigger: 'custom', customSelectionTranslatorHotkey: '', quickTranslationProfiles: []} as unknown as Config);
+        selectionTranslatorTrigger: 'custom', customSelectionTranslatorHotkey: ''} as unknown as Config);
     const scope = effectScope(); scopes.push(scope); const state = scope.run(() => useTranslationShortcutSettings(config))!;
     state.openCustomHotkeyDialog(); state.handleCustomHotkeyCancel(); expect(config.value.floatingBallHotkey).toBe('Alt+T');
     state.openCustomMouseHotkeyDialog(); state.handleCustomMouseHotkeyCancel(); expect(config.value.hotkey).toBe('Control');
@@ -170,7 +162,7 @@ import {onScopeDispose, watch as watchSettingsConfig} from 'vue';
 function mountWithNormalizedSettingsEcho(initial: Partial<Config> = {}, initialState: 'normalized' | 'legacy' = 'normalized') {
     const initialConfig = Object.assign(new PersistedShortcutConfig(), {
         floatingBallHotkey: 'Alt+Q', customFloatingBallHotkey: '', hotkey: 'Shift', customHotkey: '',
-        selectionTranslatorTrigger: 'hover', customSelectionTranslatorHotkey: '', quickTranslationProfiles: [],
+        selectionTranslatorTrigger: 'hover', customSelectionTranslatorHotkey: '',
     }, initial);
     const config = ref(initialState === 'legacy' ? initialConfig : normalizeConfig(initialConfig));
     const active = ref(true);

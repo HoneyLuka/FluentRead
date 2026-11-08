@@ -6,7 +6,7 @@
  */
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 const state = vi.hoisted(() => ({config: {} as Record<string, any>, listeners: [] as Array<() => void>,
-    ready: Promise.resolve(), language: vi.fn(), action: vi.fn(), feedback: vi.fn(), capabilities: {browser: 'chrome', imageTranslation: true, areaTranslation: true}}));
+    ready: Promise.resolve(), language: vi.fn(), action: vi.fn(), feedback: vi.fn(), capabilities: {browser: 'chrome'}}));
 vi.mock('@/src/services/config/store', () => ({config: state.config, configReady: {then: (fn: () => void) => state.ready.then(fn)}, subscribeConfig: (fn: () => void) => {state.listeners.push(fn);return () => {};}}));
 vi.mock('@/src/platform/browser/capabilities', () => ({browserCapabilities: state.capabilities}));
 vi.mock('@/src/platform/i18n/uiLanguageBundles', () => ({ensureUiLanguageBundle: state.language}));
@@ -24,7 +24,7 @@ function pageTitles() {return api.contextMenus.update.mock.calls.filter(([id]: a
 beforeEach(() => {
     vi.resetModules();vi.clearAllMocks();state.listeners.length = 0;state.ready = Promise.resolve();active = 9;
     for (const key of Reflect.ownKeys(state.config)) delete state.config[key as string];
-    Object.assign(state.config, {on: true, uiLanguage: 'zh-CN', contextMenuEnabled: true, contextMenuEntries: {}, selectionTranslatorMode: 'bilingual', disableSelectionTranslator: false, disableImageTranslator: false, selectionAreaEnabled: true, imageTranslationContextMenuEnabled: true, disabledExtensionDomains: []});
+    Object.assign(state.config, {on: true, uiLanguage: 'zh-CN', contextMenuEnabled: true, contextMenuEntries: {}, selectionTranslatorMode: 'bilingual', disableSelectionTranslator: false, disabledExtensionDomains: []});
     state.language.mockResolvedValue(undefined);state.action.mockResolvedValue({handled: false});
     const event = () => ({addListener: vi.fn()});
     api = {contextMenus: {create: vi.fn().mockResolvedValue(undefined), removeAll: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockResolvedValue(undefined), onClicked: event()},
@@ -130,7 +130,7 @@ describe('右键菜单原生写入的异步归属', () => {
         api.tabs.sendMessage.mockResolvedValue({...neutral,isTranslated:true});
         const old = runtime.update(9);await settle();change({contextMenuEntries: {translateSelection: false}});await settle();
         const removalsWhilePending = api.contextMenus.removeAll.mock.calls.length;write.resolve(undefined);await old;await settle();expect(removalsWhilePending).toBe(0);
-        expect(api.contextMenus.removeAll).toHaveBeenCalledTimes(1);expect(api.contextMenus.create.mock.calls.map(([item]: any[]) => item.id)).toEqual([pageId,'fluent-read:image:translateImage']);
+        expect(api.contextMenus.removeAll).toHaveBeenCalledTimes(1);expect(api.contextMenus.create.mock.calls.map(([item]: any[]) => item.id)).toEqual([pageId]);
     });
     it('结构创建期间配置关闭，停止余下条目并撤回本轮', async () => {
         const create = deferred();api.contextMenus.create.mockReturnValueOnce(create.promise);await install();await settle();
@@ -213,11 +213,6 @@ describe('右键菜单原生写入的异步归属', () => {
         api.tabs.onActivated.addListener.mock.calls[0][0]({tabId: 9});await settle();expect(error).toHaveBeenCalled();
         api.tabs.sendMessage.mockResolvedValue({...neutral,isTranslated:true});api.tabs.onActivated.addListener.mock.calls[0][0]({tabId: 9});await settle();expect(pageTitles()).toEqual(['显示页面原文']);
     });
-    it('外部快照的图片配置不混入全局配置', async () => {
-        const {readContextMenuSettings} = await import('@/src/app/background/contextMenuPreferences');
-        const source = {...state.config, disableImageTranslator: true};expect(readContextMenuSettings(source as any).toggles.translateImage).toBe(false);
-        state.config.disableImageTranslator = true;source.disableImageTranslator = false;expect(readContextMenuSettings(source as any).toggles.translateImage).toBe(true);
-    });
     it('不读取菜单不展示的目标语言与快捷键字段', async () => {
         const {readContextMenuSettings} = await import('@/src/app/background/contextMenuPreferences');let reads = 0;
         for(const key of ['to','floatingBallHotkey','customFloatingBallHotkey']) Object.defineProperty(state.config,key,{configurable:true,get:()=>{reads++;return 'Alt+T';}});
@@ -235,7 +230,7 @@ describe('右键菜单原生写入的异步归属', () => {
     it('配置在活动页查询中改变时不读取旧页，当前原生更新失败仍继续其他条目', async () => {
         const runtime = await start(), query = deferred();api.tabs.query.mockReturnValueOnce(query.promise);const old = runtime.update(9);await settle();change({contextMenuEnabled:false});await settle();query.resolve([{id:9}]);await old;expect(api.tabs.sendMessage).not.toHaveBeenCalled();
         change({contextMenuEnabled:true});await settle();api.contextMenus.update.mockClear();const error = vi.spyOn(console,'error').mockImplementation(() => {});api.contextMenus.update.mockRejectedValueOnce(new Error('native unavailable'));
-        api.tabs.sendMessage.mockResolvedValue({...neutral,isSiteDisabled:true});await runtime.update(9);expect(error).toHaveBeenCalled();expect(api.contextMenus.update).toHaveBeenCalledTimes(3);
+        api.tabs.sendMessage.mockResolvedValue({...neutral,isSiteDisabled:true});await runtime.update(9);expect(error).toHaveBeenCalled();expect(api.contextMenus.update).toHaveBeenCalledTimes(2);
         api.contextMenus.update.mockClear();await runtime.update(9);expect(api.contextMenus.update).toHaveBeenCalledTimes(1);expect(pageTitles()).toEqual([]);
     });
     it('排队的更新失效时跳过它，新查询失败后队列仍可重试', async () => {
@@ -248,14 +243,14 @@ describe('右键菜单原生写入的异步归属', () => {
     });
     it('等待原生队列的重建失效时不创建，后续创建失败仍可重建', async () => {
         const runtime = await start(), write = deferred();api.tabs.sendMessage.mockResolvedValue({...neutral,isTranslated:true});api.contextMenus.update.mockReturnValueOnce(write.promise);const old = runtime.update(9);await settle();change({uiLanguage:'en-US'});await settle();change({contextMenuEnabled:false});write.resolve(undefined);await old;await settle();expect(api.contextMenus.create).not.toHaveBeenCalled();
-        const error = vi.spyOn(console,'error').mockImplementation(() => {});api.contextMenus.create.mockRejectedValueOnce(new Error('native create failed'));change({contextMenuEnabled:true});await settle();expect(error).toHaveBeenCalled();api.contextMenus.create.mockClear();change({uiLanguage:'zh-CN'});await settle();expect(api.contextMenus.create).toHaveBeenCalledTimes(3);
+        const error = vi.spyOn(console,'error').mockImplementation(() => {});api.contextMenus.create.mockRejectedValueOnce(new Error('native create failed'));change({contextMenuEnabled:true});await settle();expect(error).toHaveBeenCalled();api.contextMenus.create.mockClear();change({uiLanguage:'zh-CN'});await settle();expect(api.contextMenus.create).toHaveBeenCalledTimes(2);
     });
     it('没有活动页时只建结构，导航和关闭维护状态，缺失点击目标不会发消息', async () => {
         api.tabs.query.mockResolvedValue([]);const runtime = await start();expect(api.contextMenus.update).not.toHaveBeenCalled();api.tabs.onUpdated.addListener.mock.calls[0][0](9,{status:'complete'});api.tabs.onUpdated.addListener.mock.calls[0][0](9,{status:'loading'});api.tabs.onRemoved.addListener.mock.calls[0][0](9);
         const click = api.contextMenus.onClicked.addListener.mock.calls[0][0];click({menuItemId:pageId},undefined);click({menuItemId:'missing'},{id:9});await settle();await runtime.update(9);expect(state.action).not.toHaveBeenCalled();expect(api.tabs.sendMessage).not.toHaveBeenCalled();
     });
-    it('图片隐藏时点击不执行，可见动作失败受控，成功按回复更新网站状态', async () => {
-        const runtime = await start();const click = api.contextMenus.onClicked.addListener.mock.calls[0][0];api.tabs.sendMessage.mockResolvedValue({...neutral,isSiteDisabled:true});await runtime.update(9);click({menuItemId:'fluent-read:image:translateImage'},{id:9});await settle();expect(state.action).not.toHaveBeenCalled();
+    it('可见动作失败受控，成功按回复更新网站状态', async () => {
+        const runtime = await start();const click = api.contextMenus.onClicked.addListener.mock.calls[0][0];api.tabs.sendMessage.mockResolvedValue({...neutral,isSiteDisabled:true});await runtime.update(9);
         state.action.mockRejectedValueOnce(new Error('action failed'));click({menuItemId:pageId},{id:9});await settle();expect(state.feedback).toHaveBeenCalled();
         state.action.mockResolvedValueOnce({handled:true,isSiteDisabled:false});click({menuItemId:pageId},{id:9});await settle();expect(pageTitles().at(-1)).toBe('翻译全文');
         state.action.mockResolvedValueOnce({handled:true,isTranslated:true});click({menuItemId:pageId},{id:9});await settle();expect(pageTitles().at(-1)).toBe('恢复在此网站使用');
@@ -271,11 +266,7 @@ describe('右键菜单原生写入的异步归属', () => {
 
     it.each([
         ['translateSelection','fluent-read:selection:translateSelection','https://example.com/'],
-        ['translateImage','fluent-read:image:translateImage','https://example.com/'],
-        ['translateArea','fluent-read:page:translateArea','https://example.com/'],
-        ['translatePage',pageId,'https://example.com/document.pdf'],
     ])('冷启动活动页查询未回复时 %s 仍直接执行，且不再查询顶层状态', async (action, menuItemId, url) => {
-        if (action === 'translateArea') state.config.contextMenuEntries = {translatePage:false,translateArea:true};
         api.tabs.sendMessage.mockReturnValue(deferred().promise);state.action.mockResolvedValue({handled:true});
         await install();await settle();const queries = api.tabs.sendMessage.mock.calls.length;
         api.contextMenus.onClicked.addListener.mock.calls[0][0]({menuItemId,frameId:7},{id:9,url});await settle();
@@ -291,12 +282,11 @@ describe('右键菜单原生写入的异步归属', () => {
         expect(api.tabs.sendMessage).not.toHaveBeenCalled();expect(api.tabs.query).not.toHaveBeenCalled();expect(api.contextMenus.update).not.toHaveBeenCalled();
     });
 
-    it('轻量动作实时按顶层网站配置恢复禁用站点，图片入口隐藏且不等页面查询', async () => {
+    it('轻量动作实时按顶层网站配置恢复禁用站点且不等页面查询', async () => {
         await start();state.config.disabledExtensionDomains = ['example.com'];
         const click = api.contextMenus.onClicked.addListener.mock.calls[0][0];
         click({menuItemId:'fluent-read:selection:translateSelection',pageUrl:'https://sub.example.com/'},{id:9,url:'https://sub.example.com/'});await settle();
         expect(state.action).toHaveBeenCalledWith('toggleSite',9,expect.any(Object),expect.any(Object),false);expect(api.tabs.sendMessage).not.toHaveBeenCalled();
-        click({menuItemId:'fluent-read:image:translateImage',pageUrl:'https://sub.example.com/'},{id:9,url:'https://sub.example.com/'});await settle();expect(state.action).toHaveBeenCalledTimes(1);
     });
 
     it('重复全文点击串行读取前一动作后的状态，选区动作可同时执行', async () => {

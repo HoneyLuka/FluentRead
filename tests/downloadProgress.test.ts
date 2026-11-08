@@ -7,7 +7,6 @@
 import {describe, expect, it, vi} from 'vitest';
 import {
     DOWNLOAD_PROGRESS_MESSAGE,
-    LOCAL_TTS_DOWNLOAD_ID,
     createCoalescedDownloadNotifier,
     createDownloadProgressPublisher,
     createDownloadCompletionSummary,
@@ -18,8 +17,6 @@ import {
     formatDownloadProgress,
     isDownloadProgressId,
     normalizeDownloadProgress,
-    ocrLanguageDownloadId,
-    videoModelDownloadId,
     type DownloadProgress,
 } from '@/src/core/download/progress';
 
@@ -35,10 +32,8 @@ describe('download progress data', () => {
         }
     });
     it('builds stable ids and storage keys and rejects anything that is not a plain id', () => {
-        expect(videoModelDownloadId('tiny')).toBe('video-model:tiny');
-        expect(ocrLanguageDownloadId('chi_sim')).toBe('ocr-language:chi_sim');
-        expect(downloadProgressKey(LOCAL_TTS_DOWNLOAD_ID)).toBe('fluentReadDownloadProgress:local-tts');
-        for (const id of [LOCAL_TTS_DOWNLOAD_ID, videoModelDownloadId('base'), ocrLanguageDownloadId('jpn')]) {
+        expect(downloadProgressKey('model:tiny')).toBe('fluentReadDownloadProgress:model:tiny');
+        for (const id of ['model:base', 'task:jpn', 'dictionary:en']) {
             expect(isDownloadProgressId(id)).toBe(true);
         }
         for (const value of ['', ':leading', 'Upper', 'has space', 'a'.repeat(65), 7, null, undefined]) {
@@ -150,16 +145,16 @@ describe('multi-file download tracker', () => {
 describe('combined percentage across sequential downloads', () => {
     it('weights each task equally so the percentage never drops when the next task starts', () => {
         const reports: number[] = [];
-        const update = createDownloadCompletionSummary(['ocr-language:jpn', 'ocr-language:eng'], percent => reports.push(percent));
-        update('ocr-language:kor', {loaded: 1, total: 2});
+        const update = createDownloadCompletionSummary(['task:jpn', 'task:eng'], percent => reports.push(percent));
+        update('task:kor', {loaded: 1, total: 2});
         expect(reports).toEqual([]);
-        update('ocr-language:jpn', {loaded: 1, total: 4});
-        update('ocr-language:jpn', {loaded: 4, total: 4});
+        update('task:jpn', {loaded: 1, total: 4});
+        update('task:jpn', {loaded: 4, total: 4});
         // 结束事件把该项记为完成；下一项从 0 开始时总百分比保持在一半，不倒退。
-        update('ocr-language:jpn', undefined);
-        update('ocr-language:eng', {loaded: 0, total: 6});
-        update('ocr-language:eng', {loaded: 3, total: 6});
-        update('ocr-language:eng', {loaded: 9, total: 6});
+        update('task:jpn', undefined);
+        update('task:eng', {loaded: 0, total: 6});
+        update('task:eng', {loaded: 3, total: 6});
+        update('task:eng', {loaded: 9, total: 6});
         expect(reports).toEqual([12, 50, 50, 50, 75, 100]);
     });
 

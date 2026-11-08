@@ -376,23 +376,14 @@ describe('configmodelAudit 配置、目录和真实消费者边界', () => {
         expect(thinking.hasModelThinkingPreference({openai: undefined} as any, 'openai', 'm')).toBe(false);
     });
 
-    it('导入非法功能枚举时回退默认，合法独立服务与关闭状态保持幂等', () => {
+    it('导入非法字段时忽略，合法独立服务保持幂等', () => {
         const normalized = model.normalizeConfig({
-            futureApiKey: 'synthetic', hoverTranslationService: 'google', selectionTranslationService: 'deepL', imageTranslationService: 'microsoft',
-            areaTranslationMode: 'ai', areaTranslationService: 'openai', areaRecognitionMode: 'ocr', selectionAreaEnabled: false,
-            videoLocalModel: 'unsupported', videoSourceLanguage: 'unsupported', videoSubtitleVisible: null, videoSubtitleDisplayMode: 'unsupported',
-            videoService: 'deeplx', videoServiceDefaultMigrated: true, vocabularyReencounterEnabled: null,
-            imageTranslationMangaEnabled: null, imageTranslationMangaPromptEnabled: null, imageTranslationOcrEngine: 'tesseract',
+            futureApiKey: 'synthetic', hoverTranslationService: 'google', selectionTranslationService: 'deepL',
             hotkey: 'none', hoverShortcutBeforeDisable: 'Alt',
         });
         expect(normalized).not.toHaveProperty('futureApiKey');
-        expect(normalized).toMatchObject({hoverTranslationService: 'google', selectionTranslationService: 'deepL', imageTranslationService: 'microsoft',
-            areaTranslationMode: 'ai', areaTranslationService: 'openai', areaRecognitionMode: 'ocr', selectionAreaEnabled: false,
-            videoLocalModel: 'small', videoSourceLanguage: 'auto', videoSubtitleVisible: true, videoSubtitleDisplayMode: 'bilingual', videoService: 'deeplx',
-            vocabularyReencounterEnabled: false, imageTranslationMangaEnabled: true, imageTranslationMangaPromptEnabled: true,
-            imageTranslationOcrEngine: 'tesseract', hoverShortcutBeforeDisable: 'Alt'});
+        expect(normalized).toMatchObject({hoverTranslationService: 'google', selectionTranslationService: 'deepL', hoverShortcutBeforeDisable: 'Alt'});
         expect(model.normalizeConfig(normalized)).toEqual(normalized);
-        expect(model.normalizeConfig({videoService: 'deeplx'}).videoService).toBe('');
     });
 
     it('旧 Key 列表创建旧自定义服务，轮询仅在缺失显式选择时迁移', () => {
@@ -408,12 +399,7 @@ describe('configmodelAudit 配置、目录和真实消费者边界', () => {
         expect(normalized.apiKeys.deepL).toEqual([]);
     });
 
-    it('数值型字幕、拖动位置与延迟边界不产生 NaN 或无效布局', () => {
-        expect(model.normalizeVideoSubtitleFontSize('120')).toBe(120);
-        expect(model.normalizeVideoSubtitleFontSize('invalid')).toBe(100);
-        expect(model.normalizeVideoSubtitleOffsetMs('1250')).toBe(1500);
-        expect(model.normalizeVideoSubtitleOffsetMs('invalid')).toBe(0);
-        expect(model.normalizeVideoSubtitleOffsetMs(0)).toBe(0);
+    it('数值型拖动位置与延迟边界不产生 NaN 或无效布局', () => {
         expect(model.normalizeFloatingBallVerticalPosition(0.3)).toBe(0.3);
         expect(model.normalizeFloatingBallVerticalPosition(-2)).toBe(0);
         expect(model.normalizeFloatingBallVerticalPosition(2)).toBe(1);
@@ -494,8 +480,7 @@ describe('configmodelAudit 配置、目录和真实消费者边界', () => {
                 models: Array.from({length: 50}, (_, modelIndex) => `model-${modelIndex}`),
             })),
             model: Object.fromEntries(Array.from({length: providerCount}, (_, index) => [`custom:op-${index}`, 'selected-page'])),
-            documentModel: Object.fromEntries(Array.from({length: providerCount}, (_, index) => [`custom:op-${index}`, 'selected-document'])),
-            modelThinking: Object.fromEntries(Array.from({length: providerCount}, (_, index) => [`custom:op-${index}`, {'selected-page': true, 'selected-document': false}])),
+            modelThinking: Object.fromEntries(Array.from({length: providerCount}, (_, index) => [`custom:op-${index}`, {'selected-page': true}])),
         };
         const before = JSON.stringify(input);
         let mapVisits = 0;
@@ -516,11 +501,10 @@ describe('configmodelAudit 配置、目录和真实消费者边界', () => {
         expect(JSON.stringify(input)).toBe(before);
         for (const profile of normalized.customOpenAIProviders) {
             expect(profile.models).toHaveLength(50);
-            expect(profile.models.slice(-2)).toEqual(['selected-page', 'selected-document']);
-            expect(profile.models.slice(0, 48)).toEqual(input.customOpenAIProviders[0].models.slice(0, 48));
-            expect(normalized.modelThinking[profile.id]).toEqual({'selected-page': true, 'selected-document': false});
+            expect(profile.models.slice(-1)).toEqual(['selected-page']);
+            expect(profile.models.slice(0, 49)).toEqual(input.customOpenAIProviders[0].models.slice(0, 49));
+            expect(normalized.modelThinking[profile.id]).toEqual({'selected-page': true});
             expect(currentConfiguredModel(normalized, profile.id)).toBe('selected-page');
-            expect(currentConfiguredModel(normalized, profile.id, normalized.documentModel[profile.id])).toBe('selected-document');
         }
         expect(model.normalizeConfig(normalized)).toEqual(normalized);
         expect(mapVisits).toBeLessThanOrEqual(6 * providerCount);

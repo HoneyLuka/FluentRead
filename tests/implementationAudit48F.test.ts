@@ -35,6 +35,7 @@ import {translateMicrosoftTextsWithTransport} from '@/src/providers/translation/
 import {createOffscreenClient} from '@/src/platform/offscreen/client';
 import {createOffscreenMessageListener} from '@/src/app/offscreen/messageRouter';
 import {translateWithChromeApi, disposeChromeTranslationModels} from '@/src/app/offscreen/translation';
+import {createSelectionTtsPlayer} from '@/src/app/offscreen/ttsPlayback';
 import {runTranslationServiceConnectionTest} from '@/src/providers/translation/connectionTest';
 import {getTranslationLanguages} from '@/src/services/translation/languages';
 import {createTranslationRequestScheduler} from '@/src/services/translation/requestScheduler';
@@ -209,9 +210,11 @@ describe('audit48F: cancellation at controlled external boundaries', () => {
         const create = vi.fn(async (_options: unknown) => ({translate, destroy}));
         const environment = {Translator: {availability: async () => 'available', create}};
         const unexpected = async () => {throw new Error('unexpected unrelated offscreen port');};
+        const unexpectedSync = () => {throw new Error('unexpected unrelated offscreen port');};
+        const ttsPlayer = createSelectionTtsPlayer({createAudio: unexpectedSync, decodeBase64: unexpectedSync,
+            createObjectUrl: unexpectedSync, revokeObjectUrl: unexpectedSync, notify: unexpectedSync});
         const listener = createOffscreenMessageListener({translate: (data, signal) => translateWithChromeApi(data, environment, signal),
-            ttsPlayer: {play: unexpected, stop: () => {throw new Error('unexpected unrelated offscreen port');}, seek: () => {throw new Error('unexpected unrelated offscreen port');}}, fetchImage: unexpected, translateImage: unexpected,
-            translateArea: () => {throw new Error('unexpected unrelated offscreen port');}, downloadOcrLanguages: unexpected,
+            ttsPlayer,
         });
         const sent: Array<Record<string, unknown>> = [];
         const sendMessage = vi.fn((message: unknown, callback: (response: unknown) => void) => {

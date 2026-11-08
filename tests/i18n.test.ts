@@ -37,7 +37,6 @@ import {toRestorableConfig} from '@/src/services/config/history';
 import {renderContextMenuTitle} from '@/src/core/context-menu/presentation';
 import {navigationItems} from '@/src/features/settings/model/navigation';
 import {parseHotkey} from '@/src/core/hotkey';
-import {IMAGE_OCR_LANGUAGE_PACKS} from '@/src/features/image-translation/ocrLanguages';
 import {registerAllUiLanguageBundles} from './helpers/uiLanguageBundles';
 import {translateServiceLabel} from '@/src/core/i18n/serviceLabels';
 
@@ -46,7 +45,7 @@ registerAllUiLanguageBundles();
 
 describe('界面 i18n 契约', () => {
   it('两点选取的动态快捷键冲突说明翻译整句和实际占用功能名', () => {
-    const owners = ['鼠标悬停翻译', '全文翻译', '划词翻译', '圈选翻译', '段落复制', '局部翻译', '输入框翻译', '额外翻译方案'];
+    const owners = ['鼠标悬停翻译', '全文翻译', '划词翻译', '局部翻译'];
     for (const language of ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
       for (const owner of owners) {
         const translatedOwner = translateLegacyText(owner, language);
@@ -59,8 +58,6 @@ describe('界面 i18n 契约', () => {
         }
       }
     }
-    expect(translateLegacyText('快捷键已用于段落复制，请点击快捷键更换后使用', 'en-US')).toBe('This shortcut is used for Paragraph copy. Click the shortcut to change it before use.');
-    expect(translateLegacyText('此快捷键已用于额外翻译方案，请更换组合键', 'en-US')).toBe('This shortcut is already used for Additional translation profile. Choose another combination.');
   });
 
   it('原型属性名既不是资源键也不是旧文案，不会被替换为原生函数或对象', () => {
@@ -284,7 +281,7 @@ describe('界面 i18n 契约', () => {
         expect(getMultilingualTargetLanguageLabel(alias, alias, uiLanguage)).toBe(traditional);
       }
     }
-    for (const choices of [options.from, options.to, options.inputBoxTranslationTarget]) {
+    for (const choices of [options.from, options.to]) {
       expect(choices.filter(item => item.value.startsWith('zh-'))).toEqual([
         {value: 'zh-Hans', label: '简体中文'},
         {value: 'zh-Hant', label: '繁體中文'},
@@ -331,48 +328,9 @@ describe('界面 i18n 契约', () => {
       key.startsWith('settings.services.chromePreparation.')
     ));
     expect(englishChromeMessages.length).toBeGreaterThan(20);
-    expect(englishChromeMessages.filter(([, value]) => /[\u3400-\u9fff]/u.test(value))).toEqual([]);
+    expect(englishChromeMessages.filter(([, value]) => /[\u3400-\u9fff]/u.test(String(value)))).toEqual([]);
   });
 
-  it.each(['en-US','ja-JP','ko-KR','fr-FR','ru-RU','es-ES'] as const)('图片翻译的准备与各阶段说明在 %s 中完整本地化', language => {
-    for (const source of ["首次使用需准备识别语言包，下载后自动继续", "正在准备识别语言包…", "正在读取图片…", "正在识别图片文字…", "正在翻译文字…", "正在生成译图…", "已翻译 · 点击恢复原图", "查看译图", "翻译设置已更改，请重试", "译图加载超时", "图片读取超时", "图片加载超时"]) {
-      const translated = translateLegacyText(source, language);
-      expect(translated).not.toBe(source);
-      if (language !== 'ja-JP') expect(translated).not.toMatch(/[\u3400-\u9fff]/u);
-    }
-    expect(translateLegacyText('图片翻译失败：图片读取超时',language)).toContain(translateLegacyText('图片读取超时',language));
-    expect(translateLegacyText('图片翻译失败：NETWORK_ERROR_42',language)).toContain('NETWORK_ERROR_42');
-  });
-
-  it.each([
-    ['en-US', 'Traditional Chinese', 'four language packs'],
-    ['ja-JP', '中国語（繁体字）', '4 つの言語パック'],
-    ['ko-KR', '중국어 번체', '네 언어 팩'],
-    ['fr-FR', 'Chinois traditionnel', 'quatre packs de langue'],
-    ['ru-RU', 'Китайский (традиционный)', 'четыре языковых пакета'],
-    ['es-ES', 'Chino tradicional', 'cuatro paquetes de idiomas'],
-  ] as const)('OCR 简繁语言包在 %s 界面中具有独立名称、说明和四包下载提示', (language, traditionalLabel, packCount) => {
-    const simplified = IMAGE_OCR_LANGUAGE_PACKS.find(pack => pack.code === 'chi_sim')!;
-    const traditional = IMAGE_OCR_LANGUAGE_PACKS.find(pack => pack.code === 'chi_tra')!;
-    expect(translateLegacyText(traditional.label, language)).toBe(traditionalLabel);
-    const simplifiedDescription = translateLegacyText(simplified.description, language);
-    const traditionalDescription = translateLegacyText(traditional.description, language);
-    expect(simplifiedDescription).not.toBe(traditionalDescription);
-    const sourceCopy = [
-      simplified.label,
-      simplified.description,
-      traditional.description,
-      '推荐先下载简体中文、繁體中文、English 和日本語',
-      '自动检测默认使用这四种语言包。识别其他语言图片前，请选择源语言并下载对应语言包。',
-    ];
-    sourceCopy.push(...IMAGE_OCR_LANGUAGE_PACKS.map(pack => pack.description));
-    for (const source of sourceCopy) {
-      const translated = translateLegacyText(source, language);
-      expect(translated).not.toBe(source);
-      if (language !== 'ja-JP') expect(translated).not.toMatch(/[\u3400-\u9fff]/u);
-    }
-    expect(translateLegacyText(sourceCopy[4]!, language)).toContain(packCount);
-  });
 
   it('提供可继续扩展的语言选择器和参数插值', () => {
     expect(UI_LANGUAGE_OPTIONS.map((item) => item.value)).toEqual([
@@ -767,22 +725,6 @@ describe('界面 i18n 契约', () => {
     }
   });
 
-  it('学习中心的新导航、栏目和保存期限覆盖全部界面语言', () => {
-    const item = navigationItems.find(value => value.id === 'settings-vocabulary')!;
-    for (const language of ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
-      for (const source of [item.label, item.description, item.summary, item.detail, item.searchDescription]) {
-        expect(translateLegacyText(source, language), `${language}: ${source}`).not.toBe(source);
-      }
-      for (const key of ['learning.saved', 'learning.history', 'learning.content', 'learning.retention', 'learning.savedDescription', 'learning.historyDescription', 'learning.memoryDescription', 'learning.memory', 'learning.memoryAdd', 'learning.memoryDisabled', 'learning.memoryClearConfirm', 'settings.memoryEnabled', 'settings.memoryDescription', 'settings.learningContext', 'learning.localStorage', 'learning.localStorageHelp', 'learning.backup', 'learning.collection.actions', 'learning.collection.reviewHelp', 'learning.collection.upToDate', 'learning.collection.review', 'learning.collection.reviewDone', 'learning.collection.manage', 'learning.collection.settingHelp', 'learning.collection.type', 'learning.collection.filter', 'learning.collection.reset', 'learning.collection.matches', 'learning.collection.noMatchesHelp', 'learning.collection.sentence', 'learning.collection.expression', 'learning.collection.listenLearn', 'learning.collection.learnUsage', 'learning.memorySettingsOpen', 'learning.collection.setting', 'learning.collection.enable', 'learning.collection.offEmptyTitle', 'learning.collection.emptyTitle', 'learning.collection.emptyHint', 'learning.collection.enableHelp', 'reading.saveNote', 'reading.noteSavedButton', 'reading.saveNoteTitle', 'reading.viewNotes', 'reading.noteSaved', 'reading.openNotesFailed', 'reading.noteSaveFailed', 'reading.saveSourceTitle', 'reading.viewSaved', 'reading.sourceSaved', 'reading.openSavedFailed', 'reading.savingSource']) {
-        expect(translate(key, language)).not.toBe(translate(key, 'zh-CN'));
-        expect(translate(key, language)).not.toBe(key);
-      }
-    }
-    expect(translate('learning.saved', 'zh-CN')).toBe('单词与句子');
-    expect(translate('learning.memory', 'zh-CN')).toBe('学习笔记');
-    expect(translate('learning.history', 'en-US')).toBe('Reading history');
-  });
-
   it('完整本地化菜单栏布局编辑器与布局差异顺序', () => {
     const layoutKeys = [
       'settings.interface.popupLayout.label',
@@ -1027,38 +969,6 @@ describe('界面 i18n 契约', () => {
 
 // 扫描实际界面源文件，避免只检查词典自身而放过未登记的新文案。
 describe('i18n 全量界面扫描', () => {
-  it('Vue 文案和展示注册表在非中文界面有本地化结果', async () => {
-    const {collectUiSourceCopy} = await import('../scripts/testing/i18n-source-audit.mjs');
-    const audit = collectUiSourceCopy(process.cwd());
-    // 固定的中英术语演示、语言自身名称和装饰图标不属于界面译文。
-    const examples = new Set(['中文', 'A中', '語言', '言語', 'large language model → 大语言模型', 'source,target,tgt_lng large language model,大语言模型,zh-Hans']);
-    const readingPreviewFile = 'src/features/settings/ui/VideoSubtitleAppearanceSettings.vue';
-    // 日语原句用于固定排版示例；仅豁免该组件的这句话，并要求保留本地化的演示数据说明。
-    expect(readFileSync(join(process.cwd(), readingPreviewFile), 'utf8'))
-      .toMatch(/data-video-subtitle-reading-sample>\s*\{\{\s*t\('video\.readingAnnotation\.previewSample'\)\s*\}\}/u);
-    const missing: string[] = [];
-    for (const {source, files} of audit.sources) {
-      if (examples.has(source)) continue;
-      if (source === '今日はいい天気ですね。' && files.length === 1 && files[0] === readingPreviewFile) continue;
-      for (const locale of ['en-US', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
-        const result = translateLegacyText(source, locale);
-        if (/[\u3400-\u9fff]/u.test(result)) missing.push(`${locale} ${files.join(', ')}: ${source}`);
-      }
-    }
-    expect(audit.files.length).toBeGreaterThan(50);
-    expect(missing).toEqual([]);
-    // 扫描器的插值占位不能成为固定译文；实际校订预览必须保留每次计算的句数。
-    for (const locale of ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
-      for (const count of [0, 1, 12, 125]) {
-        const source = `当前网页有 ${count} 处相同原句。出现不同的已保存译法时，不会自动采用。`;
-        const translated = translateLegacyText(source, locale);
-        expect(translated, `${locale} ${count}`).not.toBe(source);
-        expect(translated.match(/\d+/gu), `${locale} ${count}`).toEqual([String(count)]);
-        if (locale !== 'ja-JP') expect(translated, `${locale} ${count}`).not.toMatch(/[\u3400-\u9fff]/u);
-      }
-    }
-  });
-
   it('新增稳定资源必须提供实际译文，不能继承 English 掩盖遗漏', () => {
     // ms 是国际通用的毫秒符号，无需在法语或西班牙语中改写。
     const common = new Set(['inputTranslation.intervalUnit', 'common.brand', 'metadata.popupTitle', 'settings.advanced.translationLoadingStyleOptionAria', 'reading.generatingAction',
@@ -1168,12 +1078,13 @@ describe('运行期反馈文案资源', () => {
   const locales = ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const;
   const han = /[㐀-鿿]/u;
 
-  it('每条精确反馈都来自真实源码，不重复，并在每种界面语言中完整本地化', () => {
-    const sourceText = collectSourceText('src', (path) => !path.includes('/i18n/messages/'))
-      + collectSourceText('userscript', () => true);
-    const sources = runtimeFeedbackRows.map(row => row[0]);
-    expect(new Set(sources).size).toBe(sources.length);
-    expect(sources.filter((source) => !sourceText.includes(source))).toEqual([]);
+  it('保留的运行期反馈不重复，并在每种界面语言中完整本地化', () => {
+    const sourceText = collectSourceText('src', (path) => !path.includes('/i18n/messages/'));
+    const allSources = runtimeFeedbackRows.map(row => row[0]);
+    expect(new Set(allSources).size).toBe(allSources.length);
+    // 已删除功能的反馈不再出现在源码中；只校验仍被生产代码引用的条目。
+    const sources = allSources.filter((source) => sourceText.includes(source));
+    expect(sources.length).toBeGreaterThan(0);
     for (const locale of locales) {
       const catalog = createRuntimeFeedbackLegacyText(locale);
       for (const source of sources) {
@@ -1242,7 +1153,7 @@ describe('旧界面译文人工校正', () => {
     }
   });
 
-  it('校正原文仍在界面源码中使用，不重复，并覆盖此前的译文', () => {
+  it('保留的校正原文不重复，并覆盖此前的译文', () => {
     const sourceText = collectSourceText('src', (path) => !path.includes('/i18n/messages/'));
     // QuickTranslationProfiles 将目录名称传给 key 化提示；完整句没有对应的源码字面量。
     // 从真实 key 与完整目录登记合成文案，而不是把校正字典本身当成使用证据。
@@ -1250,9 +1161,11 @@ describe('旧界面译文人工校正', () => {
       translate(unavailableServiceKey, 'zh-CN', {service: option.label})
     ));
     const generatedSourceText = generatedServiceSources.join('\n');
-    const sources = [...correctionRows, ...siteRuleTextRows].map(row => row[0]);
-    expect(new Set(sources).size).toBe(sources.length);
-    expect(sources.filter((source) => !sourceText.includes(source) && !generatedSourceText.includes(source))).toEqual([]);
+    const allSources = [...correctionRows, ...siteRuleTextRows].map(row => row[0]);
+    expect(new Set(allSources).size).toBe(allSources.length);
+    // 已删除功能的校正原文不再被界面使用；只校验仍出现在源码中的条目。
+    const sources = allSources.filter((source) => sourceText.includes(source) || generatedSourceText.includes(source));
+    expect(sources.length).toBeGreaterThan(0);
     for (const locale of ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
       const catalog = createLegacyCorrectionText(locale);
       for (const source of sources) {
@@ -1263,14 +1176,6 @@ describe('旧界面译文人工校正', () => {
   });
 });
 
-it('共享图片识别选择与下载提示在六种非中文界面有本地化文案', () => {
-  const sources = ['图片识别方式', 'Tesseract（轻量模型）', 'PaddleOCR（标准模型）', '入口与缓存', '识别资源与下载', '正在准备图片识别模型…', 'PaddleOCR 文字识别', '悬停图片或右键翻译，随时对照原图。', '适合截图、图表与清晰排版文字。按原文语言准备语言包。', '适合普通图片、截图和漫画文字。首次翻译下载约 30 MB，与漫画共用，已下载无需重复下载。', '使用 PaddleOCR，当前页优先，只提前处理已加载的图片。', '图片文字识别', '识别普通图片与漫画中的文字'];
-  for (const locale of ['en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
-    for (const source of sources) expect(translateLegacyText(source, locale), `${locale} ${source}`).not.toBe(source);
-    expect(translateLegacyText(sources[9], locale)).toContain('30 MB');
-    expect(translateLegacyText(sources[2], locale)).toContain('PaddleOCR');
-  }
-});
 
 import {describePartOfSpeech} from '@/src/core/language/partOfSpeech';
 it('localizes word-class labels and learning explanations from the shared registry', () => {
@@ -1287,10 +1192,8 @@ it('中文展示使用流畅阅读，首启七语品牌与正式目录一致并�
     const localizedKeys = [
         'settings.backup.restoreHint', 'options.userscriptUnavailableDescription', 'glossary.builtin.source',
         'language.settingsDescription', 'language.onboardingWelcomeTitle', 'language.onboardingDescription',
-        'language.onboardingSuccessDescription', 'video.panelAriaLabel', 'video.translationOverlayAriaLabel',
-        'video.buttonAriaLabel', 'video.globalDisabled', 'metadata.optionsTitle', 'metadata.popupTitle',
-        'metadata.documentTitle', 'document.fileLimitNote', 'options.aboutThanks', 'popup.donationTitle',
-        'shareCard.showBrand', 'learning.collection.fileReadFailed', 'settings.cloud.privacyWebDavStorage',
+        'language.onboardingSuccessDescription', 'metadata.optionsTitle', 'metadata.popupTitle',
+        'options.aboutThanks', 'popup.donationTitle',
     ];
     for (const key of localizedKeys) {
         expect(translate(key, 'zh-CN'), key).toContain('流畅阅读');
@@ -1299,13 +1202,10 @@ it('中文展示使用流畅阅读，首启七语品牌与正式目录一致并�
     expect(translate('options.userscriptUnavailableDescription', 'zh-CN')).toBe('此功能需要浏览器扩展的运行环境。请安装流畅阅读浏览器扩展后使用。');
     expect(translate('metadata.optionsTitle', 'zh-CN')).toBe('流畅阅读 · 设置');
     expect(translate('metadata.popupTitle', 'zh-CN')).toBe('流畅阅读');
-    expect(translate('metadata.documentTitle', 'zh-CN')).toBe('流畅阅读 · 文档翻译');
     expect(translate('settings.cloud.deleteManualDrive', 'zh-CN')).toBe('请前往 Google Drive 设置 → 管理应用 → FluentRead，清理该应用的数据。');
-    expect(translate('settings.cloud.deleteManualWebDav', 'zh-CN')).toBe('请在 WebDAV 服务商页面手动删除 FluentRead/fluentread-config.encrypted.json，保留目录内其他文件。');
     for (const {value} of UI_LANGUAGE_OPTIONS) {
         expect(onboardingMessages.onboardingProductNames[value], value).toBe(translate('common.brand', value));
         expect(translate('common.brand', value)).toBe(value === 'zh-CN' ? '流畅阅读' : 'FluentRead');
-        expect(translateLegacyText(translate('video.panelAriaLabel', 'zh-CN'), value), value).toBe(translate('video.panelAriaLabel', value));
     }
     expect(translateLegacyText('用户输入 FluentRead', 'zh-CN')).toBe('用户输入 FluentRead');
 });

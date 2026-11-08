@@ -27,7 +27,6 @@ import deepseek from "./deepseek";
 import azureOpenai from "./azure-openai";
 import chromeTranslator from "./chrome-translator";
 import hunyuanTranslation from "./hunyuan-translation";
-import localTranslation from "./local-translation";
 import googleCloudTranslation from "./google-cloud-translation";
 import azureTranslator from "./azure-translator";
 import aliyunTranslation from "./aliyun-translation";
@@ -75,7 +74,6 @@ const legacyServices: TranslationProviderRegistry<TranslationProviderResult> = {
     [services.claude]: singleTextProvider(claude),
     [services.deepseek]: singleTextProvider(deepseek),
     [services.huanYuanTranslation]: singleTextProvider(hunyuanTranslation),
-    [services.localTranslation]: singleTextProvider(localTranslation),
     // ChatGPT 套餐通过独立本机 OAuth 助手使用 Responses SSE，不走 API Key transport。
     [services.chatgptPlan]: chatgptPlan,
 };

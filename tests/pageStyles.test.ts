@@ -1,7 +1,6 @@
 import {parseHTML} from 'linkedom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {TRANSLATION_APPEARANCE_STYLE_ID} from '@/src/app/content/translationAppearance';
-import reencounterStyles from '@/src/ui/styles/vocabulary-reencounter.css?inline';
 import translationDisplayStyles from '@/src/ui/styles/translation-display.css?inline';
 import {prepareTranslationStyleRoot, subscribeTranslationStyleRoots} from '@/src/features/full-page-translation/content/styleRoots';
 
@@ -211,8 +210,6 @@ describe('页面公共样式与译文外观生命周期', () => {
         installPageStyles(context());
         expect(document.querySelectorAll('#fluent-read-page-styles')).toHaveLength(1);
         expect(document.getElementById('fluent-read-page-styles')?.parentNode).toBe(document.head);
-        expect(reencounterStyles).toContain('::highlight(fluentread-vocabulary-reencounter)');
-        expect(document.getElementById('fluent-read-page-styles')?.textContent).toContain(reencounterStyles);
         expect(appearanceStyle()?.textContent).toContain('--fluent-read-translation-line: #ef4776 !important;');
         expect(mocks.listeners.size).toBe(1);
 

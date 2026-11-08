@@ -14,7 +14,6 @@ describe('host-page trust boundary', () => {
       source('src/app/content/hotkeyRuntime.ts'),
       source('src/app/content/messageRuntime.ts'),
       source('src/features/hover-translation/content/index.ts'),
-      source('src/features/input-translation/content/index.ts'),
     ].join('\n');
     const floatingBall = source('src/features/floating-ball/ui/FloatingBall.vue');
     const hotkeyRuntime = source('src/app/content/hotkeyRuntime.ts');
@@ -34,26 +33,16 @@ describe('host-page trust boundary', () => {
       source('src/app/content/hotkeyRuntime.ts'),
       source('src/app/content/messageRuntime.ts'),
       source('src/features/hover-translation/content/index.ts'),
-      source('src/features/input-translation/content/index.ts'),
     ].join('\n');
-    const area = source('src/features/area-translation/ui/AreaTranslator.vue');
     const selection = source('src/features/selection-translation/ui/SelectionTranslator.vue');
-    const video = source('src/features/video-subtitle/content/runtime.ts');
 
-    expect(content.match(/if \(!event\.isTrusted\) return;/g)?.length).toBeGreaterThanOrEqual(10);
-    for (const handler of ['handleKeydown', 'handlePointerdown', 'handlePointermove', 'handlePointerup', 'handlePointercancel']) {
-      expect(area).toMatch(new RegExp(`function ${handler}\\(event: \\w+\\): void \\{\\s*if \\(!event\\.isTrusted\\) return;`));
-    }
+    expect(content.match(/if \(!event\.isTrusted\) return;/g)?.length).toBeGreaterThanOrEqual(4);
     expect(selection).toContain('TRUSTED_SELECTION_INTERACTION_GRACE_MS');
-    expect(video.match(/if \(!event\.isTrusted\) return;/g)?.length).toBeGreaterThanOrEqual(4);
   });
 
   it('keeps privileged controls and translated bitmaps out of page-visible shadow roots', () => {
     expect(source('src/features/floating-ball/content/runtime.ts')).toContain("mode: 'closed'");
     expect(source('src/features/selection-translation/content/runtime.ts')).toContain("mode: 'closed'");
-    expect(source('src/features/input-translation/content/index.ts')).toContain("mode: 'closed'");
-    expect(source('src/features/area-translation/content/runtime.ts')).toContain("mode: 'closed'");
-    expect(source('src/features/image-translation/content/runtime.ts')).toContain("attachShadow({ mode: 'closed' })");
   });
 
   it('keeps the section picker behind trusted input and a closed shadow root', () => {

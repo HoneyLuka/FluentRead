@@ -58,18 +58,18 @@ describe('content feature registry', () => {
     it('checks required browser capabilities before reading feature configuration', async () => {
         const isEnabled = vi.fn(() => true);
         const mount = vi.fn();
-        const feature = {id: 'area', requiredCapability: 'areaTranslation' as const, isEnabled, mount};
+        const feature = {id: 'chrome-translation', requiredCapability: 'chromeTranslation' as const, isEnabled, mount};
         const firefox = createContentFeatureRegistry([feature], {
             capabilities: resolveBrowserCapabilities({browser: 'firefox', manifestVersion: 3}),
         });
-        await expect(firefox.mountEnabled(runtime())).resolves.toEqual([{id: 'area', status: 'skipped'}]);
+        await expect(firefox.mountEnabled(runtime())).resolves.toEqual([{id: 'chrome-translation', status: 'skipped'}]);
         expect(isEnabled).not.toHaveBeenCalled();
         expect(mount).not.toHaveBeenCalled();
 
         const chrome = createContentFeatureRegistry([feature], {
             capabilities: resolveBrowserCapabilities({browser: 'chrome', manifestVersion: 3}),
         });
-        await expect(chrome.mountEnabled(runtime())).resolves.toEqual([{id: 'area', status: 'mounted'}]);
+        await expect(chrome.mountEnabled(runtime())).resolves.toEqual([{id: 'chrome-translation', status: 'mounted'}]);
         expect(isEnabled).toHaveBeenCalled();
         expect(mount).toHaveBeenCalled();
     });
@@ -83,9 +83,9 @@ describe('content feature registry', () => {
                 mount: () => calls.push('selection'),
             },
             {
-                id: 'video-subtitle',
+                id: 'hover-translation',
                 isEnabled: () => false,
-                mount: () => calls.push('video-subtitle'),
+                mount: () => calls.push('hover-translation'),
             },
         ]);
 
@@ -94,7 +94,7 @@ describe('content feature registry', () => {
         expect(calls).toEqual(['selection']);
         expect(results).toEqual([
             {id: 'selection', status: 'mounted'},
-            {id: 'video-subtitle', status: 'skipped'},
+            {id: 'hover-translation', status: 'skipped'},
         ]);
     });
 
@@ -252,10 +252,10 @@ describe('content feature registry', () => {
         controller.abort();
         const isEnabled = vi.fn(() => true);
         const mount = vi.fn();
-        const registry = createContentFeatureRegistry([{id: 'image', isEnabled, mount}]);
+        const registry = createContentFeatureRegistry([{id: 'hover-translation', isEnabled, mount}]);
 
         await expect(registry.mountEnabled(runtime(() => true, controller.signal))).resolves.toEqual([
-            {id: 'image', status: 'skipped'},
+            {id: 'hover-translation', status: 'skipped'},
         ]);
         expect(isEnabled).not.toHaveBeenCalled();
         expect(mount).not.toHaveBeenCalled();
@@ -265,8 +265,8 @@ describe('content feature registry', () => {
         const enabled = new Map([
             ['floating-ball', false],
             ['selection-translator', false],
-            ['selection-area-translator', false],
-            ['image-translator', false],
+            ['hover-translation', false],
+            ['section-translation', false],
             ['translation-progress-panel', true],
         ]);
         const mounted = new Map<string, boolean>();
@@ -282,8 +282,8 @@ describe('content feature registry', () => {
                 isEnabled: () => enabled.get(id) === true,
                 mount,
                 unmount,
-                // 图片 runtime 没有 DOM isMounted 回调，专门验证 registry ownership 去重。
-                ...(id === 'image-translator' ? {} : {isMounted: () => mounted.get(id) === true}),
+                // 局部翻译入口没有 DOM isMounted 回调，专门验证 registry ownership 去重。
+                ...(id === 'section-translation' ? {} : {isMounted: () => mounted.get(id) === true}),
             };
         });
         const registry = createContentFeatureRegistry(definitions);
@@ -364,8 +364,8 @@ describe('content feature registry', () => {
 
     it('尚未建立 activation 时 reconcile 确定性跳过所有功能', async () => {
         const isEnabled = vi.fn(() => true);
-        const registry = createContentFeatureRegistry([{id: 'image', isEnabled, mount: vi.fn()}]);
-        await expect(registry.reconcileEnabled()).resolves.toEqual([{id: 'image', status: 'skipped'}]);
+        const registry = createContentFeatureRegistry([{id: 'hover-translation', isEnabled, mount: vi.fn()}]);
+        await expect(registry.reconcileEnabled()).resolves.toEqual([{id: 'hover-translation', status: 'skipped'}]);
         expect(isEnabled).not.toHaveBeenCalled();
     });
 
@@ -375,7 +375,7 @@ describe('content feature registry', () => {
         const onError = vi.fn();
         const mount = vi.fn();
         const registry = createContentFeatureRegistry([{
-            id: 'image',
+            id: 'hover-translation',
             isEnabled: () => enabled,
             mount,
             unmount: () => { throw failure; },
@@ -384,7 +384,7 @@ describe('content feature registry', () => {
 
         enabled = false;
         await registry.reconcileEnabled();
-        expect(onError).toHaveBeenCalledWith('image', 'unmount', failure);
+        expect(onError).toHaveBeenCalledWith('hover-translation', 'unmount', failure);
         enabled = true;
         await registry.reconcileEnabled();
         expect(mount).toHaveBeenCalledTimes(2);

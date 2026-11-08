@@ -1,14 +1,13 @@
 /**
  * @file src/app/popup/pageActions.ts
  * 文件职责：管理 Popup 的标签页状态读取、全文/局部操作和站点规则即时翻译归属。
- * 主要内容：区分状态读取、页面翻译与规则保存的操作归属，确定来源丢失时立即提供重新打开指引；新文档通知只触发去重的只读握手，合并在途完成通知且不撤销当前操作；写规则前复验实际标签页，确认后台保存后反馈；原生在线 PDF 交给扩展阅读器，导航和失活使旧回复失效。
+ * 主要内容：区分状态读取、页面翻译与规则保存的操作归属，确定来源丢失时立即提供重新打开指引；新文档通知只触发去重的只读握手，合并在途完成通知且不撤销当前操作；写规则前复验实际标签页，确认后台保存后反馈；导航和失活使旧回复失效。
  * 模块边界：只通过注入端口读取标签页、发送已有消息、提交站点字段补丁和修改界面状态，不直接访问存储、创建观察器或实现网页翻译。
  */
 import {diagnoseFailure, normalizeDiagnostic, type Diagnostic} from '@/src/services/diagnostics'
 import type {Config} from '@/src/core/config/model'
 import {getSiteBaseDomain} from '@/src/core/site-rules/domain'
 import {isBrowserTabId} from '@/src/platform/browser/ids'
-import {getPdfSourceUrl} from '@/src/features/document-translation/core/pdfSource'
 import type {PopupActiveTab} from './pageContracts'
 export type {PopupActiveTab} from './pageContracts'
 
@@ -22,7 +21,6 @@ export interface PopupPagePorts {
   getTab: () => Promise<PopupActiveTab | undefined>
   send: (tabId: number, message: {type: string; action?: string}) => Promise<unknown>
   persistRule: (patch: PopupSiteRulePatch) => Promise<void>
-  openPdf?: (sourceUrl: string) => Promise<unknown>
   notice: (message: string, type?: 'success' | 'error') => void
   close: () => void
   translate: (key: string) => string
@@ -66,7 +64,6 @@ export function createPopupPageActions(ports: PopupPagePorts) {
       if (!current() || sequence !== readSequence || statusVersion !== stateSequence) return
       if (!isBrowserTabId(tab?.id)) {ports.onFailure?.(diagnoseFailure(undefined, {reason: 'source-closed'}));return}
       bindTab(tab as PopupActiveTab & {id: number})
-      if (ports.openPdf && getPdfSourceUrl(state.url)) return
       try {
         const response = await ports.send(tab.id, {type: 'getFullPageTranslationState'}) as {isTranslated?: unknown} | undefined
         if (current() && sequence === readSequence && statusVersion === stateSequence) {state.translated = response?.isTranslated === true;acceptStatus(response)}
@@ -97,12 +94,6 @@ export function createPopupPageActions(ports: PopupPagePorts) {
     let responseVersion: number | undefined
     try {
       const tabId = await target(task.current);if (tabId === undefined || !task.current()) return
-      const pdfSource = allowPdf ? getPdfSourceUrl(state.url) : null
-      if (pdfSource && ports.openPdf) {
-        await ports.openPdf(pdfSource)
-        if (task.current()) ports.close()
-        return
-      }
       if (allowPdf && action !== 'restore') {
         const warning = ports.warning();if (warning) {ports.notice(warning, 'error');ports.onFailure?.(diagnoseFailure(undefined, {reason: 'configuration'}));return}
       }

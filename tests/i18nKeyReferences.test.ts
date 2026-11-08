@@ -6,7 +6,6 @@ import {collectUiMessageReferences, auditUiMessageReferences} from '../scripts/t
 import {zhCNMessages} from '@/src/core/i18n/messages/zh-CN';
 import {UI_LANGUAGE_OPTIONS} from '@/src/core/i18n/language';
 import {UI_LANGUAGE_BUNDLES} from '@/src/core/i18n/bundles';
-import {personalCorrectionMessages} from '@/src/core/i18n/messages/personalCorrections';
 import {selectionDictionaryMessages} from '@/src/core/i18n/messages/selectionDictionary';
 
 describe('稳定 i18n key 的生产调用契约', () => {
@@ -16,13 +15,13 @@ describe('稳定 i18n key 的生产调用契约', () => {
         expect(auditUiMessageReferences(audit.references, zhCNMessages)).toEqual([]);
     });
 
-    it('设置与个人校订的稳定资源在最终七语目录中生效，不被旧的对象展开顺序静默覆盖', () => {
+    it('设置与划词词典的稳定资源在最终七语目录中生效，不被旧的对象展开顺序静默覆盖', () => {
         for (const {value: language} of UI_LANGUAGE_OPTIONS) {
             const final: Readonly<Record<string, string>> = language === 'zh-CN' ? zhCNMessages : UI_LANGUAGE_BUNDLES[language].messages;
             const settings = JSON.parse(readFileSync(join(process.cwd(), 'src/core/i18n/messages/settings-copy', language + '.json'), 'utf8'))
                 .messages as Record<string, string>;
             expect(Object.keys(settings).length).toBeGreaterThan(100);
-            for (const source of [settings, personalCorrectionMessages[language], selectionDictionaryMessages[language]]) {
+            for (const source of [settings, selectionDictionaryMessages[language]]) {
                 for (const [key, value] of Object.entries(source)) expect(final[key], `${language}: ${key}`).toBe(value);
             }
         }

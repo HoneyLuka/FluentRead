@@ -7,6 +7,14 @@ import {buildDriveSyncDiff, driveSyncPayload as completePayload, driveValuesEqua
 const driveSyncPayload = (config: Record<string, unknown>) => completePayload(config, true);
 function complete(patch: Record<string, unknown> = {}) {return toDriveSyncConfig(normalizeConfig({...new Config(), videoServiceDefaultMigrated: true, ...patch}));}
 describe('Google Drive 完整快照和安全合并', () => {
+    it('数组归一化同时覆盖标量列表与可校验的对象列表', () => {
+        const projected = projectDriveSyncConfig({
+            alwaysTranslateDomains: ['example.com', 'openai.com'],
+            sectionTranslationRules: [{id: 'rule-1', enabled: true, site: 'example.com', selectors: [['main']], mode: 'remind'}],
+        });
+        expect(projected.alwaysTranslateDomains).toEqual(['example.com', 'openai.com']);
+        expect(projected.sectionTranslationRules).toHaveLength(1);
+    });
     it('previews signed margin units and keeps selected remote values through backup restoration', () => {
         const local = complete({floatingBallDefaultMargin: 0, floatingBallPopoutMargin: 20});
         const remote = complete({floatingBallDefaultMargin: -18, floatingBallPopoutMargin: -18});
@@ -48,12 +56,12 @@ describe('Google Drive 完整快照和安全合并', () => {
         expect(publicSettings).not.toHaveProperty('customOpenAIProviders');
         const unknownRuntime = {...fixture, compositeTranslationProviders: [{...composite, runtimeStatistics: {successes: 5}}]};
         expect(projectDriveSyncConfig(unknownRuntime)).not.toHaveProperty('compositeTranslationProviders');
-        expect(() => parseDriveSyncPayload(driveSyncPayload({...fixture, service: 'google', videoService: composite.id, compositeTranslationProviders: []}))).toThrow('不存在的组合翻译服务');
+        expect(() => parseDriveSyncPayload(driveSyncPayload({...fixture, service: 'google', hoverTranslationService: composite.id, compositeTranslationProviders: []}))).toThrow('不存在的组合翻译服务');
     });
 
     it('备份差异复用设置名称，连接整组说明变更类别而不暴露凭据', () => {
-        const diff=buildDriveSyncDiff(null,{translationScope:'content',hotkey:'Alt',inputBoxTranslationPrompt:'fixture-private-prompt',service:'google',token:{},proxy:{}},{translationScope:'all',hotkey:'Shift',inputBoxTranslationPrompt:'other-private-prompt',service:'bing',token:{openai:'fixture-private-key'},proxy:{openai:'https://private.invalid'}});
-        expect(diff.changes.map(change=>change.label)).toEqual(['识别全部节点','鼠标悬浮快捷键','输入框翻译提示词','翻译连接与凭据（整组）']);
+        const diff=buildDriveSyncDiff(null,{translationScope:'content',hotkey:'Alt',service:'google',token:{},proxy:{}},{translationScope:'all',hotkey:'Shift',service:'bing',token:{openai:'fixture-private-key'},proxy:{openai:'https://private.invalid'}});
+        expect(diff.changes.map(change=>change.label)).toEqual(['识别全部节点','鼠标悬浮快捷键','翻译连接与凭据（整组）']);
         expect(diff.changes.at(-1)?.details).toEqual(['settings.cloud.changed.credentials','settings.cloud.changed.requests','settings.cloud.changed.services']);
         expect(JSON.stringify(diff.changes)).not.toMatch(/private|\.invalid/u);
         const headerRules = buildDriveSyncDiff(null, {requestHeaderRules: []}, {requestHeaderRules: [{domain: 'fixture-private.invalid', removeOrigin: true, removeReferer: false}]});
@@ -63,12 +71,6 @@ describe('Google Drive 完整快照和安全合并', () => {
         expect(unknown.changes[0].label).toBe('私密或自定义设置');
         expect(unknown.changes.every(change=>change.sensitive)).toBe(true);
         expect(JSON.stringify(unknown.changes)).not.toMatch(/private|toString/u);
-    });
-    it('提前翻译零页跨设备保留，差异预览使用设置名称', () => {
-        const fixture=complete({imageTranslationMangaPrefetchPages:0,imageTranslationMangaCachePages:18});
-        expect(parseDriveSyncPayload(driveSyncPayload(fixture)).imageTranslationMangaPrefetchPages).toBe(0);
-        expect(parseDriveSyncPayload(driveSyncPayload(fixture)).imageTranslationMangaCachePages).toBe(18);
-        expect(buildDriveSyncDiff(null,{imageTranslationMangaPrefetchPages:3},fixture).changes).toContainEqual(expect.objectContaining({label:'提前翻译后续页面'}));
     });
     it('保留全部指定凭据及请求体/URL 鉴权，省略本机统计和迁移状态', () => {
         const fixture = complete({customOpenAIProviders: [{id: 'custom:fixture', name: 'Fixture', endpoint: 'https://fixture.invalid/v1', models: ['fixture-model']}], token: {openai: 'fixture-key'}, customHeaders: {'custom:fixture': '{"Authorization":"fixture-header"}'}, customBody: {openai: '{"auth":"fixture-body"}'}, proxy: {openai: 'https://fixture.invalid/?token=fixture-query'}, extra: {oauth: 'fixture-oauth'}, key: 'fixture-scalar', count: 10});
@@ -143,7 +145,7 @@ describe('Google Drive 完整快照和安全合并', () => {
     it('拒绝各功能引用已删除服务，服务选择与连接定义必须一起合并', () => {
         const base = complete({customOpenAIProviders: [{id: 'custom:fixture', name: 'Fixture', endpoint: 'https://fixture.invalid/v1', models: ['fixture-model']}]});
         const local = complete({...base, customOpenAIProviders: []});
-        for (const field of ['service', 'documentService', 'hoverTranslationService', 'selectionTranslationService', 'imageTranslationService', 'videoService', 'areaTranslationService', 'inputBoxTranslationService']) {
+        for (const field of ['service', 'hoverTranslationService', 'selectionTranslationService']) {
             const remote = complete({...base, [field]: 'custom:fixture'});
             const diff = buildDriveSyncDiff(base, local, remote);
             expect(diff.changes.filter(change => change.conflict)).toHaveLength(1);
@@ -151,25 +153,24 @@ describe('Google Drive 完整快照和安全合并', () => {
             expect(parseDriveSyncPayload(driveSyncPayload(merged))).toEqual(remote);
             expect(() => parseDriveSyncPayload(driveSyncPayload({...local, [field]: 'custom:fixture'}))).toThrow();
         }
-        for (const patch of [{translationCenterServices: ['custom:missing']}, {favoriteServices: ['custom:missing']}, {quickTranslationProfiles: [{service: 'custom:missing'}]}, {writing: {service: 'custom:missing'}}, {harness: {service: 'custom:missing'}}]) {
+        for (const patch of [{favoriteServices: ['custom:missing']}]) {
             expect(() => parseDriveSyncPayload(driveSyncPayload({...local, ...patch}))).toThrow('不存在');
         }
     });
 
     it('复合外观按组比较，提示词仍隐藏，常见单位与枚举直接可读', () => {
         const diff = buildDriveSyncDiff(null,
-            {translationAppearance: {color: 'fixture-secret', weight: 300}, system_role: 'fixture-secret', translationCacheMaxBytes: 10485760, theme: 'light', floatingBallCollapsedOpacity: 75, videoSubtitleOffsetMs: 100, translationCacheMaxEntries: 10000, on: null},
-            {translationAppearance: {color: 'other-secret', weight: 400}, system_role: 'other-secret', translationCacheMaxBytes: 5242880, theme: 'dark', floatingBallCollapsedOpacity: 50, videoSubtitleOffsetMs: 200, translationCacheMaxEntries: 2000, on: true});
+            {translationAppearance: {color: 'fixture-secret', weight: 300}, system_role: 'fixture-secret', translationCacheMaxBytes: 10485760, theme: 'light', floatingBallCollapsedOpacity: 75, translationCacheMaxEntries: 10000, on: null},
+            {translationAppearance: {color: 'other-secret', weight: 400}, system_role: 'other-secret', translationCacheMaxBytes: 5242880, theme: 'dark', floatingBallCollapsedOpacity: 50, translationCacheMaxEntries: 2000, on: true});
         expect(diff.changes.filter(change => change.label === '译文外观')).toHaveLength(1);
         expect(JSON.stringify(diff.changes)).not.toMatch(/fixture-secret|other-secret/u);
         expect(diff.changes.find(change => change.label === '翻译缓存容量上限')).toMatchObject({local: '10 MiB', remote: '5 MiB'});
         expect(diff.changes.find(change => change.label === '主题')).toMatchObject({local: '亮色主题', remote: '暗色主题'});
         expect(diff.changes.find(change => change.label === '悬浮球收起不透明度')).toMatchObject({local: '75%', remote: '50%'});
-        expect(diff.changes.find(change => change.label === '字幕时间偏移')).toMatchObject({local: '100 ms', remote: '200 ms'});
         expect(diff.changes.find(change => change.label === '翻译缓存条数上限')).toMatchObject({local: '10000', remote: '2000'});
         const selected = resolveDriveSyncDiff(diff, Object.fromEntries(diff.changes.map(change => [change.id, 'remote'])));
         expect(selected.translationAppearance).toEqual({color: 'other-secret', weight: 400});
-        for (const patch of [{from: 'en'}, {to: 'fr'}, {style: 1}, {inputBoxTranslationInterval: 100}, {videoSubtitleFontSize: 100}, {theme: 'unknown'}, {translationCacheMaxBytes: Infinity}]) {
+        for (const patch of [{from: 'en'}, {to: 'fr'}, {style: 1}, {theme: 'unknown'}, {translationCacheMaxBytes: Infinity}]) {
             expect(buildDriveSyncDiff(null, {}, patch).changes).toHaveLength(1);
         }
     });

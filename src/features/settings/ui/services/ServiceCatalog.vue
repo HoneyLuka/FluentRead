@@ -157,7 +157,7 @@
           </div>
         </details>
 
-        <div v-if="!publicPlanBlocked && showModel && service !== 'localTranslation' && !isCompositeTranslationProviderId(service)" class="model-section">
+        <div v-if="!publicPlanBlocked && showModel && !isCompositeTranslationProviderId(service)" class="model-section">
           <div class="model-heading">
             <strong>模型</strong>
           </div>
@@ -167,14 +167,13 @@
             :maximum-models="maximumModels"
             :maximum-model-length="maximumModelLength"
             :custom-model-count="customModelCount"
-            :allow-custom-models="allowCustomModels"
             :onSelect="actions.selectModel"
             :onAdd="actions.addModel"
             :onRemove="actions.removeModel"
           />
         </div>
 
-        <div class="service-configuration-slot" :class="{'local-model-configuration': service === 'localTranslation'}" aria-label="当前服务配置">
+        <div class="service-configuration-slot" aria-label="当前服务配置">
           <slot name="configuration" :connection-action-target="connectionActionTarget" />
         </div>
 
@@ -227,7 +226,6 @@ const props = withDefaults(defineProps<{
   maximumModels: number
   maximumModelLength: number
   customModelCount: number
-  allowCustomModels: boolean
 }>(), {active: true, addServiceFeedbackVisible: false, disabledServices: () => []})
 
 const emit = defineEmits<{

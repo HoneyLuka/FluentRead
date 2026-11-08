@@ -5,16 +5,12 @@
  * 主要内容：保持语言名称使用各自原生写法，并为尚未 key 化的旧 UI 提供法语映射。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入或翻译结果。
  */
-import videoLearningText from './video-learning/fr-FR.json';
 import selfHelpText from './self-help/fr-FR.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
 import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesFrenchMessages} from './sectionTranslationRulesRomance';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/fr-FR.json';
 import settingsCopyText from './settings-copy/fr-FR.json';
 import brandTaglines from './brand-taglines.json';
 import googleDriveText from './google-drive/fr-FR.json';
@@ -25,11 +21,8 @@ import {legacyTextOverrides} from './legacy-overrides';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsFrenchMessages} from './localTts';
 import {translationStatsFrenchMessages} from './translationStats';
-import {localTranslationFrenchMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -38,16 +31,11 @@ export const frFRMessages = {
     "feedback.serviceHint": "Vérifiez la connexion ou le modèle du service choisi, puis réessayez.",
     "feedback.retryHint": "Réessayez dans un instant. Le texte source et votre sélection restent disponibles.",
     ...countForms['fr-FR'],
-    ...personalCorrectionMessages['fr-FR'],
     "document.config.loadFailed": "Impossible de charger les paramètres. Rechargez la page et réessayez.",
     "popup.compact.translate": "Traduire",
     "popup.compact.restore": "Rétablir",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['fr-FR'],
-    ...pdfReadingMessages['fr-FR'],
-    ...informationHighlightMessages['fr-FR'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "Supprimer les en-têtes de provenance",
     "settings.headers.help": "La liste est vide par défaut. Elle concerne uniquement les requêtes de FluentRead vers le domaine exact, pour tous les services. Les sous-domaines sont distincts. Supprimez une entrée ou décochez un en-tête pour rétablir le comportement par défaut.",
@@ -413,7 +401,6 @@ export const frFRMessages = {
     "settings.excludedLanguages.hint": "S’applique à partir de la prochaine traduction. Les textes courts ou de langue indéterminée sont toujours traduits.",
     "options.userscriptUnavailableTitle": "Indisponible dans le userscript",
     "options.userscriptUnavailableDescription": "Cette fonction nécessite l’environnement de l’extension de navigateur. Installez l’extension FluentRead pour l’utiliser.",
-    ...localTtsFrenchMessages,
     ...translationStatsFrenchMessages,
     "settings.services.library.freeReady": "Aucune clé API requise. Les services gratuits disponibles sont sélectionnés automatiquement.",
     "settings.services.library.keepOne": "Gardez au moins un service activé.",
@@ -556,7 +543,6 @@ export const frFRMessages = {
     "writing.demo.reviewHint": "L’assistant rédige à partir de la discussion. Relisez et modifiez la réponse.",
     "writing.demo.insertHint": "Le brouillon est dans la zone de réponse. Vérifiez-le, puis envoyez-le vous-même.",
 
-    ...localTranslationFrenchMessages,
     "settings.requestLimits.modelTitle": "Limites du modèle",
     "settings.requestLimits.globalTitle": "Limites de requêtes",
     "settings.requestLimits.globalHelp": "Les services et modèles sans réglages spécifiques partagent ces limites.",

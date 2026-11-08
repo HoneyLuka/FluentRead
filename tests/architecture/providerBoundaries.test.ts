@@ -50,7 +50,6 @@ const EXPECTED_PROVIDER_FILES = [
     'googleErrorBody.ts',
     'googleRequestGate.ts',
     'hunyuan-translation.ts',
-    'local-translation.ts',
     'microsoft.ts',
     'microsoftTransport.ts',
     'native-batch.ts',
@@ -148,7 +147,6 @@ describe('translation provider architecture', () => {
             'src/app/background/providerRuntime.ts',
             'src/app/background/messageRuntime.ts',
             'entrypoints/background.ts',
-            'userscript/platform.ts',
         ];
         const violations = audited.filter((path) => readProjectFile(path).includes('@/entrypoints/service/'));
 

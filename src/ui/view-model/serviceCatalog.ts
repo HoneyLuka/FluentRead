@@ -34,7 +34,6 @@ const serviceWebsites = {
   baiduTranslation: 'https://fanyi-api.baidu.com/',
   volcTranslation: 'https://console.volcengine.com/translate',
   chromeTranslator: 'https://developer.chrome.com/docs/ai/translator-api',
-  localTranslation: serviceGuide,
   openai: 'https://platform.openai.com/',
   chatgptPlan: 'https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt',
   azureOpenai: 'https://ai.azure.com/',
@@ -198,7 +197,7 @@ export function getServiceWebsite(
     url: service === services.minimax && context.minimaxRegion === 'global'
       ? 'https://platform.minimax.io/login'
       : serviceWebsites[service as keyof typeof serviceWebsites],
-    kind: [services.freeTranslation, services.bilibili, services.chromeTranslator, services.myMemory, services.localTranslation].includes(service)
+    kind: [services.freeTranslation, services.bilibili, services.chromeTranslator, services.myMemory].includes(service)
       ? 'documentation'
       : 'website',
   }

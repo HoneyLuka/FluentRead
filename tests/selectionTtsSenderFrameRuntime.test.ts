@@ -71,9 +71,7 @@ function runtime(nativeRecovery = false) {
     });
     disposers.push(() => player.dispose());
     const listener = createOffscreenMessageListener({runtimeId: extensionId, ttsPlayer: player,
-        translate: async () => {throw new Error('Unexpected translation');}, fetchImage: async () => {throw new Error('Unexpected image fetch');},
-        translateImage: async () => {throw new Error('Unexpected image OCR');}, translateArea: async () => {throw new Error('Unexpected area OCR');},
-        downloadOcrLanguages: async () => {throw new Error('Unexpected download');}});
+        translate: async () => {throw new Error('Unexpected translation');}});
     function direct(message: Record<string, unknown>, sender: unknown) {
         return new Promise<any>((resolve, reject) => {
             if (!listener({...message, target: 'offscreen'}, sender, resolve)) reject(new Error('Unexpected unhandled offscreen message'));

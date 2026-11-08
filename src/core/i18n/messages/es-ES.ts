@@ -5,16 +5,12 @@
  * 主要内容：以 English 资源作为结构基线，逐项覆盖当前稳定 message key；旧版尚未 key 化的文案由 i18n 迁移层按显式映射处理。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入、提示词或翻译结果。
  */
-import videoLearningText from './video-learning/es-ES.json';
 import selfHelpText from './self-help/es-ES.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
 import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesSpanishMessages} from './sectionTranslationRulesRomance';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/es-ES.json';
 import settingsCopyText from './settings-copy/es-ES.json';
 import brandTaglines from './brand-taglines.json';
 import googleDriveText from './google-drive/es-ES.json';
@@ -25,11 +21,8 @@ import {legacyTextOverrides} from './legacy-overrides';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsSpanishMessages} from './localTts';
 import {translationStatsSpanishMessages} from './translationStats';
-import {localTranslationSpanishMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -38,16 +31,11 @@ export const esESMessages = {
     "feedback.serviceHint": "Revisa la conexión o el modelo del servicio seleccionado e inténtalo de nuevo.",
     "feedback.retryHint": "Vuelve a intentarlo en un momento. Se conservarán el texto original y la selección.",
     ...countForms['es-ES'],
-    ...personalCorrectionMessages['es-ES'],
     "document.config.loadFailed": "No se pudieron cargar los ajustes. Recarga la página e inténtalo de nuevo.",
     "popup.compact.translate": "Traducir",
     "popup.compact.restore": "Restaurar",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['es-ES'],
-    ...pdfReadingMessages['es-ES'],
-    ...informationHighlightMessages['es-ES'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "Eliminar cabeceras de origen",
     "settings.headers.help": "La lista está vacía por defecto. Solo se aplica a solicitudes de FluentRead al dominio exacto, en todos los servicios. Los subdominios se añaden por separado. Elimine una entrada o desmarque una cabecera para restaurar el comportamiento predeterminado.",
@@ -413,7 +401,6 @@ export const esESMessages = {
     "settings.excludedLanguages.hint": "Se aplica a partir de la próxima traducción. Los textos breves o de idioma no identificado se siguen traduciendo.",
     "options.userscriptUnavailableTitle": "No disponible en el script de usuario",
     "options.userscriptUnavailableDescription": "Esta función requiere el entorno de la extensión del navegador. Instala la extensión FluentRead para usarla.",
-    ...localTtsSpanishMessages,
     ...translationStatsSpanishMessages,
     "settings.services.library.freeReady": "No se necesita una clave API. Los servicios gratuitos disponibles se seleccionan automáticamente.",
     "settings.services.library.keepOne": "Mantén al menos un servicio activado.",
@@ -556,7 +543,6 @@ export const esESMessages = {
     "writing.demo.reviewHint": "El asistente redacta a partir de la conversación. Revisa y modifica la respuesta.",
     "writing.demo.insertHint": "El borrador está en el campo de respuesta. Revísalo y envíalo tú mismo.",
 
-    ...localTranslationSpanishMessages,
     "settings.requestLimits.modelTitle": "Límites del modelo",
     "settings.requestLimits.globalTitle": "Límites de solicitudes",
     "settings.requestLimits.globalHelp": "Los servicios y modelos sin ajustes propios comparten estos límites.",

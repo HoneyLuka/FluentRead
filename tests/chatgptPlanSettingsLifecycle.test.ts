@@ -90,7 +90,7 @@ afterEach(async () => {
 describe('ChatGPT 套餐设置真实组件', () => {
     it.each(Object.keys(chatGPTPlanMessages))('公开%s不渲染任何界面，保留配置且不调用任何助手端口', async locale => {
         ports.development = false;ports.locale = locale;await mount('saved-account-model');
-        props.config.service = services.chatgptPlan;props.config.documentModel[services.chatgptPlan] = 'saved-document-model';
+        props.config.service = services.chatgptPlan;props.config.model[services.chatgptPlan] = 'saved-account-model';
         const saved = JSON.stringify(props.config);
         expect(container.textContent).toBe('');expect(container.childElementCount).toBe(0);
         expect(container.querySelector('[data-chatgpt-plan-settings], [data-chatgpt-plan-unavailable]')).toBeNull();

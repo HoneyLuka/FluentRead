@@ -20,7 +20,6 @@ import {
 } from '@/src/core/config/compositeTranslation';
 import {Config, normalizeConfig} from '@/src/core/config/model';
 import {services, servicesType} from '@/src/core/config/catalog';
-import {normalizeInputBoxTranslationService} from '@/src/core/config/inputTranslation';
 import {createTranslationProviderConfigSnapshot} from '@/src/services/translation/requestSnapshot';
 import {projectDriveSyncConfig} from '@/src/core/config/driveSync';
 import {createApiKeyRequirementKey} from '@/src/core/config/validation';
@@ -105,24 +104,16 @@ describe('组合翻译公开配置', () => {
         expect(new Config().compositeTranslationProviders).toEqual([]);
         const item = provider();
         const normalized = normalizeConfig({customOpenAIProviders: [custom], compositeTranslationProviders: [item], service: item.id,
-            documentService: item.id, videoService: item.id, hoverTranslationService: item.id, selectionTranslationService: item.id,
-            imageTranslationService: item.id, areaTranslationService: item.id, inputBoxTranslationService: item.id,
-            favoriteServices: [item.id, 'composite:missing'], translationCenterServices: [item.id, 'composite:missing'],
-            quickTranslationProfiles: [{id: 'quick:combo', action: 'full-page', enabled: true, service: item.id}],
+            hoverTranslationService: item.id, selectionTranslationService: item.id,
+            favoriteServices: [item.id, 'composite:missing'],
         });
-        for (const field of ['service', 'documentService', 'videoService', 'hoverTranslationService', 'selectionTranslationService', 'imageTranslationService', 'areaTranslationService', 'inputBoxTranslationService'] as const) expect(normalized[field]).toBe(item.id);
+        for (const field of ['service', 'hoverTranslationService', 'selectionTranslationService'] as const) expect(normalized[field]).toBe(item.id);
         expect(normalized.favoriteServices).toEqual([item.id]);
-        expect(normalized.translationCenterServices).toEqual([item.id]);
-        expect(normalized.quickTranslationProfiles[0].service).toBe(item.id);
-        expect(normalizeInputBoxTranslationService(item.id, [], [item])).toBe(item.id);
-        expect(normalizeInputBoxTranslationService('composite:missing', [], [item])).toBe('');
         expect(normalizeConfig({...normalized, customOpenAIProviders: []}).compositeTranslationProviders[0].services).toEqual(['google']);
         const deleted = normalizeConfig({...normalized, compositeTranslationProviders: []});
         expect(deleted.service).toBe(new Config().service);
-        for (const field of ['documentService', 'videoService', 'hoverTranslationService', 'selectionTranslationService', 'imageTranslationService', 'areaTranslationService', 'inputBoxTranslationService'] as const) expect(deleted[field]).toBe('');
+        for (const field of ['hoverTranslationService', 'selectionTranslationService'] as const) expect(deleted[field]).toBe('');
         expect(deleted.favoriteServices).toEqual([]);
-        expect(deleted.translationCenterServices).toEqual([]);
-        expect(deleted.quickTranslationProfiles[0].service).toBe('');
         expect(normalizeConfig({compositeTranslationProviders: [provider({services: []})], service: item.id}).service).toBe(item.id);
     });
 

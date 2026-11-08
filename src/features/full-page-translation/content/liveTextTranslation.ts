@@ -18,7 +18,6 @@ import {hasDistinctTargetTranslation as hasDistinctTranslation} from '@/src/core
 import {isClearlyWrongLanguageResponse, isUnchangedTranslationResponse} from '@/src/core/translation/resultValidation';
 import type {TranslationQueueSession} from '@/src/services/translation/queue';
 import {copyFullPageTranslationConfigSnapshot} from './translationConfigSnapshot';
-import {isPersonalCorrectionEnabled, lookupPersonalCorrection, type PersonalCorrectionSnapshot} from './personalCorrections';
 import {
     translateTextSlots,
     tryTranslateInlineCodeSentence,
@@ -176,7 +175,7 @@ export type TranslationResult = (LiveTextTranslationResult | ControlValueTransla
     translations: readonly string[];
     inlineCodePacket?: InlineCodePacket;
     staleInlineCode?: true;
-}) & {personalCorrection?: PersonalCorrectionSnapshot};
+});
 
 /** 统一冻结候选范围；异步期间其他会话的范围变化不能改变本次请求的文本槽。 */
 export async function createTranslationRequest(
@@ -208,7 +207,7 @@ export async function createTranslationRequest(
     if (origins.length === 0) return {kind: 'snapshot', sources: [], translations: []};
     let source: string | null = null;
     let inlineCodePacket: InlineCodePacket | null = null;
-    if (origins.length > 1 || (import.meta.env.BROWSER !== 'userscript' && isPersonalCorrectionEnabled())) {
+    if (origins.length > 1) {
         const core = getCurrentTranslationCore(scope);
         const skeleton = createTranslationSourceSnapshot(node, core.shouldStayOriginal, undefined,
             protectionOptions, core.shouldOmitFromTranslation);
@@ -221,12 +220,7 @@ export async function createTranslationRequest(
             });
         }
     }
-    const personalCorrection = import.meta.env.BROWSER !== 'userscript' && source
-        ? await lookupPersonalCorrection(node, source, snapshot.sourceLanguage, snapshot.targetLanguage, signal) : undefined;
-    if (personalCorrection?.translation) return {kind: 'snapshot', sources: origins,
-        translations: origins.map((_, index) => index === 0 ? personalCorrection.translation! : ''), personalCorrection};
-    const finish = (translations: readonly string[]): TranslationResult => ({kind: 'snapshot', sources: origins, translations,
-        ...(import.meta.env.BROWSER !== 'userscript' && personalCorrection ? {personalCorrection: {...personalCorrection, baseline: [...translations]}} : {})});
+    const finish = (translations: readonly string[]): TranslationResult => ({kind: 'snapshot', sources: origins, translations});
     if (parts.length > 1) {
         const wholeBlock = await translateSnapshotAsWholeBlock(node, origins, source, snapshot, signal, queueSession,
             fullPageSession, forceFailedRequest);

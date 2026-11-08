@@ -7,7 +7,6 @@ vi.mock('webextension-polyfill', () => ({default: {runtime: {id: 'test', getURL:
 
 import {Config} from '@/src/core/config/model';
 import {models, services, servicesType} from '@/src/core/config/catalog';
-import {supportsVisionTransport} from '@/src/core/config/vision';
 import {supportsTranslationGlossary} from '@/src/services/translation/capabilities';
 import {
     DOUBAO_SEED_TRANSLATION_LANGUAGES,
@@ -77,13 +76,11 @@ describe('Doubao-Seed-Translation 模型识别与语言映射', () => {
         expect(Object.keys(DOUBAO_SEED_TRANSLATION_LANGUAGES)).toHaveLength(28);
     });
 
-    it('模型进入豆包候选列表，并关闭提示词上下文、术语库与视觉能力', () => {
+    it('模型进入豆包候选列表，并关闭提示词上下文、保留术语库能力', () => {
         expect(models.get(services.doubao)).toContain(DOUBAO_SEED_TRANSLATION_MODEL_ID);
         expect(servicesType.isUseAIContext(services.doubao, DOUBAO_SEED_TRANSLATION_MODEL_ID)).toBe(false);
         expect(servicesType.isUseAIContext(services.doubao, 'doubao-seed-1-6-250615')).toBe(true);
         expect(supportsTranslationGlossary(services.doubao, DOUBAO_SEED_TRANSLATION_MODEL_ID)).toBe(true);
-        expect(supportsVisionTransport(services.doubao, DOUBAO_SEED_TRANSLATION_MODEL_ID)).toBe(false);
-        expect(supportsVisionTransport(services.doubao, 'doubao-seed-1-6-250615')).toBe(true);
     });
 });
 

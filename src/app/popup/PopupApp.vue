@@ -1,11 +1,11 @@
 <!--
  @file src/app/popup/PopupApp.vue
  服务启用：默认服务提示和功能选择同步用户关闭状态，具体候选与旧选择保护由 PopupServices 执行。
- 文件职责：实现浏览器 Popup 的主交互界面，连接当前标签页状态、翻译配置、可插拔皮肤、功能抽屉和高频操作，让现场开关与显示操作保持简短，将长期偏好引导到对应设置页，并为从划词抽屉打开的设置保留明确返回原网页的入口。
- 主要内容：Aa 按钮通过既有配置补丁保存全局译文字体偏好，以固定尺寸的衬线／无衬线图标、按下状态和紧凑操作提示反馈选择；保存失败时在翻译卡片内显示居中提示与重试按钮，重试时将焦点交回字体按钮；已有配置订阅同步其他页面的选择，导航不撤销已接受保存，关闭与失活只取消界面等待和迟到反馈；翻译卡片右下角的双语/仅译文图标与网站规则同行，两种按钮共用提示样式并支持 Escape 收起，模式回调随服务和操作变化失效；品牌官网入口保留稳定点击区域，内部图标在悬停和键盘聚焦时缓慢单次摇摆并遵循动画偏好，停留后显示可用 Escape 关闭的官网提示；全文翻译进度与完成状态由主按钮反馈，失败时在主操作内的预留区域呈现自助诊断入口，不挤动网站开关，配置修复定位当前服务，本地报告由用户预览并手动导出；在配置 hydration 后汇总翻译服务，直接展示网页默认服务与适用的配置模型；翻译与局部同排，主操作用短标题合并平台快捷键并保留加载状态，长组合在悬停提示中完整显示，站点开关保留独立按钮；赞赏码在当前弹窗内切换放大与还原，关闭后重置；悬停、划词与图片抽屉优先展示开关和操作示意，首次单屏语言选择独占内容，保存后立即显示主菜单；页面操作、抽屉和导航绑定活跃会话，等待期间独占请求，关闭和配置切换使旧回复失效；网站规则写前复验标签页，等待后台确认并呈现保存忙碌、暂停与失败反馈；Safari 免费池精确授权，焦点复查保留已就绪按钮，点击接管旧读取并重新确认实际许可，撤权取消待发操作，授权事件合并刷新，错误随语言资源更新；打开的实际 teleport 抽屉复用平台可见视口订阅跟随键盘与缩放，极矮区域由同一订阅派生紧凑布局，整页遮罩保持背景拦截，可见高度扩大时仅修正当前聚焦服务搜索被吸顶标题遮住的外框，关闭、缓存失活和卸载立即释放，根画布保持固有尺寸。
- 信息层级：服务摘要只保留当前服务与模型；悬停和划词的快捷开关与标题同排，独立快捷方案的作用范围仍明确说明，圈选快捷键只在操作示意中展示。
+ 文件职责：实现浏览器 Popup 的主交互界面，连接当前标签页状态、翻译配置、可插拔皮肤、悬停/划词抽屉和高频操作，让现场开关与显示操作保持简短，将长期偏好引导到对应设置页，
+ 主要内容：Aa 按钮通过既有配置补丁保存全局译文字体偏好，以固定尺寸的衬线／无衬线图标、按下状态和紧凑操作提示反馈选择；保存失败时在翻译卡片内显示居中提示与重试按钮，重试时将焦点交回字体按钮；已有配置订阅同步其他页面的选择，导航不撤销已接受保存，关闭与失活只取消界面等待和迟到反馈；翻译卡片右下角的双语/仅译文图标与网站规则同行，两种按钮共用提示样式并支持 Escape 收起，模式回调随服务和操作变化失效；品牌官网入口保留稳定点击区域，内部图标在悬停和键盘聚焦时缓慢单次摇摆并遵循动画偏好，停留后显示可用 Escape 关闭的官网提示；全文翻译进度与完成状态由主按钮反馈，失败时在主操作内的预留区域呈现自助诊断入口，不挤动网站开关，配置修复定位当前服务，本地报告由用户预览并手动导出；在配置 hydration 后汇总翻译服务，直接展示网页默认服务与适用的配置模型；翻译与局部同排，主操作用短标题合并平台快捷键并保留加载状态，长组合在悬停提示中完整显示，站点开关保留独立按钮；赞赏码在当前弹窗内切换放大与还原，关闭后重置；悬停与划词抽屉优先展示开关和操作示意，首次单屏语言选择独占内容，保存后立即显示主菜单；页面操作、抽屉和导航绑定活跃会话，等待期间独占请求，关闭和配置切换使旧回复失效；网站规则写前复验标签页，等待后台确认并呈现保存忙碌、暂停与失败反馈；Safari 免费池精确授权，焦点复查保留已就绪按钮，点击接管旧读取并重新确认实际许可，撤权取消待发操作，授权事件合并刷新，错误随语言资源更新；打开的实际 teleport 抽屉复用平台可见视口订阅跟随键盘与缩放，极矮区域由同一订阅派生紧凑布局，整页遮罩保持背景拦截，可见高度扩大时仅修正当前聚焦服务搜索被吸顶标题遮住的外框，关闭、缓存失活和卸载立即释放，根画布保持固有尺寸。
+ 信息层级：服务摘要只保留当前服务与模型；悬停和划词的快捷开关与标题同排。
  缓存清理：每次清理拥有独立的可取消等待，失活或卸载释放旧等待，超时恢复按钮并提示结果未确认，后台确认清除但页面仍同步时展示中性状态；全局暂停不取消清理，旧回复不能覆盖新请求。
- 顶部入口：赞赏使用带提示的咖啡图标；支持的浏览器在其右侧提供带悬停和键盘提示的侧边栏图标，点击时同步调用 open 保留用户手势，成功后关闭弹窗；失败保留入口与重试提示，不把原文保存到配置。
+ 顶部入口：赞赏使用带提示的咖啡图标；设置按钮进入完整设置页，不把原文保存到配置。
  模块边界：组件编排 UI、浏览器导航事件与生命周期；页内面板通过授权来源固定发起网页，页面消息归属由 pageActions 管理，不实现翻译 provider、缓存存储或 content 挂载；公共配置由 services/config 管理；配置草稿复用共享编辑会话，保留 post 合并和关闭补丁交接。
 -->
 <!-- Popup 页面归 app 层所有；WXT 入口只负责调用挂载函数。 -->
@@ -73,15 +73,6 @@
           <template #content><span class="translation-tool-tooltip-copy">{{ t('popup.donationTitle') }}</span></template>
           <button ref="donationTrigger" class="donation-button" type="button" :aria-label="t('popup.donationTitle')" :onClick="donationActions.open">
             <Coffee />
-          </button>
-        </ElTooltip>
-        <ElTooltip v-if="sidepanelAvailable" :trigger="['hover', 'focus']" :trigger-keys="[]" :show-after="350" :hide-after="0"
-          :persistent="false" :show-arrow="false" :disabled="!popupContext.active.value || drawerVisible" placement="bottom" effect="light" popper-class="translation-tool-tooltip">
-          <template #content><span class="translation-tool-tooltip-copy">{{ t('sidepanel.title') }}</span></template>
-          <button class="sidebar-translation-entry" type="button" data-testid="sidebar-translation"
-            :aria-label="t('sidepanel.title')" :aria-busy="sidepanelOpening"
-            :disabled="sidepanelOpening || (browserCapabilities.browser !== 'firefox' && pageState.windowId === undefined)" :onClick="popupActions.sidebar">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M12.5 3.5v13M5.5 8h4M5.5 11h4"/></svg>
           </button>
         </ElTooltip>
         <button class="settings-button" type="button" title="完整设置" aria-label="打开完整设置" :onClick="popupActions.settings">
@@ -163,15 +154,15 @@
         {{ t('safari.freePool.policy') }} · {{ freePoolStatus }}
       </p>
 
-      <div class="translate-action" :class="{'has-section-translation': !isThunderbird && !currentPdfSource, 'is-translated': pageTranslated}">
+      <div class="translate-action" :class="{'has-section-translation': !isThunderbird, 'is-translated': pageTranslated}">
         <button class="translate-button" :class="{ translated: pageTranslated }" type="button"
           data-testid="page-translation" :aria-pressed="pageTranslated" :aria-busy="translationInProgress"
           :aria-label="pageTranslationLabel" :title="pageTranslationTitle"
-          :disabled="!config.on || currentSiteExtensionDisabled || translating || pageState.savingRule || (!pageTranslated && !currentPdfSource && safariFreePool && (freePoolLoading || freePoolBusy))" :onClick="pageButtons.toggle">
+          :disabled="!config.on || currentSiteExtensionDisabled || translating || pageState.savingRule || (!pageTranslated && safariFreePool && (freePoolLoading || freePoolBusy))" :onClick="pageButtons.toggle">
           <span v-if="translationInProgress" class="spinner" aria-hidden="true" />
           <span class="translate-label">{{ pageTranslationButtonLabel }}</span>
         </button>
-        <button v-if="!isThunderbird && !currentPdfSource" class="section-translate-button" type="button" data-testid="section-translation"
+        <button v-if="!isThunderbird" class="section-translate-button" type="button" data-testid="section-translation"
           :disabled="!config.on || currentSiteExtensionDisabled || translating || pageState.savingRule || (safariFreePool && (freePoolLoading || freePoolBusy))" :aria-label="sectionTranslationLabel" :title="sectionTranslationLabel"
           :onClick="pageButtons.section">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15M10 10l7 2.6-3 1.1-1.1 3z" /></svg>
@@ -326,7 +317,6 @@
               <button v-else-if="activeDrawer === 'selection'" class="switch compact" type="button" role="switch" :aria-label="t('popup.selectionTranslation')" :aria-checked="config.selectionTranslatorMode !== 'disabled'" data-testid="selection-enable" :onClick="drawerActions.selection"><i /></button>
             </div>
             <p v-if="drawerDescription">{{ drawerDescription }}</p>
-            <p v-if="activeDrawer === 'hover' && quickHoverProfiles.length" class="independent-profile-note">{{ t('popup.quickTranslation.defaultOnly', {count: quickHoverProfiles.length}) }}</p>
           </div>
         </div>
         <button type="button" aria-label="关闭" :onClick="drawerActions.close">×</button>
@@ -362,18 +352,10 @@
       </div>
 
       <div v-else-if="activeDrawer === 'hover'" class="drawer-content">
-        <div class="interaction-preview hover-translation-preview" :class="{'preview-disabled': !hoverProfileCount}">
+        <div class="interaction-preview hover-translation-preview" :class="{'preview-disabled': !defaultHoverEnabled}">
           <span class="cursor" aria-hidden="true">↖</span><span aria-hidden="true">＋</span>
           <button class="hover-keycap" type="button" :aria-label="t('popup.quickSettings.chooseHoverShortcut')" :title="t('popup.quickSettings.chooseHoverShortcut')" :onClick="drawerActions.translationSettings" data-i18n-ignore>{{ hoverPreviewKey }}</button>
           <span aria-hidden="true">＝</span><strong>即时翻译</strong>
-        </div>
-        <div v-if="quickHoverProfiles.length" class="quick-profile-preview" data-testid="popup-quick-hover-profiles">
-          <label>{{ t('popup.quickTranslation.extraProfiles') }}</label>
-          <div v-for="profile in quickHoverProfiles.slice(0, 3)" :key="profile.id" class="quick-profile-preview-row">
-            <kbd>{{ profile.hotkey }}</kbd>
-            <span>{{ quickProfileSummary(profile) }}</span>
-          </div>
-          <small v-if="quickHoverProfiles.length > 3">{{ t('popup.quickTranslation.moreProfiles', {count: quickHoverProfiles.length - 3}) }}</small>
         </div>
       </div>
 
@@ -383,31 +365,6 @@
           <div class="chips two" role="group" aria-label="划词翻译模式">
             <button v-for="item in drawerSelectionModes" :key="item.value" type="button" :class="{ selected: (config.selectionTranslatorMode === 'disabled' ? config.selectionTranslatorModeBeforeDisable : config.selectionTranslatorMode) === item.value }" :aria-pressed="(config.selectionTranslatorMode === 'disabled' ? config.selectionTranslatorModeBeforeDisable : config.selectionTranslatorMode) === item.value" :disabled="config.selectionTranslatorMode === 'disabled'" :onClick="item.choose">{{ item.label }}</button>
           </div>
-        </div>
-      </div>
-
-      <div v-else-if="activeDrawer === 'image'" class="drawer-content image-methods">
-        <div v-if="!browserCapabilities.imageTranslation" class="capability-unavailable" role="status">
-          <strong>当前浏览器暂不支持图片翻译与 OCR</strong>
-          <small>原有开关偏好已保留；请在 Chrome 中使用此功能。</small>
-        </div>
-        <button v-if="browserCapabilities.imageTranslation" class="image-method" :class="{enabled: !config.disableImageTranslator}" type="button" role="switch" :aria-checked="!config.disableImageTranslator" aria-label="启用或关闭图片翻译" :onClick="drawerActions.image">
-          <svg class="image-method-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg>
-          <span class="image-method-copy"><strong>{{ t('popup.image.web') }}</strong><small>{{ t('popup.image.webHint') }}</small></span>
-          <span class="switch compact" :aria-checked="!config.disableImageTranslator" aria-hidden="true"><i /></span>
-        </button>
-        <div v-if="!browserCapabilities.areaTranslation" class="capability-unavailable" role="status">
-          <strong>当前浏览器暂不支持圈选翻译</strong>
-          <small>原有开关偏好已保留；回到 Chrome 后仍会按原设置生效。</small>
-        </div>
-        <button v-else class="image-method" :class="{enabled: config.selectionAreaEnabled}" type="button" role="switch" :aria-checked="config.selectionAreaEnabled" aria-label="启用或关闭圈选翻译" :onClick="drawerActions.area">
-          <svg class="image-method-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
-          <span class="image-method-copy"><strong>{{ t('popup.image.area') }}</strong><small>{{ t('popup.image.areaHint') }}</small></span>
-          <span class="switch compact" :aria-checked="config.selectionAreaEnabled" aria-hidden="true"><i /></span>
-        </button>
-        <div v-if="browserCapabilities.areaTranslation" class="area-translation-preview quick-area-preview" :class="{'preview-disabled': !config.selectionAreaEnabled}" data-testid="area-translation-demo">
-          <span class="area-hotkey"><kbd v-for="(key, index) in areaPreviewKeys" :key="index" data-i18n-ignore>{{ key }}</kbd></span>
-          <span aria-hidden="true">＋</span><span class="area-ring" aria-hidden="true" /><span aria-hidden="true">＝</span><strong>翻译选中区域</strong>
         </div>
       </div>
 
@@ -461,14 +418,7 @@ import {
   resolveConfiguredModel,
   servicesType,
 } from '@/src/core/config/catalog';
-import {
-  enabledQuickTranslationProfiles,
-  findEnabledQuickTranslationHotkeyConflict,
-    quickTranslationActionKey,
-  type QuickTranslationProfile,
-} from '@/src/core/config/quickTranslation';
 import {parseHotkey, resolveConfiguredHotkey} from '@/src/core/hotkey';
-import {areaTranslationHotkeyDisplayName, resolveAreaTranslationHotkey} from '@/src/core/config/areaTranslation';
 import {sectionTranslationHotkeyDisplayName} from '@/src/core/config/sectionTranslation';
 import {
   getCustomOpenAIProvider,
@@ -498,17 +448,14 @@ import {popupQuickFeatureIconPaths, popupQuickFeatureIconTones, type PopupQuickF
 import {useUiI18n} from '@/src/ui/i18n';
 import PopupSiteRule from './PopupSiteRule.vue';
 import {browserCapabilities} from '@/src/platform/browser/capabilities';
-import {canOpenTranslationSidepanel, openTranslationSidepanel} from '@/src/platform/browser/translationSidepanel';
 import {readFreePoolAccess, requestFreeProviderAccess, subscribeFreeProviderAccessChanges, type FreePoolAccess} from '@/src/platform/browser/freeProviderPermissions';
 import {FREE_TRANSLATION_PROVIDERS} from '@/src/core/config/freeTranslation';
-import {createPdfReaderUrl, getPdfSourceUrl} from '@/src/features/document-translation/core/pdfSource';
 import {
   getTranslationServiceUnavailableMessage,
-  isTranslationServiceAvailable,
 } from '@/src/services/translation/capabilities';
 
-type DrawerName = 'services' | 'hover' | 'selection' | 'appearance' | 'image' | 'aiContext';
-type SettingsSection = 'settings-selection' | 'settings-general' | 'settings-interface' | 'settings-image-translation' | 'settings-area-translation' | 'settings-translation' | 'settings-services' | 'settings-sites' | 'settings-video' | 'settings-vocabulary';
+type DrawerName = 'services' | 'hover' | 'selection' | 'appearance' | 'aiContext';
+type SettingsSection = 'settings-selection' | 'settings-general' | 'settings-interface' | 'settings-translation' | 'settings-services' | 'settings-sites';
 interface PopupQuickFeatureViewModel {
   id: PopupQuickFeatureId;
   label: string;
@@ -552,10 +499,8 @@ let releaseDrawerViewport: (() => void) | undefined;
 const activeDrawer = ref<DrawerName>('hover');
 const pageState = reactive<PopupPageState>({tabId: null, url: '', domain: '', translated: false, busy: false, savingRule: false});
 const {busy: translating, translated: pageTranslated, tabId: currentTabId, domain: currentSiteDomain} = toRefs(pageState);
-const currentPdfSource = computed(() => getPdfSourceUrl(pageState.url));
 const currentSiteTranslationOnly = computed(() => Boolean(pageState.domain && config.value.translationOnlyDomains?.includes(pageState.domain)));
 const currentPageDisplay = computed(() => resolveSiteTranslationDisplay(config.value, pageState.url));
-const pageTranslationLabel = computed(() => t(currentPdfSource.value ? 'document.pdfReading.openReader' : pageTranslated.value ? 'popup.restoreCurrentPage' : 'popup.translateCurrentPage'));
 const clearingCache = ref(false);
 const donationVisible = ref(false);
 const donationQrEnlarged = ref(false);
@@ -583,7 +528,6 @@ const drawerSettingsSection: Record<DrawerName, SettingsSection> = {
   hover: 'settings-translation',
   selection: 'settings-selection',
   appearance: 'settings-interface',
-  image: 'settings-image-translation',
 };
 const sendConfigMessage = browser.runtime.sendMessage.bind(browser.runtime);
 const persistConfigPatch = (value: unknown) => requestConfigPatch(value, sendConfigMessage);
@@ -602,15 +546,6 @@ function readBrowserUiLocale(): unknown {
     || '';
 }
 
-// 圈选快捷键可自定义；抽屉提示、按键贴片和冲突检查都读取同一份解析结果。
-const areaHotkey = computed(() => resolveAreaTranslationHotkey(
-  config.value.selectionAreaHotkey,
-  config.value.customSelectionAreaHotkey,
-));
-const areaHotkeyDisplayName = computed(() => areaTranslationHotkeyDisplayName(
-  config.value.selectionAreaHotkey,
-  config.value.customSelectionAreaHotkey,
-));
 // 局部翻译按钮只有图标和短标签，完整用途与已开启的快捷键放在提示与无障碍名称里。
 const sectionTranslationLabel = computed(() => {
   const title = t('popup.sectionTranslationTitle');
@@ -634,7 +569,6 @@ const providerLabel = (service: string) => providerLabels.value.get(service) || 
 const assignedProviders = computed(() => [...new Set([
   config.value.service,
   ...featureServiceDefinitions.map(feature => getFeatureService(config.value, feature) || config.value.service),
-  ...enabledQuickTranslationProfiles(config.value.quickTranslationProfiles).map(profile => profile.service).filter(Boolean),
 ])]);
 const selectedServiceUnavailableMessage = computed(() => isTranslationServiceDisabled(config.value.disabledTranslationServices, config.value.service)
   ? t('settings.services.library.serviceDisabledMessage') : getTranslationServiceUnavailableMessage(config.value.service));
@@ -662,7 +596,6 @@ const canUseAIContext = computed(() => servicesType.isUseAIContext(
 const missingCredentialMessage = computed(() => getMissingCredentialMessage(config.value.service, config.value));
 const credentialWarning = computed(() => selectedServiceUnavailableMessage.value || missingCredentialMessage.value);
 const isThunderbird = browserCapabilities.browser === 'thunderbird';
-const pageFontEntryVisible = computed(() => !isThunderbird && !currentPdfSource.value && /^(?:https?|file):/u.test(pageState.url));
 const currentSiteSupported = computed(() => !isThunderbird && currentTabId.value !== null && Boolean(currentSiteDomain.value));
 const currentSiteRuleEnabled = computed(() => currentSiteSupported.value
   && (config.value.alwaysTranslateDomains ?? []).includes(currentSiteDomain.value));
@@ -691,14 +624,15 @@ const pageTranslationHotkey = computed(() => {
   return displayName.replace(/Pageup$/u, 'PgUp').replace(/Pagedown$/u, 'PgDn');
 });
 const pageTranslationButtonLabel = computed(() => {
-  if (currentPdfSource.value) return pageTranslationLabel.value;
   const action = t(pageTranslated.value ? 'popup.compact.restore' : 'popup.compact.translate');
   // 超长组合完整保留在提示中；短组合直接并入标题，不另占按键胶囊或一行。
   const shortcut = pageTranslationHotkey.value;
   if (!shortcut || shortcut.length > 10) return action;
   return language.value === 'zh-CN' ? `${action}（${shortcut}）` : `${action} (${shortcut})`;
 });
-const pageTranslationTitle = computed(() => currentPdfSource.value || !pageTranslationHotkey.value
+const pageFontEntryVisible = computed(() => !isThunderbird && /^(?:https?|file):/u.test(pageState.url));
+const pageTranslationLabel = computed(() => t(pageTranslated.value ? 'popup.restoreCurrentPage' : 'popup.translateCurrentPage'));
+const pageTranslationTitle = computed(() => !pageTranslationHotkey.value
   ? pageTranslationLabel.value : `${pageTranslationLabel.value} · ${pageTranslationHotkey.value}`);
 const visiblePopupQuickFeatureIds = computed(() => config.value.popupQuickFeatureOrder.filter(
   (featureId) => config.value.popupQuickFeatureVisibility[featureId]
@@ -753,30 +687,13 @@ const styleLabel = computed(() => options.styles.find((item: any) => item.value 
 const defaultHoverHotkey = computed(() => resolveConfiguredHotkey(config.value.hotkey, config.value.customHotkey));
 const defaultHoverEnabled = computed(() => Boolean(defaultHoverHotkey.value && defaultHoverHotkey.value !== 'none'));
 const hoverKey = computed(() => defaultHoverEnabled.value ? defaultHoverHotkey.value : '未设置');
-const quickHoverProfiles = computed(() => enabledQuickTranslationProfiles(config.value.quickTranslationProfiles, 'hover')
-  .filter((profile) => isTranslationServiceAvailable(profile.service || config.value.service)));
-const hoverProfileCount = computed(() => quickHoverProfiles.value.length + (defaultHoverEnabled.value ? 1 : 0));
-const hoverPreviewKey = computed(() => resolveConfiguredHotkey(defaultHoverEnabled.value ? config.value.hotkey
-  : quickHoverProfiles.value.length ? 'custom' : config.value.hoverShortcutBeforeDisable,
-  !defaultHoverEnabled.value && quickHoverProfiles.value.length ? quickHoverProfiles.value[0].hotkey : config.value.customHotkey) || t('common.notSet'));
-const hoverSummary = computed(() => quickHoverProfiles.value.length
-  ? t('popup.quickTranslation.profileCount', {count: hoverProfileCount.value})
-  : defaultHoverEnabled.value ? hoverKey.value.replace('Control', 'Ctrl') : '已关闭');
-function quickProfileSummary(profile: QuickTranslationProfile): string {
-  const service = profile.service || config.value.service;
-  const serviceName = providerLabel(service);
-  if (!servicesType.isUseModel(service)) return serviceName;
-  const model = profile.model || resolveConfiguredModel(config.value.model[service], config.value.customModel[service]);
-  return model ? `${serviceName} · ${model}` : serviceName;
-}
+const hoverPreviewKey = computed(() => defaultHoverEnabled.value ? config.value.hotkey : t('common.notSet'));
+const hoverSummary = computed(() => defaultHoverEnabled.value ? hoverKey.value.replace('Control', 'Ctrl') : '已关闭');
 const selectionSummary = computed(() => config.value.selectionTranslatorMode === 'disabled'
   ? '已关闭' : config.value.selectionTranslatorTrigger === 'contextMenu'
     ? t('selectionTrigger.contextMenu')
     : options.selectionTranslatorTriggers.find(item => item.value === config.value.selectionTranslatorTrigger)?.label || '显示图标');
 const displaySummary = computed(() => currentPageDisplay.value === 1 ? `双语 · ${styleLabel.value}` : '仅显示译文');
-const imageTranslationSummary = computed(() => !browserCapabilities.imageTranslation
-  ? '当前浏览器不可用'
-  : config.value.selectionAreaEnabled ? areaHotkeyDisplayName.value : config.value.disableImageTranslator ? '已关闭' : '悬停图片');
 const popupQuickFeatureViewModels = computed<Record<PopupQuickFeatureId, PopupQuickFeatureViewModel>>(() => {
   const current = popupContext.capture();
   return {
@@ -786,7 +703,7 @@ const popupQuickFeatureViewModels = computed<Record<PopupQuickFeatureId, PopupQu
     summary: hoverSummary.value,
     iconTone: popupQuickFeatureIconTones.hover,
     showStatus: true,
-    active: hoverProfileCount.value > 0,
+    active: defaultHoverEnabled.value,
     open: () => {if (current()) openDrawer('hover')},
   },
   selection: {
@@ -806,46 +723,21 @@ const popupQuickFeatureViewModels = computed<Record<PopupQuickFeatureId, PopupQu
     showStatus: false,
     open: () => {if (current()) openDrawer('appearance')},
   },
-  image: {
-    id: 'image',
-    label: '图片翻译',
-    summary: imageTranslationSummary.value,
-    iconTone: popupQuickFeatureIconTones.image,
-    showStatus: true,
-    active: (browserCapabilities.imageTranslation && !config.value.disableImageTranslator) || (browserCapabilities.areaTranslation && config.value.selectionAreaEnabled),
-    open: () => {if (current()) openDrawer('image')},
-  },
-  document: {
-    id: 'document',
-    label: '文档翻译',
-    summary: 'PDF / Word / …',
-    iconTone: popupQuickFeatureIconTones.document,
-    showStatus: false,
-    className: 'document-feature-card',
-    dataFeature: 'document-translation',
-    ariaLabel: '打开文档翻译',
-    open: () => {if (current()) return openDocumentTranslation()},
-  },
 };});
 const visiblePopupQuickFeatures = computed(() => visiblePopupQuickFeatureIds.value
   .map((featureId) => popupQuickFeatureViewModels.value[featureId]));
-const drawerTitle = computed(() => ({ services: t('popup.providers.title'), aiContext: t('popup.aiContext.title'), hover: t('popup.quickTranslation.defaultHoverShortcut'), selection: t('popup.selectionTranslation'), appearance: '译文显示设置', image: '图片翻译' }[activeDrawer.value]));
+const drawerTitle = computed(() => ({ services: t('popup.providers.title'), aiContext: t('popup.aiContext.title'), hover: t('popup.quickTranslation.defaultHoverShortcut'), selection: t('popup.selectionTranslation'), appearance: '译文显示设置' }[activeDrawer.value]));
 const drawerDescription = computed(() => ({
   services: '',
   aiContext: t('popup.aiContext.intro'),
   hover: '',
   selection: '',
   appearance: t('popup.quickSettings.appearanceDescription'),
-  image: '',
 }[activeDrawer.value]));
 const selectionModes = [
   { value: 'bilingual', label: '双语显示' },
   { value: 'translation-only', label: '仅译文' },
 ] as const;
-const areaPreviewKeys = computed(() => {
-  const label = areaHotkeyDisplayName.value;
-  return label.endsWith('+') ? [...label.slice(0, -1).split('+').filter(Boolean), '+'] : label.split('+').filter(Boolean);
-});
 
 const pageExited = ref(false);
 const popupContext = useSettingsActionContext(() => hydrated.value && !showLanguageOnboarding.value && !pageExited.value,
@@ -916,7 +808,6 @@ const tabSource = createPopupTabSource(window.location?.search || '', {
 const pageActions = createPopupPageActions({state: pageState, config: () => config.value, active: () => pageContext.active.value,
   warning: () => credentialWarning.value || '', getTab: tabSource.getTab,
   persistRule: persistSiteRulePatch,
-  openPdf: source => browser.tabs.create({url: createPdfReaderUrl(browser.runtime.getURL('document.html'), source)}),
   onStatus: readPageResult, onFailure: diagnostic => {pageDiagnostic.value = diagnostic;notice.value = ''},
   send: (id, message) => browser.tabs.sendMessage(id, message, {frameId: 0}), notice: showNotice, close: closePopupSurface, translate: t, thunderbird: isThunderbird});
 const {hydrate: hydrateCurrentSite, toggle: togglePageTranslation, section: startSectionTranslation,
@@ -933,8 +824,8 @@ const pageButtons = computed(() => {
 });
 function runPageWithFreePoolAccess(action: 'toggle' | 'section' | 'retry'): Promise<void> | void {
   const run = () => action === 'retry' ? pageActions.retry() : action === 'toggle' ? togglePageTranslation() : startSectionTranslation();
-  // 恢复原文与打开 PDF 阅读器不产生新的免费池请求，不能被授权状态阻挡。
-  if ((action === 'toggle' && (pageTranslated.value || currentPdfSource.value)) || !safariFreePool.value) return run();
+  // 恢复原文、非 Safari 固定服务与 retry 不产生新的免费池请求，不能被授权状态阻挡。
+  if ((action === 'toggle' && pageTranslated.value) || !safariFreePool.value) return run();
   if (!pageContext.active.value || !config.value.on || translating.value || pageState.savingRule || currentSiteExtensionDisabled.value
       || freePoolBusy.value || freePoolLoading.value) return;
   const access = freePoolAccess.value;
@@ -989,21 +880,8 @@ const popupActions = computed(() => {
   const current = popupContext.capture();
   const bind = (run: () => void | Promise<void>) => () => {if (current()) return run()};
   return {settings: bind(() => openOptions()), siteSettings: bind(() => openOptions('settings-sites')), serviceSettings: bind(() => openOptions('settings-services', undefined, config.value.service)),
-    services: bind(() => openDrawer('services')), sidebar: bind(openSidebarTranslation), cache: bind(clearCache)};
+    services: bind(() => openDrawer('services')), cache: bind(clearCache)};
 });
-const sidepanelAvailable = canOpenTranslationSidepanel();
-const sidepanelOpening = ref(false);
-async function openSidebarTranslation() {
-  if (!popupContext.active.value || sidepanelOpening.value) return;
-  const current = popupContext.capture();
-  sidepanelOpening.value = true;
-  try {
-    // 原生 open 必须发生在点击调用栈内；窗口身份已由现有站点读取准备好。
-    await openTranslationSidepanel(pageState.windowId);
-    if (current()) closePopupSurface();
-  } catch {if (current()) showNotice(t('sidepanel.openError'), 'error');}
-  finally {sidepanelOpening.value = false;}
-}
 // 快捷模式属于整个弹窗；服务、显示模式或在途操作变化会淘汰旧按钮回调。
 const displayModeContext = useSettingsActionContext(() => popupContext.active.value,
   () => [config.value, config.value.on, config.value.service, config.value.display, currentSiteTranslationOnly.value, pageState.url, translating.value, pageState.savingRule]);
@@ -1017,9 +895,8 @@ const displayModeButton = computed(() => {
 });
 const drawerContext = useSettingsActionContext(() => popupContext.active.value && drawerVisible.value,
   () => [config.value, activeDrawer.value, config.value.on, config.value.hotkey, config.value.customHotkey,
-    config.value.selectionTranslatorMode, config.value.selectionTranslatorPresentation, config.value.selectionAreaEnabled,
-    config.value.disableImageTranslator, config.value.display, config.value.service, config.value.enableAIContext,
-    browserCapabilities.areaTranslation, browserCapabilities.imageTranslation]);
+    config.value.selectionTranslatorMode, config.value.selectionTranslatorPresentation,
+    config.value.display, config.value.service, config.value.enableAIContext]);
 const pageFontState = reactive<PopupPageFontState>({busy: false, error: ''});
 // 全局偏好不绑定标签页或文档身份；已接受的保存由共享配置队列接续。
 const pageFontContext = useSettingsActionContext(() => popupContext.active.value && config.value.on, () => []);
@@ -1057,8 +934,7 @@ const drawerActions = computed(() => {
   const current = drawerContext.capture(), section = drawerSettingsSection[activeDrawer.value];
   const bind = (run: () => void | Promise<void>) => () => {if (current()) return run()};
   return {close: bind(() => {drawerVisible.value = false}), aiContext: bind(toggleAIContext), hover: bind(toggleDefaultHoverShortcut),
-    selection: bind(toggleSelectionTranslation), image: bind(() => {config.value.disableImageTranslator = !config.value.disableImageTranslator}),
-    area: bind(() => setAreaEnabled(!config.value.selectionAreaEnabled)), options: bind(() => openOptions(section)),
+    selection: bind(toggleSelectionTranslation), options: bind(() => openOptions(section)),
     services: bind(() => openDrawer('services')), serviceSettings: bind(() => openOptions('settings-services', undefined, config.value.service)),
     translationSettings: bind(() => openOptions('settings-translation'))};
 });
@@ -1333,19 +1209,6 @@ async function openOptions(section?: SettingsSection, target?: string, service?:
   }
 }
 
-async function openDocumentTranslation() {
-  if (!popupContext.active.value || !config.value.on) return;
-  const current = popupContext.capture();
-  try {
-    const tab = await tabSource.getTab();
-    if (!current()) return;
-    const source = getPdfSourceUrl(tab?.pendingUrl || tab?.url || '');
-    const readerUrl = browser.runtime.getURL('document.html');
-    await browser.tabs.create({ url: source ? createPdfReaderUrl(readerUrl, source) : readerUrl });
-    if (current()) closePopupSurface();
-  } catch {if (current()) showNotice(t('translationCenter.requestError'), 'error');}
-}
-
 async function clearCache() {
   if (!popupContext.active.value || clearingCache.value) return;
   const current = cacheContext.capture();
@@ -1371,12 +1234,6 @@ async function clearCache() {
   }
 }
 
-function quickTranslationConflictMessage(hotkey: string): string {
-  const conflict = findEnabledQuickTranslationHotkeyConflict(config.value.quickTranslationProfiles, hotkey);
-  if (!conflict) return '';
-  const group = t(`quickTranslation.heading.${quickTranslationActionKey(conflict.action)}`);
-  return t('quickTranslation.conflictProfilePopup', {group});
-}
 function toggleDefaultHoverShortcut() {
   if (defaultHoverEnabled.value) {
     config.value.hoverShortcutBeforeDisable = config.value.hotkey;
@@ -1386,8 +1243,6 @@ function toggleDefaultHoverShortcut() {
   const previous = config.value.hoverShortcutBeforeDisable;
   const resolved = resolveConfiguredHotkey(previous, config.value.customHotkey);
   const restored = resolved && resolved !== 'none' ? previous : 'Control';
-  const conflictMessage = quickTranslationConflictMessage(resolveConfiguredHotkey(restored, config.value.customHotkey));
-  if (conflictMessage) {showNotice(conflictMessage, 'error'); return;}
   config.value.hotkey = restored;
 }
 function toggleSelectionTranslation() {
@@ -1402,14 +1257,6 @@ function setSelectionMode(mode: 'disabled' | 'bilingual' | 'translation-only') {
   }
   config.value.selectionTranslatorMode = mode;
   config.value.disableSelectionTranslator = mode === 'disabled';
-}
-function setAreaEnabled(enabled: boolean) {
-  const conflictMessage = enabled ? quickTranslationConflictMessage(areaHotkey.value) : '';
-  if (conflictMessage) {
-    showNotice(conflictMessage, 'error');
-    return;
-  }
-  config.value.selectionAreaEnabled = enabled;
 }
 </script>
 

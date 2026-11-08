@@ -1,7 +1,7 @@
 /**
  * @file tests/popupKeyInformation.test.ts
  * 文件职责：执行真实 Popup 客户端模板，验证首页默认服务、配置模型与原有抽屉入口。
- * 主要内容：覆盖模型能力、请求体覆盖、自定义接口、外部同步、中英文无障碍名称，以及模块排序、PDF 主入口与迟到标签页查询的模板边界；全局字体真值来自配置，页面状态读取失败或关闭后的迟到响应不能覆盖偏好。
+ * 主要内容：覆盖模型能力、请求体覆盖、自定义接口、外部同步、中英文无障碍名称，以及模块排序与迟到标签页查询的模板边界；全局字体真值来自配置，页面状态读取失败或关闭后的迟到响应不能覆盖偏好。
  * 模块边界：浏览器、配置存储和展示组件为受控端口；不读取源码私有状态，不将 DOM 测试视为真实几何或在线服务证明。
  */
 import * as runtime from 'vue';
@@ -11,7 +11,6 @@ import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi} fr
 import type {App, Plugin} from 'vue';
 import {Config, normalizeConfig} from '@/src/core/config/model';
 import {customModelString} from '@/src/core/config/catalog';
-import {LOCAL_TRANSLATION_MODEL_IDS} from '@/src/core/config/localTranslation';
 import {translate, translateLegacyText, type UiLanguage} from '@/src/core/i18n';
 import {registerAllUiLanguageBundles} from './helpers/uiLanguageBundles';
 import type {PopupActiveTab} from '@/src/app/popup/pageActions';
@@ -60,7 +59,7 @@ vi.mock('@/src/ui/i18n', () => ({useUiI18n: () => ({language, bundleRevision,
   t: (key: string, params?: Parameters<typeof translate>[2]) => translate(key, language.value, params),
   translateLegacy: (text: string) => translateLegacyText(text, language.value)})}));
 vi.mock('@/src/ui/interfaceAppearance', () => ({applyInterfaceFont() {}, applyInterfaceSkin() {}}));
-vi.mock('@/src/platform/browser/capabilities', () => ({browserCapabilities: {browser: 'chrome', areaTranslation: true, imageTranslation: true}}));
+vi.mock('@/src/platform/browser/capabilities', () => ({browserCapabilities: {browser: 'chrome'}}));
 vi.mock('@element-plus/icons-vue', () => ({Setting: {render: () => null}}));
 vi.mock('element-plus/es/components/tooltip/index', () => ({ElTooltip: {inheritAttrs: false,
   setup(_: unknown, {slots, expose}: any) {expose({onClose() {}, hide() {}});return () => slots.default?.();}}}));
@@ -126,91 +125,6 @@ describe('Popup 首页关键信息', () => {
     expect({service: config.service, from: config.from, to: config.to, model: config.model.openai}).toEqual(before);
     expect(patches).not.toHaveBeenCalled();
   });
-  it.each([['zh-CN', '打开 PDF 阅读器'], ['en-US', 'Open PDF reader']] as const)('%s PDF 主入口保留服务摘要并只打开携带原文地址的阅读器', async (locale, label) => {
-    language.value = locale;
-    queryTabs.mockResolvedValue([{id: 7, windowId: 3, url: 'https://example.test/docs/research.pdf?edition=2#page=5'}]);
-    const before = JSON.stringify(config);
-    await mount();
-    const button = document.querySelector<HTMLButtonElement>('[data-testid="page-translation"]')!;
-    expect(summary().querySelector('strong')?.textContent).toBe('OpenAI');
-    expect(model()?.textContent).toBe('saved-model');
-    expect(summary().getAttribute('aria-haspopup')).toBe('dialog');
-    expect(button.querySelector('.translate-label')?.textContent).toBe(label);
-    expect(button.getAttribute('title')).toBe(label);
-    expect(button.querySelector('kbd, .translate-hotkey')).toBeNull();
-    expect(button.getAttribute('title')).not.toMatch(/Alt\+T|⌥\+T/u);
-    expect(document.querySelector('[data-testid="section-translation"]')).toBeNull();
-    expect(button.hasAttribute('disabled')).toBe(false);
-    expect(send).not.toHaveBeenCalled();
-
-    button.dispatchEvent(new window.Event('click'));await settle();
-    expect(createTab.mock.calls).toEqual([[{url: 'extension://document.html#pdf=https%3A%2F%2Fexample.test%2Fdocs%2Fresearch.pdf%3Fedition%3D2'}]]);
-    expect(send).not.toHaveBeenCalled();
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.getAttribute('aria-busy')).toBe('false');
-    expect(JSON.stringify(config)).toBe(before);expect(patches).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['Win32', 'Alt+T', 'Ctrl+Alt+Shift+Arrowright'],
-    ['MacIntel', '⌥+T', '⌃+⌥+⇧+Arrowright'],
-  ] as const)('%s PDF 导航回普通页恢复紧凑主按钮与快捷键，旧 PDF 查询晚到不改写模板或创建阅读器', async (platform, shortcut, longShortcut) => {
-    vi.stubGlobal('navigator', {languages: ['en-US'], platform});
-    language.value = 'en-US';
-    config.browserDefaultTranslationFont = true;
-    queryTabs.mockResolvedValue([{id: 7, windowId: 3, url: 'https://example.test/first.pdf'}]);
-    await mount();
-    expect(document.querySelector('.translate-label')?.textContent).toBe('Open PDF reader');
-    expect(document.querySelector('[data-testid="page-font-entry"]')).toBeNull();
-    expect(config.browserDefaultTranslationFont).toBe(true);
-    expect(tabUpdated.size).toBe(1);
-
-    let resolveOld!: (tabs: PopupActiveTab[]) => void;
-    queryTabs.mockReturnValueOnce(new Promise(resolve => {resolveOld = resolve;}));
-    const latePdf = {id: 7, windowId: 3, active: true, url: 'https://example.test/late.pdf'};
-    for (const listener of tabUpdated) listener(7, {url: latePdf.url}, latePdf);
-    const article = {id: 7, windowId: 3, active: true, url: 'https://example.test/article'};
-    queryTabs.mockResolvedValue([article]);
-    for (const listener of tabUpdated) listener(7, {url: article.url}, article);
-    await settle();
-
-    const button = document.querySelector<HTMLButtonElement>('[data-testid="page-translation"]')!;
-    expect(button.querySelector('.translate-label')?.textContent).toBe(`Translate (${shortcut})`);
-    expect(button.querySelector('kbd, .translate-hotkey')).toBeNull();
-    expect(button.getAttribute('aria-label')).toBe('Translate this page');
-    expect(document.querySelector('[data-testid="section-translation"]')).not.toBeNull();
-    expect(summary().querySelector('strong')?.textContent).toBe('OpenAI');
-    expect(model()?.textContent).toBe('saved-model');
-    resolveOld([latePdf]);await settle();
-    expect(button.getAttribute('title')).toBe(`Translate this page · ${shortcut}`);
-    expect(button.querySelector('.translate-label')?.textContent).toBe(`Translate (${shortcut})`);
-    expect(document.querySelector('[data-testid="section-translation"]')).not.toBeNull();
-    expect(createTab).not.toHaveBeenCalled();
-    const articleReads = [[7, {type: 'getFullPageTranslationState'}, {frameId: 0}]];
-    expect(send.mock.calls).toEqual(articleReads);
-    const font = document.querySelector('[data-testid="page-font-entry"]')!;
-    expect(font.getAttribute('aria-pressed')).toBe('true');
-    expect(font.getAttribute('data-font-state')).toBe('browser-default');
-    expect(font.querySelector('svg')?.getAttribute('data-font-style')).toBe('sans');
-    expect(config.browserDefaultTranslationFont).toBe(true);
-
-    button.dispatchEvent(new window.Event('click'));await settle();
-    expect(createTab).not.toHaveBeenCalled();
-    expect(send.mock.calls).toEqual([...articleReads, [7, {type: 'contextMenuTranslate', action: 'fullPage'}, {frameId: 0}]]);
-    expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.querySelector('.translate-label')?.textContent).toBe(`Restore (${shortcut})`);
-    expect(button.getAttribute('title')).toBe(`Restore this page · ${shortcut}`);
-    publish(next => {next.floatingBallHotkey = 'custom';next.customFloatingBallHotkey = 'Control+Alt+Shift+ArrowRight';next.browserDefaultTranslationFont = false;});await settle();
-    expect(button.querySelector('.translate-label')?.textContent).toBe('Restore');
-    expect(button.getAttribute('title')).toBe(`Restore this page · ${longShortcut}`);
-    expect(button.querySelector('kbd, .translate-hotkey')).toBeNull();
-    expect(font.getAttribute('aria-pressed')).toBe('false');
-    expect(font.getAttribute('data-font-state')).toBe('host');
-    expect(font.querySelector('svg')?.getAttribute('data-font-style')).toBe('serif');
-    expect(send.mock.calls).toEqual([...articleReads, [7, {type: 'contextMenuTranslate', action: 'fullPage'}, {frameId: 0}]]);
-    expect(model()?.textContent).toBe('saved-model');expect(patches).not.toHaveBeenCalled();
-  });
-
   it('当前网页状态读取失败仍按全局配置显示字体，外部偏好更新不依赖页内字体查询', async () => {
     config.browserDefaultTranslationFont = true;
     send.mockRejectedValueOnce(new Error('The content frame was removed'));
@@ -306,15 +220,6 @@ describe('Popup 首页关键信息', () => {
     expect(model()?.textContent).toBe('next-model');
   });
 
-  it('本地模型服务支持配置模型，显示本地选择而非上一项 AI 模型', async () => {
-    config.service = 'localTranslation';config.model.localTranslation = LOCAL_TRANSLATION_MODEL_IDS.hunyuan;
-    await mount();
-    expect(model()?.textContent).toBe(LOCAL_TRANSLATION_MODEL_IDS.hunyuan);
-    expect(summary().textContent).not.toContain('saved-model');
-    publish(next => {next.model.localTranslation = LOCAL_TRANSLATION_MODEL_IDS.opusJaEn;});await settle();
-    expect(model()?.textContent).toBe(LOCAL_TRANSLATION_MODEL_IDS.opusJaEn);
-  });
-
   it('翻译专用模型不支持 AI 上下文时，仍展示其适用配置模型', async () => {
     config.service = 'tongyi';config.model.tongyi = 'qwen-mt-turbo';config.token.tongyi = 'test-only-key';
     await mount();expect(model()?.textContent).toBe('qwen-mt-turbo');
@@ -329,8 +234,7 @@ describe('Popup 首页关键信息', () => {
   });
 
   it('多个功能服务仍只展示网页默认服务，其余分配保留在完整提示中', async () => {
-    config.hoverTranslationService = 'deepseek';config.selectionTranslationService = 'google';config.documentService = 'google';
-    config.quickTranslationProfiles = [];
+    config.hoverTranslationService = 'deepseek';config.selectionTranslationService = 'google';
     await mount();
     expect(summary().querySelectorAll('.provider-avatar')).toHaveLength(1);
     expect(summary().querySelector('.provider-overflow')).toBeNull();

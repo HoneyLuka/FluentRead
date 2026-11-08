@@ -5,10 +5,7 @@
  * 模块边界：这里只读取传入配置并比较键盘事件，不订阅配置、不绑定事件、不选取网页文字，也不持久化用户偏好。
  */
 import {canonicalizeHotkey, matchesHotkey, parseHotkey, resolveConfiguredHotkey} from '@/src/core/hotkey';
-import {resolveAreaTranslationHotkey} from './areaTranslation';
-import {resolveParagraphCopyHotkey} from './paragraphCopy';
 import {resolveSectionTranslationHotkey} from './sectionTranslation';
-import {findEnabledQuickTranslationHotkeyConflict, inputBoxTranslationTriggerHotkey, type QuickTranslationProfile} from './quickTranslation';
 
 export const DEFAULT_CLICK_SELECTION_HOTKEY = 'Alt+Shift+S';
 
@@ -24,18 +21,9 @@ interface ClickSelectionConfig {
     customFloatingBallHotkey?: string;
     selectionTranslatorTrigger?: string;
     customSelectionTranslatorHotkey?: string;
-    selectionAreaEnabled?: boolean;
-    selectionAreaHotkey?: string;
-    customSelectionAreaHotkey?: string;
-    paragraphCopyEnabled?: boolean;
-    paragraphCopyHotkey?: string;
-    customParagraphCopyHotkey?: string;
     sectionTranslationHotkeyEnabled?: boolean;
     sectionTranslationHotkey?: string;
     customSectionTranslationHotkey?: string;
-    inputBoxTranslationTrigger?: string;
-    quickTranslationProfiles?: readonly QuickTranslationProfile[];
-    informationHighlight?: {hotkeyEnabled?: boolean; hotkey?: string};
 }
 
 /** 不接受单键或仅修饰键，避免正常输入或临时按住 Control 时进入点选模式。 */
@@ -65,15 +53,10 @@ export function findClickSelectionHotkeyConflict(config: ClickSelectionConfig, h
         {hotkey: resolveConfiguredHotkey(config.floatingBallHotkey, config.customFloatingBallHotkey), feature: '全文翻译'},
         {hotkey: config.selectionTranslatorMode === 'disabled' || config.disableSelectionTranslator === true ? ''
             : resolveConfiguredHotkey(config.selectionTranslatorTrigger, config.customSelectionTranslatorHotkey), feature: '划词翻译'},
-        {hotkey: config.selectionAreaEnabled ? resolveAreaTranslationHotkey(config.selectionAreaHotkey, config.customSelectionAreaHotkey) : '', feature: '圈选翻译'},
-        {hotkey: config.paragraphCopyEnabled ? resolveParagraphCopyHotkey(config.paragraphCopyHotkey, config.customParagraphCopyHotkey) : '', feature: '段落复制'},
         {hotkey: config.sectionTranslationHotkeyEnabled ? resolveSectionTranslationHotkey(config.sectionTranslationHotkey, config.customSectionTranslationHotkey) : '', feature: '局部翻译'},
-        {hotkey: inputBoxTranslationTriggerHotkey(config.inputBoxTranslationTrigger), feature: '输入框翻译'},
-        {hotkey: config.informationHighlight?.hotkeyEnabled === true ? config.informationHighlight.hotkey ?? '' : '', feature: '智能高亮'},
     ];
     const owner = owners.find(item => canonicalizeHotkey(item.hotkey).toLowerCase() === identity);
-    if (owner) return owner.feature;
-    return findEnabledQuickTranslationHotkeyConflict(config.quickTranslationProfiles ?? [], hotkey) ? '额外翻译方案' : '';
+    return owner ? owner.feature : '';
 }
 
 export function matchesClickSelectionShortcut(event: KeyboardEvent, config: ClickSelectionConfig): boolean {

@@ -3,57 +3,33 @@
  * 弹窗定位：自动卡片避开完整选区的纵向范围，优先放在其上方，必要时切换下方或按较大空间限高并保留滚动；仅在用户拖动或调整尺寸后固定手动位置。
  * 局部限高：整卡滚动跟随实际写入的 maxHeight，加载内容尚短时也保留后续滚动空间，不只依赖定位算法的可选限高结果。
  * 失败呈现：无结果时以简短原因、下一步提示和一个主操作展示；当前鉴权错误优先配置服务，重试按需展开，已有结果仍保留行内提示。
- * 来源提交：只允许完整位于同一局部编辑宿主的用户文本选区；右键目标与编辑宿主保持一致。翻译与词典异步结果交付前复核已克隆选区的正文、连接和适配器边界，不依赖原生高亮仍然存在；来源失效时撤销旧卡片，词书保存仍保留失联上下文回退。
+ * 来源提交：只允许完整位于同一局部编辑宿主的用户文本选区；右键目标与编辑宿主保持一致。翻译与词典异步结果交付前复核已克隆选区的正文、连接和适配器边界，不依赖原生高亮仍然存在；来源失效时撤销旧卡片。
  * 两点选取：默认关闭及文档适配器跳过快捷键冲突计算，快捷键开启单次起终点选择并放行开放 Shadow DOM 编辑区；复用原生选区与现有划词入口，完成后的首次选区读取保留同轮延迟滚动，随后恢复普通滚动收起，取消、编辑与卸载撤销首帧保护；短状态提示不捕获页面指针，未命中文字或起终点重合时说明可继续操作，配置变更和卸载释放控制器。
- * 通知布局：收藏与语音设置通知沿用安全可见视口订阅，触摸动作保留完整命中区；通知不增加独立监听或请求。
- * 极矮视口：同一卡片改为整卡滚动并收紧顶栏间距，保留输入与请求、手动几何和语音状态；Safari 键盘视口变化后仅在当前有限窗口内滚动卡片自身显露原聚焦输入，主动操作取消待处理显露；恢复尺寸后沿用原定位，不增加监听或计时器。
- * 文件职责：实现划词翻译的主要页面组件，覆盖选区捕获、触摸原生句柄稳定等待、避开原生菜单上下区域的行侧入口、可见视口与安全区定位、后台及宿主恢复来源校验、图标/小点/悬停/快捷键/仅右键菜单/直接弹出、原生菜单可信选区恢复与重复请求复用、翻译与词卡展示、免费 AI 讲解的显式启用、朗读、收藏选中的单词/表达/句子、双语分享卡片、鉴权服务配置入口、重试和关闭。
- * 主要内容：相同译文保留原文且不重复展示；Firefox 触摸入口为原生手柄保留独立侧距，以绑定来源快照的可信触摸处理缺少 click 的情况并取消拖动；Safari/Firefox 触摸入口成功开卡后保留当前快照并清空同一原生选区，异步空选区不误关卡片；组件管理可信手势、已关闭选区与选择丢失宽限、继续阅读或复制原文时自动收起、请求 token、按既有错误种类显示有限提示并仅为当前鉴权失败提供通用设置入口、行内代码保护与纯文本安全渲染、按标签页页面缩放补偿的弹窗定位、空白拖动、边角缩放、主题及可换行的多语言标题；普通译文先于完整原文，单行可横向滚动的导航与右侧固定分享、收藏、关闭及更多操作把高度留给正文，次级菜单按可见窗口覆盖显示；指针移动按帧合并并在结束时提交最后位置，已定位卡片不重复读取选区几何；富文本 UTF-16 跟读偏移一次计算并复用；默认过滤同语言选区，按配置开放中英反向入口，翻译方向始终按现有语言配置判断；统一卡片默认显示翻译并以同一导航进入学习；首次定位后保持弹窗锚点，手动尺寸下内容与播放状态变化只影响内部布局；闲置语音栏不占空间，自动卡生成与播放期间按底栏实际高度自然增高，达到视口上限后正文独立滚动；学习短回答自然收拢、长回答受高度上限约束，完整原文和译文按需对照并允许翻译继续完成；单词先展示原文与可用词卡，再补充辅助释义，以紧凑状态提示等待、未命中与网络失败；关闭或更换选区取消等待并阻止旧响应覆盖新结果；区分语音生成和播放，按实际音频时钟或浏览器词边界显示完整词高亮，并提供真实音频时间与前后 5 秒跳转。
- * 材料关联：主动收藏与阅读时捕获当前选区的稳定来源和文本位置，词书真实保存后才关联材料引用，隐私窗口不采集。
- * 词典来源：配置切换时只撤销并重查词卡，保留普通译文与学习会话，旧来源的迟到结果不能覆盖新来源。
- * 语音边界：单词朗读在仅本地模式下跳过词典外部音频，由既有后台本地语音链路处理失败与模型提示。
- * 模块边界：组件只通过公共客户端和 runtime 消息触达后台及现有设置入口，不直接持有 provider、IndexedDB 或 Offscreen 资源；纯选区算法在 core，活动 Range 通过回调交给 content/runtime 管理 modal 挂载所有权；扩展 PDF 文档页通过可选来源适配器复用同一卡片、标题和阅读上下文，来源失效时取消当前请求，词书协议独立维护；Safari 仅为可信聚焦的同一追问框、卡片和原文保留初次键盘缩高或明确旋转后的有限宿主页平移窗口，明确方向先于可见视口宽度更新时也保留该固定窗口，宽度追上不续期；极矮可滚动卡片内的可信纵向触摸另有不续期的400ms尾窗，只容许累计2px宿主页偏移，不拦截原生滚动；输入与框内编辑键结束当前窗口，外部手势、缩放、失焦与关闭撤销身份，普通滚动仍收卡；阅读依据的 DOM 锚点只属于当前选区，关闭、换区或卸载释放临时绘制和监听。
+ * 通知布局：语音设置通知沿用安全可见视口订阅，触摸动作保留完整命中区；通知不增加独立监听或请求。
+ * 极矮视口：同一卡片改为整卡滚动并收紧顶栏间距，保留输入与请求、手动几何和语音状态；恢复尺寸后沿用原定位，不增加监听或计时器。
+ * 文件职责：实现划词翻译的主要页面组件，覆盖选区捕获、触摸原生句柄稳定等待、避开原生菜单上下区域的行侧入口、可见视口与安全区定位、后台及宿主恢复来源校验、图标/小点/悬停/快捷键/仅右键菜单/直接弹出、原生菜单可信选区恢复与重复请求复用、翻译与词卡展示、朗读、鉴权服务配置入口、重试和关闭。
+ * 主要内容：相同译文保留原文且不重复展示；Firefox 触摸入口为原生手柄保留独立侧距，以绑定来源快照的可信触摸处理缺少 click 的情况并取消拖动；Safari/Firefox 触摸入口成功开卡后保留当前快照并清空同一原生选区，异步空选区不误关卡片；组件管理可信手势、已关闭选区与选择丢失宽限、请求 token、按既有错误种类显示有限提示并仅为当前鉴权失败提供通用设置入口、行内代码保护与纯文本安全渲染、按标签页页面缩放补偿的弹窗定位、空白拖动、边角缩放、主题及可换行的多语言标题；导航与右侧固定关闭按钮把高度留给正文，次级菜单按可见窗口覆盖显示；指针移动按帧合并并在结束时提交最后位置，已定位卡片不重复读取选区几何；富文本 UTF-16 跟读偏移一次计算并复用；默认过滤同语言选区，按配置开放中英反向入口，翻译方向始终按现有语言配置判断；单词先展示原文与可用词卡，再补充辅助释义，以紧凑状态提示等待、未命中与网络失败；关闭或更换选区取消等待并阻止旧响应覆盖新结果；区分语音生成和播放，按实际音频时钟或浏览器词边界显示完整词高亮，并提供真实音频时间与前后 5 秒跳转。
+ * 词典来源：配置切换时只撤销并重查词卡，保留普通译文，旧来源的迟到结果不能覆盖新来源。
+ * 模块边界：组件只通过公共客户端和 runtime 消息触达后台及现有设置入口，不直接持有 provider、IndexedDB 或 Offscreen 资源；纯选区算法在 core，活动 Range 通过回调交给 content/runtime 管理 modal 挂载所有权；扩展文档页通过可选来源适配器复用同一卡片与标题，来源失效时取消当前请求；极矮可滚动卡片内的可信纵向触摸保留原有收起规则，输入与框内编辑键结束窗口，外部手势、缩放、失焦与关闭撤销身份，普通滚动仍收卡。
  -->
 <template>
-  <div v-ui-i18n v-show="showIndicator || showTooltip || noticeMessage || copySuccess || clickSelectionState !== 'idle'" class="fr-selection-translator-root" :class="{'fr-touch-selection': touchInteraction}" :data-display-delay="selectionSettings.delay" @pointerdown.capture="dismissReadingToolsOutside" @pointerdown.stop @focusin="handleReadingInputFocus" @focusout="dismissReadingToolsOnFocusOut" @input="clearReadingKeyboardFocus" @wheel.stop="handleUiWheel">
+  <div v-ui-i18n v-show="showIndicator || showTooltip || noticeMessage || copySuccess || clickSelectionState !== 'idle'" class="fr-selection-translator-root" :class="{'fr-touch-selection': touchInteraction}" :data-display-delay="selectionSettings.delay" @pointerdown.stop @wheel.stop="handleUiWheel">
     <div v-if="clickSelectionState !== 'idle'" class="fr-click-selection-hint" :data-click-selection-state="clickSelectionState" :class="{'fr-click-selection-hint--dark': isDarkTheme}" role="status" aria-live="polite">{{ clickSelectionNotice || (clickSelectionState === 'start' ? '点击文字起点' : '点击文字终点') }} · Esc 取消</div>
     <button v-if="showIndicator && !showTooltip && triggerMode !== 'contextMenu'" class="fr-selection-indicator" :class="`fr-selection-indicator--${triggerMode}`" :style="indicatorStyle" type="button" aria-label="打开划词翻译" title="打开划词翻译" @pointerdown.prevent.stop="beginIndicatorTouch" @pointermove="trackIndicatorTouch" @pointerup="finishIndicatorTouch" @pointercancel="cancelIndicatorTouch" @contextmenu="cancelIndicatorTouch" @pointerenter="scheduleIndicatorHover" @pointerleave="leaveIndicator" @click="openTooltipFromIndicator">
       <span class="fr-selection-indicator-glyph" aria-hidden="true">译</span>
     </button>
 
-    <section v-if="showTooltip" ref="tooltip-ref" class="fr-translation-tooltip" :class="{ 'fr-dark-theme': isDarkTheme, 'fr-reading-tooltip': readingMode, 'fr-popup-manipulating': popupManipulating, 'fr-short-viewport': isShortViewport() || Number.parseFloat(tooltipStyle.maxHeight) < 140 }" :data-placement="popupPlacement" :style="[tooltipScaleStyle, tooltipStyle]" role="dialog" aria-label="划词翻译结果" data-presentation="card" @pointerdown.stop="beginPopupGesture" @pointermove="movePopupGesture" @pointerup="stopPopupGesture" @pointercancel="stopPopupGesture" @lostpointercapture="stopPopupGesture">
+    <section v-if="showTooltip" ref="tooltip-ref" class="fr-translation-tooltip" :class="{ 'fr-dark-theme': isDarkTheme, 'fr-popup-manipulating': popupManipulating, 'fr-short-viewport': isShortViewport() || Number.parseFloat(tooltipStyle.maxHeight) < 140 }" :data-placement="popupPlacement" :style="[tooltipScaleStyle, tooltipStyle]" role="dialog" aria-label="划词翻译结果" data-presentation="card" @pointerdown.stop="beginPopupGesture" @pointermove="movePopupGesture" @pointerup="stopPopupGesture" @pointercancel="stopPopupGesture" @lostpointercapture="stopPopupGesture">
       <div class="fr-study-navigation">
         <img class="fr-tooltip-brand-icon" :src="selectionTranslatorIconUrl" alt="" aria-hidden="true" draggable="false" />
         <div class="fr-study-toolbar" role="group" aria-label="划词卡片内容" :title="isWordSelection ? '词典释义 · 按词性分类' : '先看译文，按需深入'" @focusin="handleStudyToolbarFocus">
-          <button type="button" :aria-pressed="!readingMode" @click="openTooltip()">翻译</button>
-          <template v-if="readingEnabled">
-            <button v-for="action in readingActions" :key="action.id" type="button" :title="action.description" :aria-pressed="readingMode && !readingHistoryOnly && readingInitialAction === action.id" @click="openReading(action.id)">{{ action.id === 'grammar' ? '词性与句法' : action.label }}</button>
-            <button v-if="!isPrivateContext" type="button" :aria-pressed="readingMode && readingHistoryOnly" @click="openReadingHistory">记录</button>
-          </template>
-          <button v-else-if="canEnableFreeReading || freeReadingPending" type="button" :disabled="freeReadingPending" title="B站免费基础读懂/用法，无需 API Key；完整语法、练习和追问可切换 AI 服务" @click="enableFreeReading">{{ freeReadingPending ? '正在启用…' : '免费 AI 讲解' }}</button>
-          <button v-else type="button" @click="openSelectionSettings">配置 AI 讲解</button>
+          <button type="button" :aria-pressed="true" @click="openTooltip()">翻译</button>
         </div>
-        <div ref="reading-tools-target" v-show="readingMode && !readingHistoryOnly" class="fr-study-reading-tools" />
         <div class="fr-tooltip-actions">
-          <button v-if="!readingMode && shareCardAvailable && translationResult && !isLoading" class="fr-action-btn fr-share-card-entry" type="button" :title="t('shareCard.create')" :aria-label="t('shareCard.create')" @click="openShareCard({original: selectedText, translation: translationResult})"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M21 3l-9 9M10 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /></svg></button>
-          <button
-            v-if="!readingMode && config.vocabularyBookEnabled && selectedText && !isPrivateContext"
-            class="fr-action-btn fr-vocabulary-btn"
-            :class="{ 'fr-saved': isVocabularySaved }"
-            type="button"
-            :disabled="vocabularyBusy || !vocabularyAnswer"
-            :title="vocabularyButtonTitle"
-            :aria-label="vocabularyButtonTitle"
-            :aria-pressed="isVocabularySaved"
-            @click="saveVocabularyEntry"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.7 2.86 5.8 6.4.93-4.63 4.51 1.09 6.38L12 17.3l-5.72 3.02 1.09-6.38-4.63-4.51 6.4-.93L12 2.7Z" /></svg></button>
           <button class="fr-close-btn" type="button" title="关闭" aria-label="关闭翻译结果" @click="closeTooltip"><UiIcon name="close" :size="16" /></button>
         </div>
       </div>
-      <div v-if="readingSelection" v-show="readingMode" class="fr-tooltip-content fr-reading-content">
-        <ReadingPanel ref="reading-panel-ref" :external-navigation="true" :tools-target="readingToolsTarget" @view-change="syncReadingView" :selection="readingSelection" :locate-evidence="locateReadingEvidence" :clear-evidence="clearReadingEvidence" :source-revision="readingSourceRevision" :check-evidence="checkReadingEvidence" :source-translation="{source: selectedText, text: translationResult, pending: isLoading, error}" :preferences="readingPreferences" :service="readingService" :active="readingMode" :initial-action="readingInitialAction" :history-only="readingHistoryOnly" :source-language="effectiveSourceLanguage" :target-language="effectiveTargetLanguage" :playing-source-text="isPlaying && currentAudioKind === 'source' ? currentAudioText : ''" :model-revision="readingModelRevision" :vocabulary-enabled="config.vocabularyBookEnabled" :private-context="isPrivateContext" :animations="config.animations" @play-source="toggleAudio($event, 'source')" @source-change="stopAudio()" @resize="schedulePositionUpdate" />
-      </div>
-      <div v-show="!readingMode" class="fr-tooltip-content" aria-live="polite">
+      <div class="fr-tooltip-content" aria-live="polite">
         <div v-if="isLoading && !translationResult && !wordCard && !wordCardError && !isWordSelection" class="fr-loading-state"><span :class="['fr-loading-spinner', { 'fr-static': !config.animations }]" aria-hidden="true" /><span>正在查询…</span></div>
         <div v-else-if="error && !translationResult && !wordCard" class="fr-error-state">
           <div role="alert"><h3>{{ error }}</h3><p data-i18n-ignore>{{ t(isAuthenticationErrorCurrent(authenticationError) ? 'feedback.serviceHint' : 'feedback.retryHint') }}</p></div>
@@ -185,7 +161,7 @@
       <div v-for="edge in popupResizeEdges" :key="edge" class="fr-popup-resize-handle" :class="`fr-popup-resize-${edge}`" :data-resize-edge="edge" aria-hidden="true" />
     </section>
 
-    <div v-if="noticeMessage" class="fr-action-toast" :class="{ 'fr-dark-theme': isDarkTheme }" :style="noticeViewportStyle" role="status"><span>{{ noticeMessage }}</span><button v-if="noticeAction === 'open-vocabulary'" type="button" @click="openNoticeSettings">查看</button><button v-else-if="noticeAction === 'open-local-tts'" type="button" @click="openNoticeSettings">设置</button></div>
+    <div v-if="noticeMessage" class="fr-action-toast" :class="{ 'fr-dark-theme': isDarkTheme }" :style="noticeViewportStyle" role="status"><span>{{ noticeMessage }}</span></div>
     <div v-else-if="copySuccess" class="fr-copy-success-toast" :class="{ 'fr-dark-theme': isDarkTheme }" role="status">{{ copySuccessMessage }}</div>
   </div>
 </template>
@@ -198,10 +174,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTem
 import browser from 'webextension-polyfill';
 import {addRuntimeMessageListener} from '@/src/platform/browser/runtimeMessages';
 import {getSafeVisualViewportRect, observeVisualViewport} from '@/src/platform/dom/visualViewport';
-import {openShareCard, isShareCardMounted} from '@/src/features/share-card/public';
 import {createClickSelectionController} from '@/src/features/selection-translation/content/clickSelection';
 import {findClickSelectionHotkeyConflict, isClickSelectionAvailable, matchesClickSelectionShortcut} from '@/src/core/config/clickSelection';
-import { config, configReady, requestConfigPatch, subscribeConfig } from '@/src/services/config/store';
+import { config, subscribeConfig } from '@/src/services/config/store';
 import { translateText, translateTextBatch } from '@/src/services/translation/client';
 import {serializeTranslationError} from '@/src/services/translation/errors';
 import {detectlang, shouldSkipChineseSelection, shouldSkipTranslationForTarget} from '@/src/core/language/detect';
@@ -209,20 +184,13 @@ import { matchesConfiguredHotkey, matchesModifierOnlyHotkey, resolveConfiguredHo
 import {describePartOfSpeech} from '@/src/core/language/partOfSpeech';
 import type { WordCardData, WordPronunciation } from '@/src/features/selection-translation/services/wordDictionary';
 import { isSingleEnglishWord, normalizeEnglishWord } from '@/src/features/selection-translation/services/wordNormalization';
-import { calculateSelectionPopupPosition, chooseSelectionRect, getSelectionPopupAnchor, getEditableSelectionRoot, getSelectionPresentationDelayRemaining, readSelectionParts, translateSelectionParts, normalizeSpeechLanguage, reconcileSelectionPresentation, resolveSelectionDictionaryFallback, resolveSelectionVocabularyAnswer, selectionReverseTarget, SelectionRequestTokenGate, shouldIgnoreSelection, summarizeSelectionContext, type SelectionAnswerCandidate, type SelectionContentRequest, type SelectionRect, type SelectionTextPart } from '@/src/features/selection-translation/core';
+import { calculateSelectionPopupPosition, chooseSelectionRect, getSelectionPopupAnchor, getEditableSelectionRoot, getSelectionPresentationDelayRemaining, readSelectionParts, translateSelectionParts, normalizeSpeechLanguage, reconcileSelectionPresentation, resolveSelectionDictionaryFallback, selectionReverseTarget, shouldIgnoreSelection, type SelectionAnswerCandidate, type SelectionContentRequest, type SelectionRect, type SelectionTextPart } from '@/src/features/selection-translation/core';
 import {
   createSelectionTtsClientRequestId,
 } from '@/src/features/selection-translation/protocol';
 import { createSelectionTtsContentController } from '@/src/features/selection-translation/content/selectionTtsContentController';
 import { setSelectionContextMenuHandler } from '@/src/features/selection-translation/content/contextMenuBridge';
 import {normalizeSelectionPageZoom, SELECTION_PAGE_ZOOM_CHANGED, SELECTION_PAGE_ZOOM_REQUEST} from '@/src/features/selection-translation/pageZoom';
-import { VOCABULARY_BOOK_CHANGED_MESSAGE, VOCABULARY_BOOK_MESSAGE, type VocabularyBookResponse } from '@/src/features/vocabulary/protocol';
-import {ReadingPanel} from '@/src/features/reading-assistant/ui/panel/public';
-import {captureReadingSelection, createReadingEvidenceAnchor, type ReadingEvidenceAnchor, type ReadingSelection} from '@/src/features/reading-assistant/public';
-import {captureMaterialSelection, beginMaterialCapture, completeMaterialCapture} from '@/src/features/vocabulary/material/public';
-import {projectMaterialOriginalText} from '@/src/features/vocabulary/material/text/public';
-import {HARNESS_ACTIONS, getHarnessModelCacheKey, isReadingActionSupported, isReadingService, normalizeHarnessPreferences, type HarnessActionId} from '@/src/core/config/harness';
-import {services} from '@/src/core/config/catalog';
 import {useUiI18n} from '@/src/ui/i18n';
 import UiIcon from '@/src/ui/components/UiIcon.vue';
 
@@ -235,13 +203,10 @@ const props = defineProps<{
     extractText?: (range: Range, nativeText: string) => string;
     normalizeText?: (text: string) => string;
     context?: (range: Range, text: string, limit: number) => {text: string; title: string; sourceUrl: string};
-    captureReading?: (range: Range, text: string, limit: number) => ReadingSelection;
-    captureMaterial?: (range: Range, quote: string) => ReturnType<typeof captureMaterialSelection>;
     subscribeInvalidation?: (listener: () => void) => () => void;
   };
 }>();
 const {t, translateLegacy} = useUiI18n();
-const shareCardAvailable = isShareCardMounted();
 
 type SelectionTrigger = 'direct' | 'icon' | 'dot' | 'shortcut' | 'contextMenu';
 type AudioKind = 'source' | 'translation' | 'word';
@@ -251,8 +216,6 @@ interface ContextMenuSelection { snapshot: SelectionSnapshot; rangeText: string;
 interface SelectionAuthenticationError { request: SelectionContentRequest; requestId: number; service?: string; }
 
 const tooltipRef = useTemplateRef<HTMLElement>('tooltip-ref');
-const readingPanelRef = useTemplateRef<InstanceType<typeof ReadingPanel>>('reading-panel-ref');
-const readingToolsTarget = useTemplateRef<HTMLElement>('reading-tools-target');
 const selectionTranslatorIconUrl = browser.runtime.getURL('/icon/128.png');
 const selectedText = ref('');
 const manuallyRequestedSelection = ref(false);
@@ -267,39 +230,7 @@ const authenticationError = shallowRef<SelectionAuthenticationError | null>(null
 const openingAuthenticationSettings = shallowRef<{authentication: SelectionAuthenticationError} | null>(null);
 const showIndicator = ref(false);
 const showTooltip = ref(false);
-const readingMode = ref(false);
-const readingInitialAction = ref<HarnessActionId>();
-const readingHistoryOnly = ref(false);
-const readingSelection = ref<ReadingSelection | null>(null);
-const freeReadingPending = ref(false);
 let componentDisposed = false;
-let freeReadingEnable: {selection: SelectionSnapshot; text: string; previousPreferences: string; nextPreferences: string; cancelled: boolean} | undefined;
-function cancelFreeReadingEnable(): void { freeReadingEnable = undefined; freeReadingPending.value = false; }
-function invalidateFreeReadingEnable(): void {
-  // 保存不能取消，但失去选区所有权立即阻止迟到打开；确认前仍锁住乐观启用的讲解入口。
-  if (freeReadingEnable) freeReadingEnable.cancelled = true;
-}
-let readingEvidenceAnchor: ReadingEvidenceAnchor | undefined;
-const readingSourceRevision = ref(0);
-let readingEvidenceScrollFrame: number | undefined;
-function clearReadingEvidenceScroll(): void {
-  if (readingEvidenceScrollFrame !== undefined) window.cancelAnimationFrame(readingEvidenceScrollFrame);
-  readingEvidenceScrollFrame = undefined;
-}
-const locateReadingEvidence: ReadingEvidenceAnchor['locate'] = citation => {
-  clearReadingEvidenceScroll();
-  // instant scrollIntoView 的 scroll 事件在下一次绘制前派发；仅保留本次定位的两帧。
-  readingEvidenceScrollFrame = window.requestAnimationFrame(() => {
-    readingEvidenceScrollFrame = window.requestAnimationFrame(() => { readingEvidenceScrollFrame = undefined; });
-  });
-  const result = readingEvidenceAnchor?.locate(citation) ?? 'unavailable';
-  if (result !== 'located') clearReadingEvidenceScroll();
-  return result;
-};
-const clearReadingEvidence = () => { clearReadingEvidenceScroll(); readingEvidenceAnchor?.suspend(); };
-const checkReadingEvidence = () => readingEvidenceAnchor?.check() ?? 'unavailable';
-function disposeReadingEvidence(): void { clearReadingEvidenceScroll(); readingEvidenceAnchor?.dispose(); readingEvidenceAnchor = undefined; }
-watch(readingSelection, selection => { if (!selection) disposeReadingEvidence(); }, {flush: 'sync'});
 const copySuccess = ref(false);
 const copiedTextKind = ref<CopyKind | null>(null);
 const isDarkTheme = ref(false);
@@ -340,16 +271,13 @@ const tooltipScaleStyle = computed(() => {
   };
 });
 const snapshot = ref<SelectionSnapshot | null>(null);
-watch(snapshot, current => {
-  if (readingKeyboardFocus && current !== readingKeyboardFocus.selection) clearReadingKeyboardFocus();
-  if (import.meta.env.BROWSER === 'safari' && readingCardPan && current !== readingCardPan.focus.selection) clearReadingKeyboardFocus();
-  if (freeReadingEnable && current !== freeReadingEnable.selection) invalidateFreeReadingEnable();
-}, {flush: 'sync'});
 const isPlaying = ref(false);
 const isPreparingAudio = ref(false);
 const audioProgress = ref<SpeechProgress | null>(null);
 const audioPosition = ref<SpeechPlaybackPosition | null>(null);
 const seekControls = [{offset:-5, label:'后退 5 秒'}, {offset:5, label:'前进 5 秒'}] as const;
+/** hover 触发模式下指示器悬停后打开卡片的固定延迟。 */
+const INDICATOR_HOVER_DELAY_MS = 600;
 const audioTextOffset = ref(0);
 // 一次遍历计算 UTF-16 偏移；音频每帧更新只复用这些片段，不重新切片累计。
 function textPartsWithOffsets(parts: readonly SelectionTextPart[] | undefined) {
@@ -377,11 +305,8 @@ const isWordCardSupportLoading = ref(false);
 const wordCardError = ref('');
 const showChineseSupport = ref(true);
 const noticeMessage = ref('');
-const noticeAction = ref<'open-vocabulary' | 'open-local-tts' | null>(null);
-const isVocabularySaved = ref(false);
-const vocabularyBusy = ref(false);
 
-let readingHoverTimer: number | null = null;
+let indicatorHoverTimer: number | null = null;
 let entryDismissTimer: number | null = null;
 let selectionFrame: number | null = null;
 let clickSelectionFirstReadPending = false;
@@ -400,8 +325,6 @@ let translationRequestId = 0;
 let wordLookupRequestId = 0;
 let wordLookupAbortController: AbortController | null = null;
 let copyTimer: number | null = null;
-const vocabularyLookupGate = new SelectionRequestTokenGate();
-const vocabularySaveGate = new SelectionRequestTokenGate();
 let contentRequestGeneration = 0;
 let noticeTimer: number | null = null;
 let lastTrustedSelectionInteractionAt = 0;
@@ -412,13 +335,6 @@ const TOUCH_SELECTION_SETTLE_MS = 250;
 let touchSelectionActiveUntil = 0;
 let touchSelectionTimer: number | null = null;
 let unsubscribeVisualViewport: (() => void) | null = null;
-let readingFocusGestureAt: number | undefined;
-let readingKeyboardTimer: number | undefined;
-let readingKeyboardFocus: {input: HTMLElement; card: HTMLElement; selection: SelectionSnapshot;
-  expiresAt: number; width: number; height: number; scale: number; landscape: boolean; rotating: boolean;
-  revealViewport: typeof viewportSize.value; reveal?: boolean} | undefined;
-let readingCardPan: {focus: NonNullable<typeof readingKeyboardFocus>; pointerId: number | undefined;
-  x: number; y: number; local: boolean; expiresAt: number; width: number; scale: number; scrollY: number; travel: number} | undefined;
 
 let audio: HTMLAudioElement | null = null;
 let audioUrl = '';
@@ -480,33 +396,6 @@ watch(() => {
   if (props.selectionAdapter || !isClickSelectionAvailable(config)) return '';
   return `${config.selectionClickSelectHotkey}:${findClickSelectionHotkeyConflict(config, config.selectionClickSelectHotkey)}`;
 }, () => clickSelection.cancel());
-const readingPreferences = computed(() => {
-  selectionConfigVersion.value;
-  return normalizeHarnessPreferences(config.harness, config.customOpenAIProviders);
-});
-// 配置通知也包含外观等无关变更，只有模型输入变化才使阅读结果失效。
-const readingModelRevision = ref(0);
-watch(() => {
-  selectionConfigVersion.value;
-  return getHarnessModelCacheKey(config);
-}, () => { readingModelRevision.value += 1; });
-const readingEnabled = computed(() => selectionSettings.value.mode !== 'disabled' && readingPreferences.value.enabled && !freeReadingPending.value);
-const canEnableFreeReading = computed(() => {
-  selectionConfigVersion.value;
-  // 新免费入口依赖扩展流式端口；不改 userscript 已有阅读配置。显式 AI 偏好不能被替换，默认B站可启用同一服务。
-  return import.meta.env.BROWSER !== 'userscript' && selectionSettings.value.mode !== 'disabled' && !readingPreferences.value.enabled
-    && !config.harness.service.trim() && !config.harness.model.trim()
-    && (config.service === services.bilibili || !isReadingService(config.service, config.customOpenAIProviders));
-});
-const readingService = computed(() => {
-  selectionConfigVersion.value;
-  return readingPreferences.value.service || config.service;
-});
-const readingActions = computed(() => HARNESS_ACTIONS.filter(action => readingPreferences.value.actions.includes(action.id) && isReadingActionSupported(readingService.value, action.id)));
-// 仅临时选择当前服务可用的动作；切换服务不会改写用户保存的动作和默认值。
-const readingDefaultAction = computed(() => readingActions.value.find(action => action.id === readingPreferences.value.defaultAction)?.id
-  || readingActions.value.find(action => action.id === 'meaning')?.id || readingActions.value[0]?.id || 'meaning');
-
 watch(() => snapshot.value?.range ?? null, (range) => {
   props.onSelectionRangeChange?.(range);
 }, { flush: 'post' });
@@ -561,19 +450,11 @@ const effectiveSourceLanguage = computed(() => {
 const isWordSelection = computed(() => Boolean(selectedWord.value) && effectiveTargetLanguage.value !== 'en'
   && (effectiveSourceLanguage.value === 'auto' || /^en(?:-|$)/i.test(effectiveSourceLanguage.value)));
 const isWordCardVisible = computed(() => isWordSelection.value && wordCard.value !== null);
-const isPrivateContext = browser.extension.inIncognitoContext === true;
 const currentContentRequest = computed<SelectionContentRequest | null>(() => {
   const request = activeContentRequest.value;
   if (!request || snapshot.value?.text !== request.text || selectedText.value !== request.text
     || effectiveTargetLanguage.value !== request.targetLanguage) return null;
   return request;
-});
-const vocabularyAnswer = computed(() => resolveSelectionVocabularyAnswer(currentContentRequest.value, translationAnswer.value, dictionaryAnswer.value));
-const vocabularyButtonTitle = computed(() => {
-  if (vocabularyBusy.value) return t('reading.savingSource');
-  if (!vocabularyAnswer.value) return '译文准备完成后可收藏';
-  if (isVocabularySaved.value) return '已收藏；再次点击更新当前阅读上下文';
-  return t('reading.saveSourceTitle');
 });
 const copySuccessMessage = computed(() => copiedTextKind.value === 'source' ? '已复制原文' : '已复制译文');
 
@@ -690,7 +571,7 @@ function cancelSelectionLoss(): void {
 }
 
 function cancelSelectionPresentation(): void {
-  cancelReadingHover();
+  cancelIndicatorHover();
   cancelEntryDismiss();
   if (selectionPresentationTimer !== null) {
     window.clearTimeout(selectionPresentationTimer);
@@ -708,7 +589,6 @@ function clearCopyFeedback(): void {
 }
 
 function resetSelectionContentState(clearSelectionText = false): void {
-  clearReadingKeyboardFocus();
   translationRequestId += 1;
   translationAbortController?.abort();
   translationAbortController = null;
@@ -730,10 +610,6 @@ function resetSelectionContentState(clearSelectionText = false): void {
   wordCardError.value = '';
   showChineseSupport.value = true;
   clearCopyFeedback();
-  vocabularyLookupGate.invalidate();
-  vocabularySaveGate.invalidate();
-  isVocabularySaved.value = false;
-  vocabularyBusy.value = false;
   if (clearSelectionText) selectedText.value = '';
   stopAudio();
 }
@@ -809,7 +685,7 @@ function scheduleSelectionLoss(): void {
   }, SELECTION_LOSS_GRACE_MS);
 }
 
-function applySelection(next: SelectionSnapshot | null, shortcutTriggered = false, readingTriggered = false, forced = false): void {
+function applySelection(next: SelectionSnapshot | null, shortcutTriggered = false, forced = false): void {
   if (!next) {
     if (!isSelecting) scheduleSelectionLoss();
     return;
@@ -822,8 +698,7 @@ function applySelection(next: SelectionSnapshot | null, shortcutTriggered = fals
     && !(selectionSettings.value.bidirectional && selectionReverseTarget(next.text, config.to, config.from))) { hideAll(); return; }
   if (isSameSelection(snapshot.value, next)) {
     if (forced) manuallyRequestedSelection.value = true;
-    if (readingTriggered) openReading();
-    else if (forced) openTooltip(true);
+    if (forced) openTooltip(true);
     else if (shortcutTriggered) scheduleSelectionPresentation('tooltip');
     return;
   }
@@ -833,8 +708,6 @@ function applySelection(next: SelectionSnapshot | null, shortcutTriggered = fals
   touchOpenedSelection = null;
   resetSelectionContentState();
   manuallyRequestedSelection.value = forced;
-  readingMode.value = false;
-  readingSelection.value = null;
   resetPopupGeometry();
   snapshot.value = next;
   selectedText.value = next.text;
@@ -842,7 +715,6 @@ function applySelection(next: SelectionSnapshot | null, shortcutTriggered = fals
   showIndicator.value = false;
   showTooltip.value = false;
   updatePosition(false);
-  if (readingTriggered) { openReading(); return; }
   if (forced) { openTooltip(true); return; }
   if (waitingForManualTrigger) return;
   scheduleSelectionPresentation(shortcutTriggered || triggerMode.value === 'direct' ? 'tooltip' : 'indicator');
@@ -908,20 +780,12 @@ function applyManualPopupGeometry(measured?: Pick<DOMRect, 'width'>): void {
   };
 }
 
-// 自动卡保留自然高度，为生成/播放底栏留出真实空间；手动尺寸仍由用户控制。
-watch([readingMode, showTooltip], () => {
-  if (readingMode.value || !showTooltip.value) openingAuthenticationSettings.value = null;
-}, {flush: 'sync'});
+// 自动卡保留自然高度；关闭卡片时清掉打开设置的动作状态。
+watch(showTooltip, visible => { if (!visible) openingAuthenticationSettings.value = null; }, {flush: 'sync'});
 
 function beginPopupGesture(event: PointerEvent): void {
   const element = tooltipRef.value;
   const target = event.target;
-  // document capture 先保存原焦点身份；只有实际卡片本地收到同一次按下才确认，不凭 Shadow host 猜目标。
-  if (import.meta.env.BROWSER === 'safari' && readingCardPan) {
-    if (event.isTrusted && event.pointerId === readingCardPan.pointerId && event.currentTarget === readingCardPan.focus.card
-      && target instanceof Node && readingCardPan.focus.card.contains(target)) readingCardPan.local = true;
-    else clearReadingKeyboardFocus();
-  }
   if (isShortViewport() || !event.isTrusted || !event.isPrimary || event.button !== 0 || !element || !(target instanceof HTMLElement)) return;
   if (target.closest('button, summary, a, input, textarea, select, [contenteditable]')) return;
   const edge = target.dataset.resizeEdge ?? '';
@@ -1057,10 +921,6 @@ function schedulePositionUpdate(refreshSelection = true, refreshAnchor = false):
     pendingPositionRefreshSelection = true;
     pendingPopupAnchorRefresh = false;
     updatePosition(shouldRefreshSelection, shouldRefreshAnchor);
-    if (import.meta.env.BROWSER === 'safari' && readingKeyboardFocus?.reveal) {
-      const focus = readingKeyboardFocus;
-      void nextTick(() => revealReadingInput(focus, revision));
-    }
   });
 }
 
@@ -1081,7 +941,6 @@ function applyPageZoom(value: unknown): void {
   const nextZoom = normalizeSelectionPageZoom(value);
   const previousZoom = pageZoom.value;
   if (nextZoom === previousZoom) return;
-  if (import.meta.env.BROWSER === 'safari' && readingKeyboardFocus) readingKeyboardFocus.reveal = false;
   stopPopupGesture();
   // 手动位置和尺寸以视口 CSS 像素保存；缩放后换算，才能保持屏幕上的实际位置和大小。
   const ratio = previousZoom / nextZoom;
@@ -1113,18 +972,9 @@ function handlePageZoomChanged(message: unknown): undefined {
 }
 
 function handleViewportResize(): void {
-  if (import.meta.env.BROWSER === 'safari') readingKeyboardViewport();
-  // 父卡下一帧会夹边移动；先收起菜单，避免沿用移动前的展开方向。
-  readingPanelRef.value?.closeTools();
   // 视口宽度会改变自动卡片的真实宽度，不能继续用按下时的旧矩形夹边。
   stopPopupGesture();
   viewportSize.value = getSafeVisualViewportRect();
-  if (import.meta.env.BROWSER === 'safari' && readingKeyboardFocus) {
-    const focus = readingKeyboardFocus, previous = focus.revealViewport;
-    focus.revealViewport = viewportSize.value;
-    if (isShortViewport() && Date.now() < focus.expiresAt
-      && (['width', 'height', 'top', 'left'] as const).some(key => previous[key] !== viewportSize.value[key])) focus.reveal = true;
-  }
   schedulePositionUpdate(true, true);
   void requestPageZoom();
 }
@@ -1137,7 +987,6 @@ function openTooltip(forced = false): void {
   const wasVisible = showTooltip.value;
   showIndicator.value = true;
   showTooltip.value = true;
-  readingMode.value = false;
   if (!wasVisible) tooltipStyle.value = {visibility: 'hidden'};
   if (!wasVisible || error.value || !activeContentRequest.value || (!translationResult.value && !isLoading.value && !isWordCardVisible.value)) void requestSelectionContent(snapshot.value.text);
   schedulePositionUpdate();
@@ -1187,7 +1036,7 @@ function finishIndicatorTouch(event: PointerEvent): void {
 }
 
 function leaveIndicator(): void {
-  cancelReadingHover();
+  cancelIndicatorHover();
   cancelIndicatorTouch();
 }
 
@@ -1217,36 +1066,25 @@ function openTooltipFromIndicator(event?: MouseEvent): void {
   }
 }
 
-function cancelReadingHover(): void {
-  if (readingHoverTimer !== null) window.clearTimeout(readingHoverTimer);
-  readingHoverTimer = null;
+function cancelIndicatorHover(): void {
+  if (indicatorHoverTimer !== null) window.clearTimeout(indicatorHoverTimer);
+  indicatorHoverTimer = null;
 }
 
 function scheduleIndicatorHover(event: PointerEvent): void {
   cancelEntryDismiss();
-  cancelReadingHover();
+  cancelIndicatorHover();
   if (!event.isTrusted || event.pointerType !== 'mouse' || selectionSettings.value.trigger !== 'hover' || !snapshot.value) return;
   const expected = snapshot.value;
-  readingHoverTimer = window.setTimeout(() => {
-    readingHoverTimer = null;
+  indicatorHoverTimer = window.setTimeout(() => {
+    indicatorHoverTimer = null;
     if (showIndicator.value && !showTooltip.value && isSameSelection(snapshot.value, expected)) openTooltip();
-  }, readingPreferences.value.hoverDelay);
-}
-
-async function openSelectionSettings(): Promise<void> {
-  const selection = snapshot.value, requestId = translationRequestId;
-  const isCurrent = () => !componentDisposed && showTooltip.value && snapshot.value === selection && translationRequestId === requestId;
-  if (!isCurrent()) return;
-  try {
-    const response = await browser.runtime.sendMessage({type: 'openOptionsPage', section: 'settings-selection'});
-    if (response && typeof response === 'object' && 'success' in response && response.success === false && isCurrent()) showNotice('请从扩展设置进入划词翻译');
-  }
-  catch { if (isCurrent()) showNotice('请从扩展设置进入划词翻译'); }
+  }, INDICATOR_HOVER_DELAY_MS);
 }
 
 function isAuthenticationErrorCurrent(authentication: SelectionAuthenticationError | null): boolean {
   return Boolean(authentication && authenticationError.value === authentication
-    && authentication.requestId === translationRequestId && error.value && showTooltip.value && !readingMode.value
+    && authentication.requestId === translationRequestId && error.value && showTooltip.value
     && isContentRequestCurrent(authentication.request)
     && (authentication.service === undefined || authentication.service === (config.selectionTranslationService || config.service)));
 }
@@ -1265,83 +1103,6 @@ async function openAuthenticationSettings(): Promise<void> {
   } finally {
     if (openingAuthenticationSettings.value === action) openingAuthenticationSettings.value = null;
   }
-}
-
-async function enableFreeReading(): Promise<void> {
-  if (componentDisposed || freeReadingPending.value || !canEnableFreeReading.value || !snapshot.value || !showTooltip.value) return;
-  const operation = {selection: snapshot.value, text: snapshot.value.text, previousPreferences: '', nextPreferences: '', cancelled: false};
-  freeReadingEnable = operation;
-  freeReadingPending.value = true;
-  const isCurrent = () => !componentDisposed && !operation.cancelled && freeReadingEnable === operation
-    && snapshot.value === operation.selection && snapshot.value.text === operation.text
-    && selectedText.value === operation.text && showTooltip.value;
-  try {
-    // 初次水合可能带回用户已有的 AI 选择；读取完成后再确认资格，不能用默认草稿覆盖它。
-    await configReady;
-    if (!isCurrent() || !canEnableFreeReading.value) return;
-    const preferences = normalizeHarnessPreferences({...config.harness, enabled: true, service: services.bilibili, model: ''}, config.customOpenAIProviders);
-    operation.previousPreferences = JSON.stringify(readingPreferences.value);
-    operation.nextPreferences = JSON.stringify(preferences);
-    await requestConfigPatch({harness: preferences}, browser.runtime.sendMessage.bind(browser.runtime));
-    await nextTick();
-    if (!isCurrent() || JSON.stringify(readingPreferences.value) !== operation.nextPreferences) return;
-    // 乐观配置期间不能触发讲解；确认成功且选区仍归本次操作所有才打开用户默认学习动作。
-    cancelFreeReadingEnable();
-    openReading(readingDefaultAction.value);
-  } catch {
-    if (isCurrent()) showNotice('启用免费 AI 讲解失败，请重试或从设置配置');
-  } finally {
-    if (freeReadingEnable === operation) cancelFreeReadingEnable();
-  }
-}
-
-function syncReadingView(view: {action: HarnessActionId; history: boolean}): void {
-  readingInitialAction.value = view.action;
-  readingHistoryOnly.value = view.history;
-}
-
-function openReading(action: HarnessActionId = readingDefaultAction.value): void {
-  if (!readingActions.value.some(item => item.id === action)) return;
-  readingHistoryOnly.value = false;
-  readingInitialAction.value = action;
-  openReadingCard();
-}
-
-function openReadingHistory(): void {
-  readingHistoryOnly.value = true;
-  openReadingCard();
-}
-
-/** 材料定位是附加信息；宿主 DOM 或失效选区的读取失败不能中断阅读与原有收藏。 */
-function captureMaterialSafely(range: Range, quote: string): ReturnType<typeof captureMaterialSelection> {
-  if (isPrivateContext) return;
-  try { return props.selectionAdapter ? props.selectionAdapter.captureMaterial?.(range, quote) : captureMaterialSelection(range, quote); } catch { return; }
-}
-
-function openReadingCard(): void {
-  if (!snapshot.value || !readingEnabled.value) return;
-  if (shouldSkipChineseSelection(snapshot.value.text, effectiveTargetLanguage.value)) { hideAll(); return; }
-  cancelSelectionPresentation();
-  cancelSelectionLoss();
-  if (!activeContentRequest.value || error.value || (!translationResult.value && !isLoading.value)) {
-    void requestTranslation(beginSelectionContentRequest(snapshot.value.text));
-  }
-  stopAudio();
-  if (!readingSelection.value) {
-    readingSelection.value = (props.selectionAdapter?.captureReading ?? captureReadingSelection)(snapshot.value.range, snapshot.value.text,
-      readingPreferences.value.contextMode === 'paragraph' ? readingPreferences.value.maxContextChars : 0);
-    if (!isPrivateContext) readingSelection.value.material = captureMaterialSafely(snapshot.value.range, readingSelection.value.sentence || snapshot.value.text);
-    disposeReadingEvidence();
-    readingEvidenceAnchor = createReadingEvidenceAnchor(snapshot.value.range, readingSelection.value, {
-      onInvalidate: () => { readingSourceRevision.value += 1; clearReadingEvidence(); },
-    });
-  }
-  const wasVisible = showTooltip.value;
-  readingMode.value = true;
-  showIndicator.value = true;
-  showTooltip.value = true;
-  if (!wasVisible) tooltipStyle.value = {visibility: 'hidden'};
-  schedulePositionUpdate();
 }
 
 function shouldUseWordCard(text: string): boolean {
@@ -1386,127 +1147,13 @@ function requestSelectionContent(text: string): void {
     isWordCardLoading.value = false;
     wordCardError.value = '';
     dictionaryAnswer.value = null;
-    isVocabularySaved.value = false;
-    vocabularyBusy.value = false;
-  }
-  void refreshVocabularySaved(request);
-}
-
-function vocabularySourceLanguage(request: SelectionContentRequest): string {
-  return request.sourceLanguage && request.sourceLanguage !== 'auto' ? request.sourceLanguage : detectlang(request.text);
-}
-
-async function refreshVocabularySaved(request: SelectionContentRequest): Promise<void> {
-  if (!request.text.trim() || !config.vocabularyBookEnabled || isPrivateContext) {
-    vocabularyLookupGate.invalidate();
-    isVocabularySaved.value = false;
-    return;
-  }
-  const requestToken = vocabularyLookupGate.begin();
-  try {
-    const response = await browser.runtime.sendMessage({type: VOCABULARY_BOOK_MESSAGE, action: 'getByTerm', term: request.text, sourceLanguage: vocabularySourceLanguage(request)}) as VocabularyBookResponse<unknown | null>;
-    if (!vocabularyLookupGate.isCurrent(requestToken) || !isContentRequestCurrent(request)) return;
-    isVocabularySaved.value = response?.success === true && Boolean(response.data);
-  } catch {
-    if (vocabularyLookupGate.isCurrent(requestToken)) isVocabularySaved.value = false;
   }
 }
 
-function selectionContextText(): string {
-  const range = snapshot.value?.range;
-  if (!range) return '';
-  if (props.selectionAdapter?.context) return props.selectionAdapter.context(range, selectedText.value, 500).text;
-  const boundary = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer as Element : range.startContainer.parentElement;
-  const prose = boundary?.closest('p, li, blockquote, dd, dt, figcaption, article') || boundary?.parentElement;
-  const original = prose ? projectMaterialOriginalText(prose, range) : undefined;
-  // 超预算或失效时只保留实际选中文字，不回退到含双语译文的 textContent。
-  return summarizeSelectionContext(original?.text || selectedText.value, selectedText.value, 500, original?.selection?.start);
-}
-
-function pageSourceUrl(): string {
-  if (props.selectionAdapter?.context && snapshot.value) {
-    return props.selectionAdapter.context(snapshot.value.range, selectedText.value, 0).sourceUrl;
-  }
-  try {
-    const url = new URL(location.href);
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch { return ''; }
-}
-
-function selectionPageTitle(): string {
-  return props.selectionAdapter?.context && snapshot.value
-    ? props.selectionAdapter.context(snapshot.value.range, selectedText.value, 0).title || document.title
-    : document.title;
-}
-
-async function saveVocabularyEntry(event: MouseEvent): Promise<void> {
-  if (!event.isTrusted) return;
-  const contentRequest = currentContentRequest.value;
-  const answer = vocabularyAnswer.value;
-  if (!config.vocabularyBookEnabled || !contentRequest || !answer || vocabularyBusy.value || isPrivateContext) return;
-  const wasSaved = isVocabularySaved.value;
-  vocabularyBusy.value = true;
-  const requestToken = vocabularySaveGate.begin();
-  const materialSelection = snapshot.value ? captureMaterialSafely(snapshot.value.range, contentRequest.text) : undefined;
-  try {
-    const context = {text: selectionContextText(), sourceUrl: pageSourceUrl(), pageTitle: selectionPageTitle(), capturedAt: Date.now()};
-    const materialOperation = await beginMaterialCapture(materialSelection, isPrivateContext);
-    if (!vocabularySaveGate.isCurrent(requestToken) || !isContentRequestCurrent(contentRequest)) return;
-    const response = await browser.runtime.sendMessage({
-      type: VOCABULARY_BOOK_MESSAGE,
-      action: 'upsert',
-      input: {
-        term: contentRequest.text,
-        sourceLanguage: vocabularySourceLanguage(contentRequest),
-        targetLanguage: contentRequest.targetLanguage,
-        translation: answer,
-        phonetic: wordCard.value?.phonetics.find(item => item.text)?.text || '',
-        partOfSpeech: wordCard.value?.meanings.map(meaning => meaning.partOfSpeech) || [],
-        context,
-      },
-    }) as VocabularyBookResponse<unknown>;
-    if (!vocabularySaveGate.isCurrent(requestToken) || !isContentRequestCurrent(contentRequest)) return;
-    if (!response?.success || !response.data) throw new Error(response?.success ? '保存失败' : response?.error?.message || '保存失败');
-    const entryId = (response.data as {id?: unknown}).id;
-    if (typeof entryId === 'string') await completeMaterialCapture(materialOperation, {kind: 'vocabulary', id: entryId, excerpt: contentRequest.text}, () => vocabularySaveGate.isCurrent(requestToken) && isContentRequestCurrent(contentRequest));
-    if (!vocabularySaveGate.isCurrent(requestToken) || !isContentRequestCurrent(contentRequest)) return;
-    isVocabularySaved.value = true;
-    showNotice(wasSaved ? '已更新当前阅读上下文' : t('reading.sourceSaved'), 'open-vocabulary');
-  } catch (cause) {
-    if (vocabularySaveGate.isCurrent(requestToken)) showNotice(cause instanceof Error ? `保存失败：${cause.message}` : '保存失败，未写入单词本');
-  } finally {
-    if (vocabularySaveGate.isCurrent(requestToken)) vocabularyBusy.value = false;
-  }
-}
-
-function showNotice(message: string, action: 'open-vocabulary' | 'open-local-tts' | null = null): void {
+function showNotice(message: string): void {
   noticeMessage.value = message;
-  noticeAction.value = action;
   if (noticeTimer !== null) window.clearTimeout(noticeTimer);
-  noticeTimer = window.setTimeout(() => { noticeMessage.value = ''; noticeAction.value = null; }, 2600);
-}
-
-async function openNoticeSettings(): Promise<void> {
-  const action = noticeAction.value, timer = noticeTimer;
-  if (!action || !noticeMessage.value || componentDisposed) return;
-  const isCurrent = () => !componentDisposed && noticeTimer === timer && noticeAction.value === action && Boolean(noticeMessage.value);
-  try {
-    const response = await browser.runtime.sendMessage({type: 'openOptionsPage',
-      section: action === 'open-vocabulary' ? 'settings-vocabulary' : 'settings-selection'}) as {success?: unknown} | undefined;
-    if (!isCurrent()) return;
-    if (response?.success !== true) {
-      showNotice('无法打开设置，请从扩展菜单打开设置后重试', action);
-      return;
-    }
-    if (noticeTimer !== null) window.clearTimeout(noticeTimer);
-    noticeTimer = null;
-    noticeMessage.value = '';
-    noticeAction.value = null;
-  } catch {
-    if (isCurrent()) showNotice('无法打开设置，请从扩展菜单打开设置后重试', action);
-  }
+  noticeTimer = window.setTimeout(() => { noticeMessage.value = ''; }, 2600);
 }
 
 async function requestTranslation(request: SelectionContentRequest): Promise<void> {
@@ -1896,6 +1543,8 @@ async function playGoogleFallback(text: string, language: string, kind: AudioKin
   }
 
   if (!ttsContentController.isCurrentGeneration(requestId)) return;
+  // 非浏览器测试环境没有 Audio；放弃页面音频回退，避免产生未处理拒绝。
+  if (typeof Audio === 'undefined') return;
   const speechUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(language)}&client=tw-ob&q=${encodeURIComponent(text)}`;
   const nextAudio = new Audio(speechUrl);
   nextAudio.preload = 'auto';
@@ -1967,17 +1616,7 @@ async function toggleAudio(text: string, kind: AudioKind): Promise<void> {
   } finally {if (ttsContentController.isCurrentGeneration(requestId)) isPreparingAudio.value = false;}
 }
 
-async function fallbackSpeech(edgeResult: EdgeSpeechResult, text: string, language: string, kind: AudioKind): Promise<void> {
-  if (edgeResult.errorCode === 'local-tts-model-not-downloaded') {
-    showNotice(t('selectionTts.localModelNotDownloaded'), 'open-local-tts');
-  } else if (edgeResult.errorCode === 'local-tts-language-unsupported') {
-    showNotice(t('selectionTts.languageUnsupported'));
-  }
-  if (config.selectionTtsMode === 'local-only') {
-    stopAudio(false);
-    if (!edgeResult.errorCode) showNotice(edgeResult.error || '本地语音生成失败，请重试');
-    return;
-  }
+async function fallbackSpeech(_edgeResult: EdgeSpeechResult, text: string, language: string, kind: AudioKind): Promise<void> {
   if (!playBrowserSpeech(text, language, kind)) await playGoogleFallback(text, language, kind);
 }
 
@@ -2001,11 +1640,6 @@ function handleSelectionTtsState(message: unknown): true | undefined {
   if (state === 'error') {
     const textOffset = audioTextOffset.value;
     stopAudio(false);
-    if (config.selectionTtsMode === 'local-only') {
-      const error = (message as {error?: string}).error;
-      showNotice(error || '语音播放失败，请重试');
-      return true;
-    }
     audioTextOffset.value = textOffset;
     if (text && kind && !playBrowserSpeech(text, language, kind)) void playGoogleFallback(text, language, kind);
     return true;
@@ -2027,7 +1661,7 @@ async function toggleWordAudio(pronunciation: WordPronunciation): Promise<void> 
   currentAudioKey.value = key;
   try {
     const externalAudio = pronunciation.audio;
-    if (externalAudio && config.selectionTtsMode !== 'local-only') {
+    if (externalAudio) {
       const externalStarted = await playExternalAudio(externalAudio, cleanText, 'word', key, requestId);
       if (!ttsContentController.isCurrentGeneration(requestId)) return;
       if (externalStarted) return;
@@ -2127,7 +1761,7 @@ function translateSelectionFromContextMenu(selectionText?: string): boolean {
   if (!next) return false;
   suppressSelectionUntil = 0;
   isSelecting = false;
-  applySelection(next, true, false, true);
+  applySelection(next, true, true);
   return showTooltip.value;
 }
 
@@ -2141,10 +1775,8 @@ function closeTooltip(): void {
 }
 function hideAll(): void {
   clickSelectionFirstReadPending = false;
-  clearReadingKeyboardFocus();
   cancelIndicatorTouch();
   touchOpenedSelection = null;
-  invalidateFreeReadingEnable();
   if (import.meta.env.BROWSER !== 'userscript') clearContextMenuSelection();
   resetPopupGeometry();
   // 保留关闭时的选区身份，避免按钮保留原生选区时 pointerup / selectionchange 再次打开卡片。
@@ -2159,17 +1791,12 @@ function hideAll(): void {
   selectionSettledAt = 0;
   resetSelectionContentState(true);
   manuallyRequestedSelection.value = false;
-  readingMode.value = false;
-  readingSelection.value = null;
   showIndicator.value = false;
   showTooltip.value = false;
   snapshot.value = null;
   pendingSelectionShortcutUntil = 0;
-  isVocabularySaved.value = false;
-  vocabularyBusy.value = false;
 }
 function isInsideUi(target: EventTarget | null): boolean {
-  if (target instanceof Element && target.id === 'fluent-read-share-card-container') return true;
   const node = target instanceof Node ? target : null;
   if (!node) return false;
   const host = document.getElementById('fluent-read-selection-translator-container');
@@ -2197,13 +1824,10 @@ function handlePointerDown(event: PointerEvent): void {
     suppressSelectionRead();
     return;
   }
-  if (import.meta.env.BROWSER === 'safari') prepareReadingCardPan(event);
-  else clearReadingKeyboardFocus();
   // 第二根手指可以落在入口外；document capture 先撤销尚未完成的入口触摸。
   if (event.pointerType === 'touch') cancelIndicatorTouch();
   lastTrustedSelectionInteractionAt = Date.now();
   if (isInsideUi(event.target)) {
-    if (import.meta.env.BROWSER === 'safari') readingFocusGestureAt = Date.now();
     touchSelectionActiveUntil = 0;
     cancelTouchSelectionRead();
     uiPointerInteraction = true;
@@ -2212,7 +1836,6 @@ function handlePointerDown(event: PointerEvent): void {
     return;
   }
   uiPointerInteraction = false;
-  readingPanelRef.value?.closeTools();
   if (import.meta.env.BROWSER !== 'userscript') clearContextMenuSelection();
   // 右键是打开原生菜单的准备动作；保留同一选区正在进行的请求和已完成结果。
   if (import.meta.env.BROWSER !== 'userscript' && event.button === 2) {
@@ -2234,10 +1857,8 @@ function handlePointerDown(event: PointerEvent): void {
 function handlePointerUp(event: PointerEvent): void {
   if (!event.isTrusted) return;
   if (clickSelection.handlePointerUp(event)) return;
-  if (import.meta.env.BROWSER === 'safari') finishReadingCardPan(event);
   lastTrustedSelectionInteractionAt = Date.now();
   if (uiPointerInteraction || isInsideUi(event.target)) {
-    if (import.meta.env.BROWSER === 'safari') readingFocusGestureAt = Date.now();
     uiPointerInteraction = false;
     isSelecting = false;
     suppressSelectionRead();
@@ -2252,7 +1873,6 @@ function handlePointerUp(event: PointerEvent): void {
 }
 function handlePointerCancel(event: PointerEvent): void {
   if (!event.isTrusted) return;
-  if (import.meta.env.BROWSER === 'safari') finishReadingCardPan(event);
   cancelIndicatorTouch();
   if (uiPointerInteraction || isInsideUi(event.target)) {
     uiPointerInteraction = false;
@@ -2274,8 +1894,6 @@ function cancelEntryDismiss(): void {
 }
 function handlePointerMove(event: PointerEvent): void {
   if (clickSelection.active) return;
-  if (event.isTrusted && event.pointerType === 'touch'
-    && (import.meta.env.BROWSER !== 'safari' || !moveReadingCardPan(event))) clearReadingKeyboardFocus();
   trackIndicatorTouch(event);
   if (!event.isTrusted || event.pointerType !== 'mouse' || isSelecting || showTooltip.value
     || import.meta.env.BROWSER !== 'userscript' && (contextMenuSelection || contextMenuSourceRejected)
@@ -2304,7 +1922,6 @@ function handlePageCopy(event: ClipboardEvent): void {
 }
 function handleSelectionChange(event: Event): void {
   if (clickSelection.active) return;
-  if (readingMode.value && isInsideUi(document.activeElement)) return;
   if (!event.isTrusted) return;
   if (import.meta.env.BROWSER !== 'userscript' && (contextMenuSelection || contextMenuSourceRejected)) return;
   // 新的拖选/双击可以再次选中同一段；单纯点击保留旧选区的按钮不能解除关闭状态。
@@ -2320,206 +1937,6 @@ function handleSelectionChange(event: Event): void {
   }
   if (Date.now() - lastTrustedSelectionInteractionAt > TRUSTED_SELECTION_INTERACTION_GRACE_MS) return;
   if (!isSelectionReadSuppressed()) scheduleSelectionRead(selectionShortcutHeld);
-}
-// 焦点身份本身不豁免滚动；初次缩高与明确旋转各有固定800ms，普通 resize/scroll 不续期。
-function clearReadingKeyboardFocus(event?: Event): void {
-  if (readingKeyboardTimer !== undefined) window.clearTimeout(readingKeyboardTimer);
-  readingKeyboardTimer = undefined;
-  readingFocusGestureAt = undefined;
-  if (import.meta.env.BROWSER === 'safari' && readingKeyboardFocus) readingKeyboardFocus.reveal = false;
-  if (import.meta.env.BROWSER === 'safari') readingCardPan = undefined;
-  if (import.meta.env.BROWSER === 'safari' && event && readingKeyboardFocus && readingKeyboardInputActive()
-    && (event.type === 'input' || event.type === 'keydown' && [' ', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes((event as KeyboardEvent).key))) {
-    const focus = readingKeyboardFocus, root = focus.card.getRootNode(), path = event.composedPath?.() ?? [];
-    // document capture 早于输入框 stopPropagation；关闭 ShadowRoot 在 document 只暴露当前 host。
-    if (event.target === focus.input || path.includes(focus.input)
-      || 'host' in root && event.target === root.host && document.activeElement === root.host && path.includes(root.host as EventTarget)) {
-      focus.expiresAt = 0;
-      return;
-    }
-  }
-  if (readingKeyboardFocus) window.removeEventListener('wheel', cancelReadingKeyboardWheel, true);
-  readingKeyboardFocus = undefined;
-}
-function cancelReadingKeyboardWheel(event: WheelEvent): void {
-  if (event.isTrusted) clearReadingKeyboardFocus();
-}
-function readingViewportLandscape(): boolean | undefined {
-  const type = window.screen?.orientation?.type;
-  if (type === 'landscape-primary' || type === 'landscape-secondary') return true;
-  if (type === 'portrait-primary' || type === 'portrait-secondary') return false;
-  const angle = window.orientation;
-  if ([0, 90, -90, 180].includes(angle)) return Math.abs(angle) === 90;
-}
-function startReadingKeyboardPan(rotating: boolean): void {
-  const focus = readingKeyboardFocus;
-  if (!focus) return;
-  if (readingKeyboardTimer !== undefined) window.clearTimeout(readingKeyboardTimer);
-  focus.rotating = rotating;
-  focus.expiresAt = Date.now() + 800;
-  readingKeyboardTimer = window.setTimeout(() => {
-    readingKeyboardTimer = undefined;
-    if (readingKeyboardFocus === focus) focus.expiresAt = 0;
-  }, 800);
-}
-function readingKeyboardInputActive(focus = readingKeyboardFocus): boolean {
-  const root = focus?.card.getRootNode();
-  return !!focus && selectionSettings.value.autoDismiss && readingMode.value && showTooltip.value
-    && snapshot.value === focus.selection && tooltipRef.value === focus.card && focus.input.isConnected
-    && focus.card.contains(focus.input) && !!root && 'activeElement' in root && root.activeElement === focus.input
-    && focus.input.matches('input:not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])');
-}
-function revealReadingInput(focus: NonNullable<typeof readingKeyboardFocus>, revision: number): void {
-  if (readingKeyboardFocus !== focus || revision !== positionRevision || !focus.reveal) return;
-  focus.reveal = false;
-  if (Date.now() >= focus.expiresAt || !readingKeyboardInputActive(focus) || !isShortViewport()) return;
-  restoreSelectionSource();
-  if (!readingKeyboardInputActive(focus)) return;
-  const card = focus.card, scale = popupScale.value, frame = card.getBoundingClientRect();
-  const top = frame.top + card.clientTop * scale, bottom = top + card.clientHeight * scale;
-  if (![top, bottom, scale, card.scrollTop, card.scrollHeight].every(Number.isFinite)
-    || scale <= 0 || bottom <= top || card.scrollHeight <= card.clientHeight) return;
-  // Safari 的 BCR 与 raw VV.offsetTop 不同原点；现有定位已把卡片限制在安全视口，只用自己的 client port。
-  const input = focus.input.getBoundingClientRect();
-  if (![input.top, input.bottom, input.height].every(Number.isFinite) || input.height <= 0 || input.height > bottom - top) return;
-  const gap = Math.min(4, (bottom - top - input.height) / 2);
-  const delta = input.bottom > bottom - gap ? input.bottom - bottom + gap : input.top < top + gap ? input.top - top - gap : 0;
-  if (delta) card.scrollTop = Math.max(0, Math.min(card.scrollHeight - card.clientHeight, card.scrollTop + delta / scale));
-}
-function prepareReadingCardPan(event: PointerEvent): void {
-  const focus = readingKeyboardFocus;
-  clearReadingKeyboardFocus();
-  if (!focus || !event.isPrimary || event.pointerType !== 'touch' || event.button !== 0 || !isInsideUi(event.target)
-    || !readingKeyboardInputActive(focus) || !isShortViewport() || focus.card.clientHeight <= 0
-    || focus.card.scrollHeight <= focus.card.clientHeight) return;
-  const root = focus.card.getRootNode(), target = event.target;
-  if (!(target instanceof Node && focus.card.contains(target)) && !('host' in root && target === root.host)) return;
-  const viewport = window.visualViewport;
-  if (!viewport || ![event.pointerId, event.clientX, event.clientY, window.scrollY, viewport.width, viewport.scale].every(Number.isFinite)
-    || viewport.width <= 0 || viewport.scale <= 0 || Math.abs(viewport.scale - focus.scale) > 0.01) return;
-  restoreSelectionSource();
-  if (!readingKeyboardInputActive(focus)) return;
-  focus.expiresAt = 0;
-  readingKeyboardFocus = focus;
-  readingCardPan = {focus, pointerId: event.pointerId, x: event.clientX, y: event.clientY, local: false,
-    expiresAt: 0, width: viewport.width, scale: viewport.scale, scrollY: window.scrollY, travel: 0};
-  window.addEventListener('wheel', cancelReadingKeyboardWheel, {capture: true, passive: true});
-}
-function moveReadingCardPan(event: PointerEvent): boolean {
-  const pan = readingCardPan;
-  const viewport = window.visualViewport;
-  if (!pan || !pan.local || pan.pointerId !== event.pointerId || !event.isPrimary || !isInsideUi(event.target)
-    || !readingKeyboardInputActive(pan.focus) || !isShortViewport() || !viewport
-    || ![viewport.width, viewport.scale].every(Number.isFinite) || Math.abs(viewport.width - pan.width) > 1
-    || Math.abs(viewport.scale - pan.scale) > 0.01) return false;
-  const rect = pan.focus.card.getBoundingClientRect();
-  if (![event.clientX, event.clientY].every(Number.isFinite) || event.clientX < rect.left || event.clientX > rect.right
-    || event.clientY < rect.top || event.clientY > rect.bottom) return false;
-  const dy = Math.abs(event.clientY - pan.y), dx = Math.abs(event.clientX - pan.x);
-  if (!pan.expiresAt && dy >= 4 && dy > dx) {
-    pan.expiresAt = Date.now() + 400;
-    readingKeyboardTimer = window.setTimeout(() => {
-      readingKeyboardTimer = undefined;
-      if (readingCardPan === pan) readingCardPan = undefined;
-    }, 400);
-  }
-  return true;
-}
-function finishReadingCardPan(event: PointerEvent): void {
-  const pan = readingCardPan;
-  if (!pan) return;
-  if (pan.local && pan.expiresAt > Date.now() && pan.pointerId === event.pointerId && isInsideUi(event.target)) pan.pointerId = undefined;
-  else clearReadingKeyboardFocus();
-}
-function handleReadingInputFocus(event: FocusEvent): void {
-  dismissReadingToolsOutside(event);
-  if (import.meta.env.BROWSER !== 'safari') return;
-  const gestureAt = readingFocusGestureAt;
-  clearReadingKeyboardFocus();
-  const input = event.target, card = tooltipRef.value, viewport = window.visualViewport;
-  const root = card?.getRootNode();
-  if (!event.isTrusted || gestureAt === undefined || Date.now() - gestureAt > 500
-    || !selectionSettings.value.autoDismiss || !readingMode.value || !showTooltip.value
-    || !snapshot.value || !card || !(input instanceof HTMLElement) || !card.contains(input)
-    || !input.matches('.fr-reading-followup input:not([disabled]):not([readonly]), .fr-reading-followup textarea:not([disabled]):not([readonly])')
-    || !root || !('activeElement' in root) || root.activeElement !== input || !viewport
-    || ![viewport.width, viewport.height, viewport.scale, window.innerWidth, window.innerHeight].every(value => Number.isFinite(value) && value > 0)) return;
-  readingKeyboardFocus = {input, card, selection: snapshot.value, expiresAt: 0,
-    width: viewport.width, height: viewport.height, scale: viewport.scale,
-    landscape: readingViewportLandscape() ?? (window.innerWidth > window.innerHeight), rotating: false,
-    revealViewport: viewportSize.value};
-  // 仅此 Safari 自有焦点存续时观察主动 wheel；失焦/手势/关闭即释放，不拦截 legacy mousewheel。
-  window.addEventListener('wheel', cancelReadingKeyboardWheel, {capture: true, passive: true});
-  startReadingKeyboardPan(false);
-}
-function readingKeyboardViewport() {
-  const focus = readingKeyboardFocus;
-  if (!focus) return;
-  const viewport = window.visualViewport;
-  if (!readingKeyboardInputActive() || !viewport
-    || ![viewport.width, viewport.height, viewport.scale, window.innerWidth, window.innerHeight].every(value => Number.isFinite(value) && value > 0)
-    || Math.abs(viewport.scale - focus.scale) > 0.01) {
-    clearReadingKeyboardFocus();
-    return;
-  }
-  const explicitLandscape = readingViewportLandscape();
-  const landscape = explicitLandscape ?? (window.innerWidth > window.innerHeight);
-  if (landscape !== focus.landscape && (explicitLandscape !== undefined || Math.abs(viewport.width - focus.width) > 1)) {
-    focus.landscape = landscape;
-    startReadingKeyboardPan(true);
-  }
-  // Safari 可先报告方向和宿主页平移，再更新 VV 宽度；追上只刷新几何，不重开窗口。
-  if (focus.rotating && Date.now() < focus.expiresAt) {
-    focus.width = viewport.width;
-    focus.height = viewport.height;
-  }
-  return {focus, viewport};
-}
-function handleReadingKeyboardScroll(event: Event): boolean {
-  if (import.meta.env.BROWSER !== 'safari') return false;
-  const target = event.target;
-  if (target !== document && target !== window && !(target instanceof Element
-    && (target === document.scrollingElement || target === document.documentElement || target === document.body))) return false;
-  const pan = readingCardPan;
-  if (pan) {
-    const viewport = window.visualViewport;
-    const travel = pan.travel + Math.abs(window.scrollY - pan.scrollY);
-    if (!pan.local || Date.now() >= pan.expiresAt || !readingKeyboardInputActive(pan.focus) || !isShortViewport()
-      || pan.focus.card.scrollHeight <= pan.focus.card.clientHeight || !viewport || Math.abs(viewport.width - pan.width) > 1
-      || ![viewport.width, viewport.scale, travel].every(Number.isFinite) || Math.abs(viewport.scale - pan.scale) > 0.01 || travel > 2) {
-      clearReadingKeyboardFocus();
-      return false;
-    }
-    pan.travel = travel;
-    pan.scrollY = window.scrollY;
-  } else {
-    // scroll 可能早于合帧的 viewport callback；同步读取同一实际几何，不增加监听或重试。
-    const current = readingKeyboardViewport();
-    if (!current) return false;
-    const {focus, viewport} = current;
-    if (Date.now() >= focus.expiresAt || Math.abs(viewport.width - focus.width) > 1
-      || !focus.rotating && focus.height - viewport.height < 80) {
-      clearReadingKeyboardFocus();
-      return false;
-    }
-  }
-  restoreSelectionSource();
-  if (showTooltip.value) {
-    viewportSize.value = getSafeVisualViewportRect();
-    schedulePositionUpdate();
-  }
-  return true;
-}
-// 仅在扩展 UI 内拦住滚轮冒泡；document 级 wheel 会抑制 Chromium 对同节点派发 legacy mousewheel，导致旧播放器收不到音量手势。
-function dismissReadingToolsOutside(event: Event): void {
-  if (import.meta.env.BROWSER === 'safari' && readingCardPan
-    && !(event.target instanceof Node && readingCardPan.focus.card.contains(event.target))) clearReadingKeyboardFocus();
-  readingPanelRef.value?.dismissToolsOutside(event);
-}
-function dismissReadingToolsOnFocusOut(event: FocusEvent): void {
-  clearReadingKeyboardFocus();
-  const root = event.currentTarget as HTMLElement;
-  if (!event.relatedTarget || !root.contains(event.relatedTarget as Node)) readingPanelRef.value?.closeTools();
 }
 function handleStudyToolbarFocus(event: FocusEvent): void {
   const toolbar = event.currentTarget;
@@ -2576,8 +1993,6 @@ function handleScroll(event: Event): void {
       || Date.now() - lastTrustedSelectionInteractionAt <= TRUSTED_SELECTION_INTERACTION_GRACE_MS)) hideAll();
     return;
   }
-  if (handleReadingKeyboardScroll(event)) return;
-  if (readingMode.value && readingEvidenceScrollFrame !== undefined) { schedulePositionUpdate(); return; }
   if (selectionSettings.value.autoDismiss) { hideAll(); return; }
   schedulePositionUpdate();
 }
@@ -2586,15 +2001,11 @@ function isClickSelectionEditingEvent(event: KeyboardEvent): boolean {
     && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
 }
 function handleKeydown(event: KeyboardEvent): void {
-  if (!event.isTrusted || (event.target instanceof Element && event.target.id === 'fluent-read-share-card-container')) return;
-  if (import.meta.env.BROWSER === 'safari' && readingCardPan) clearReadingKeyboardFocus();
+  if (!event.isTrusted) return;
   if (import.meta.env.BROWSER !== 'userscript') clearContextMenuSelection();
-  if (['Escape', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' '].includes(event.key)) clearReadingKeyboardFocus(event);
   lastTrustedSelectionInteractionAt = Date.now();
   if (isInsideUi(event.target)) {
-    if (import.meta.env.BROWSER === 'safari') readingFocusGestureAt = Date.now();
     suppressSelectionRead();
-    if (event.key === 'Escape' && readingPanelRef.value?.dismissTools()) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.key === 'Escape' && snapshot.value) { event.preventDefault(); event.stopPropagation(); closeTooltip(); }
     return;
   }
@@ -2647,10 +2058,9 @@ function handleKeyup(): void {
 }
 
 function handleWindowBlur(): void {
-  clearReadingKeyboardFocus();
   cancelIndicatorTouch();
   stopPopupGesture();
-  cancelReadingHover();
+  cancelIndicatorHover();
   selectionShortcutHeld = false;
   pendingSelectionShortcutUntil = 0;
   if (!showTooltip.value && !isTouchSelectionActive()
@@ -2659,7 +2069,6 @@ function handleWindowBlur(): void {
 
 function handlePageVisibility(): void {
   if (document.visibilityState !== 'hidden') return;
-  clearReadingKeyboardFocus();
   cancelIndicatorTouch();
   stopPopupGesture();
   cancelTouchSelectionRead();
@@ -2668,7 +2077,7 @@ function handlePageVisibility(): void {
   uiPointerInteraction = false;
   selectionShortcutHeld = false;
   pendingSelectionShortcutUntil = 0;
-  cancelReadingHover();
+  cancelIndicatorHover();
   cancelSelectionPresentation();
   if (selectionFrame !== null) window.cancelAnimationFrame(selectionFrame);
   selectionFrame = null;
@@ -2702,20 +2111,8 @@ function handlePageHide(): void {
 function handleSelectionSettingsMessage(message: unknown): undefined {
   if (!message || typeof message !== 'object') return undefined;
   const type = (message as { type?: unknown }).type;
-  // 后台已核对专用凭据对应的模型输入；content 只接收无值事件，不能获取密钥或摘要。
-  if (type === 'fluentReadReadingModelInputsChanged') {
-    readingModelRevision.value += 1;
-    return undefined;
-  }
   if (type !== 'updateSelectionTranslatorSettings' && type !== 'updateSelectionTranslatorMode') return undefined;
   selectionConfigVersion.value += 1;
-  return undefined;
-}
-
-function handleVocabularyBookChanged(message: unknown): undefined {
-  if (!message || typeof message !== 'object' || (message as {type?: unknown}).type !== VOCABULARY_BOOK_CHANGED_MESSAGE) return undefined;
-  const request = currentContentRequest.value;
-  if (request && isWordSelection.value) void refreshVocabularySaved(request);
   return undefined;
 }
 
@@ -2725,7 +2122,6 @@ onMounted(() => {
   systemThemeMedia.addEventListener('change', updateTheme);
   runtimeMessageUnsubscribers.push(
     addRuntimeMessageListener(browser.runtime, handleSelectionSettingsMessage),
-    addRuntimeMessageListener(browser.runtime, handleVocabularyBookChanged),
     addRuntimeMessageListener(browser.runtime, handlePageZoomChanged),
   );
   void requestPageZoom();
@@ -2757,15 +2153,6 @@ onMounted(() => {
     tooltipResizeObserver = new ResizeObserver(scheduleAutomaticPopupResize);
     tooltipResizeObserver.observe(tooltip);
   }, { flush: 'post' });
-  watch(() => JSON.stringify(readingPreferences.value), (nextPreferences, previousPreferences) => {
-    // 水合时使用最新且仍有资格的偏好；保存的准确回声与失败回滚保留选区，其他偏好更新关闭旧请求。
-    const operation = freeReadingEnable;
-    if (operation && !operation.cancelled && showTooltip.value && snapshot.value === operation.selection
-      && ((!operation.nextPreferences && canEnableFreeReading.value)
-        || (previousPreferences === operation.previousPreferences && nextPreferences === operation.nextPreferences)
-        || (previousPreferences === operation.nextPreferences && nextPreferences === operation.previousPreferences))) return;
-    hideAll();
-  });
   watch(() => [
     selectionSettings.value.theme,
     selectionSettings.value.trigger,
@@ -2776,7 +2163,6 @@ onMounted(() => {
     selectionSettings.value.from,
     selectionSettings.value.service,
     selectionSettings.value.model,
-    config.vocabularyBookEnabled,
     selectionSettings.value.bidirectional,
     selectionSettings.value.dictionarySource,
   ] as const, (nextSettings, previousSettings) => {
@@ -2791,16 +2177,14 @@ onMounted(() => {
     const translationProviderChanged = !previousSettings
       || nextSettings[7] !== previousSettings[7]
       || nextSettings[8] !== previousSettings[8];
-    const directionEntryChanged = !previousSettings || nextSettings[10] !== previousSettings[10];
-    const dictionarySourceChanged = previousSettings && nextSettings[11] !== previousSettings[11];
+    const directionEntryChanged = !previousSettings || nextSettings[9] !== previousSettings[9];
+    const dictionarySourceChanged = previousSettings && nextSettings[10] !== previousSettings[10];
     if (themeChanged) updateTheme();
     if (!snapshot.value) return;
     if (languageChanged) manuallyRequestedSelection.value = false;
-    if (languageChanged && readingMode.value) { hideAll(); return; }
     if ((languageChanged || directionEntryChanged) && !manuallyRequestedSelection.value
-      && (shouldSkipChineseSelection(snapshot.value.text, config.to)
-      && !(selectionSettings.value.bidirectional && selectionReverseTarget(snapshot.value.text, config.to, config.from))
-      || (!readingEnabled.value && isSelectionInTargetLanguage(snapshot.value.text)))) { hideAll(); return; }
+      && shouldSkipChineseSelection(snapshot.value.text, config.to)
+      && !(selectionSettings.value.bidirectional && selectionReverseTarget(snapshot.value.text, config.to, config.from))) { hideAll(); return; }
     if (languageChanged || translationProviderChanged || directionEntryChanged) resetSelectionContentState();
     if (triggerChanged) {
       const nextPresentation = reconcileSelectionPresentation({
@@ -2819,7 +2203,7 @@ onMounted(() => {
       return;
     }
     if (languageChanged || translationProviderChanged || directionEntryChanged) {
-      if (showTooltip.value && !readingMode.value) void requestSelectionContent(snapshot.value.text);
+      if (showTooltip.value) void requestSelectionContent(snapshot.value.text);
     }
     else if (dictionarySourceChanged && isWordSelection.value) {
       wordLookupRequestId += 1;
@@ -2833,10 +2217,6 @@ onMounted(() => {
       const request = currentContentRequest.value;
       if (showTooltip.value && request) void requestWordCard(request);
     }
-    if (previousSettings && nextSettings[9] !== previousSettings[9] && showTooltip.value && isWordSelection.value) {
-      const request = currentContentRequest.value;
-      if (request) void refreshVocabularySaved(request);
-    }
   });
 });
 
@@ -2844,11 +2224,8 @@ onBeforeUnmount(() => {
   componentDisposed = true;
   clickSelectionFirstReadPending = false;
   clickSelection.dispose();
-  clearReadingKeyboardFocus();
   cancelIndicatorTouch();
   touchOpenedSelection = null;
-  invalidateFreeReadingEnable();
-  disposeReadingEvidence();
   zoomRequestGeneration += 1;
   releaseContextMenuHandler?.();
   releaseContextMenuHandler = null;
@@ -2859,8 +2236,8 @@ onBeforeUnmount(() => {
   if (selectionFrame !== null) window.cancelAnimationFrame(selectionFrame);
   selectionFrame = null;
   cancelPositionUpdate();
-  // 悬停延迟可能跨过卸载；卸载后不能再按旧选区打开阅读卡片。
-  cancelReadingHover();
+  // 悬停延迟可能跨过卸载；卸载后不能再按旧选区打开卡片。
+  cancelIndicatorHover();
   cancelSelectionLoss();
   cancelSelectionPresentation();
   clearCopyFeedback();
@@ -2918,15 +2295,10 @@ onBeforeUnmount(() => {
 .fr-popup-resize-se { bottom: 0; right: 0; cursor: nwse-resize; }
 .fr-popup-resize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 .fr-popup-resize-se::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 5px; height: 5px; border-right: 2px solid #95858d; border-bottom: 2px solid #95858d; }
-.fr-reading-tooltip { display: flex; flex-direction: column; height: auto; overflow: visible; }
-.fr-reading-tooltip > .fr-reading-content { display: flex; flex-direction: column; flex: 1; min-height: 0; max-height: none; overflow: hidden; padding: 0; }
-/* 自动卡用内在高度收拢；达到外框上限后将收缩量传给真正的阅读滚动区。 */
-.fr-reading-content > :deep(.fr-reading) { flex: 1; height: auto; }
 .fr-pos-label { display:flex; gap:6px; align-items:center; }
 .fr-study-navigation { flex: none; display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-bottom: 1px solid var(--fr-border, #eeedf0); }
 .fr-tooltip-brand-icon { display:block; flex:none; width:18px; height:18px; border-radius:4px; object-fit:contain; opacity:1; pointer-events:none; }
 .fr-study-toolbar { flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: thin; gap: 3px; }
-.fr-study-reading-tools { flex: none; }
 .fr-study-toolbar button { flex:none; white-space:nowrap; font:inherit; font-size:11px; border:0; background:transparent; color:#62616c; border-radius:5px; padding:5px 8px; cursor:pointer; }
 .fr-study-toolbar button[aria-pressed=true], .fr-study-toolbar button:hover, .fr-study-toolbar button:focus-visible { background:#f4f0f3; color:#8e4867; outline:1px solid #dcc3d0; }
 .fr-dark-theme .fr-study-navigation { border-color:#4d404a; }
@@ -2938,8 +2310,6 @@ onBeforeUnmount(() => {
 .fr-action-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .fr-action-btn:hover, .fr-action-btn:focus-visible { background: #f7eaf0; color: #d63f76; outline: none; }
 .fr-action-btn:disabled { cursor: not-allowed; opacity: .38; }
-.fr-vocabulary-btn.fr-saved { color: #ef4b86; }
-.fr-vocabulary-btn.fr-saved svg { fill: currentColor; stroke: currentColor; }
 .fr-close-btn { width: 26px; height: 26px; font-size: 19px; line-height: 1; border-radius: 6px; }
 .fr-close-btn:hover, .fr-close-btn:focus-visible { background: #f1f1f5; color: #303038; outline: none; }
 .fr-tooltip-content { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 14px; scrollbar-color: rgba(108, 105, 112, .4) transparent; scrollbar-width: thin; }
@@ -3046,7 +2416,6 @@ onBeforeUnmount(() => {
 .fr-action-toast button { flex: none; padding: 0; border: 0; color: #ffc2d5; background: transparent; cursor: pointer; font: inherit; font-weight: 700; }
 .fr-action-toast button:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 .fr-dark-theme { border-color: #44444e; background: rgba(40, 40, 48, .98); color: #f1f1f4; }
-.fr-reading-tooltip.fr-dark-theme { background: #282830; }
 .fr-dark-theme .fr-action-btn:hover, .fr-dark-theme .fr-close-btn:hover { background: #50505b; color: #fff; }
 .fr-dark-theme :is(.fr-text-copy-btn, .fr-text-audio-btn) { border-color:transparent; background:transparent; color:#b4aab3; }
 .fr-dark-theme :is(.fr-text-copy-btn, .fr-text-audio-btn):is(:hover, :focus-visible) { border-color: #c96a8b; background: #553846; color: #ffd9e7; }
@@ -3087,7 +2456,7 @@ onBeforeUnmount(() => {
 .fr-short-viewport .fr-study-navigation { align-items:flex-start; padding-block:var(--fr-pad); border-bottom:0; touch-action:auto; }
 .fr-short-viewport .fr-study-toolbar { touch-action:auto; overscroll-behavior-y:auto; }
 .fr-short-viewport .fr-close-btn { min-width:44px; min-height:44px; }
-.fr-short-viewport .fr-tooltip-content, .fr-short-viewport :deep(.fr-reading), .fr-short-viewport :deep(.fr-reading-scroll) { flex:none; height:auto; max-height:none; overflow:visible; }
+.fr-short-viewport .fr-tooltip-content { flex:none; height:auto; max-height:none; overflow:visible; }
 .fr-short-viewport .fr-popup-resize-handle { display:none; }
 @media (prefers-reduced-motion: reduce) { .fr-selection-indicator, .fr-loading-spinner { transition: none; animation: none; } }
 

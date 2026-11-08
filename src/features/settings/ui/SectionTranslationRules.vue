@@ -1,7 +1,7 @@
 <!--
  * @file src/features/settings/ui/SectionTranslationRules.vue
  * 文件职责：在局部翻译设置中管理用户明确记住的网站区域，让下次访问时自动翻译或显示提醒。
- * 主要内容：列表只展示网站、下次动作与启停，支持筛选、编辑、删除和手动添加；编辑器以网站和动作为主，仅在有可选方案或已有引用时展示方案，CSS 路径收在高级设置；编辑草稿独立于配置，校验后一次提交，外部配置或页面切换使旧草稿失效。
+ * 主要内容：列表只展示网站、下次动作与启停，支持筛选、编辑、删除和手动添加；编辑器以网站和动作为主，CSS 路径收在高级设置；编辑草稿独立于配置，校验后一次提交，外部配置或页面切换使旧草稿失效。
  * 模块边界：组件仅编辑父级 Config.sectionTranslationRules 并由既有配置编辑器持久化，不访问网页、不猜测元素、不请求翻译或直接读写存储；规则格式与校验归 core/config/sectionTranslationRules。
  -->
 <template>
@@ -16,7 +16,7 @@
     <div v-if="filteredRules.length && !draft" class="rules-list">
       <article v-for="rule in filteredRules" :key="rule.id" class="rule-row" :class="{'is-disabled': !rule.enabled}" :data-rule-id="rule.id">
         <el-switch :model-value="rule.enabled" :disabled="!active" :aria-label="t('sectionTranslation.rules.enable', {site: rule.site})" @update:model-value="updateRule(rule, {enabled: Boolean($event)})" />
-        <div class="rule-main"><strong :title="rule.site" data-i18n-ignore>{{ rule.site }}</strong><small v-if="isMissingProfile(rule.profileId)" class="rule-profile-missing" role="status">{{ t('sectionTranslation.rules.profileMissing') }}</small></div>
+        <div class="rule-main"><strong :title="rule.site" data-i18n-ignore>{{ rule.site }}</strong></div>
         <el-select :model-value="rule.mode" class="rule-mode" :disabled="!active" :aria-label="t('sectionTranslation.rules.modeFor', {site: rule.site})" @update:model-value="updateRule(rule, {mode: $event})"><el-option value="remind" :label="t('sectionTranslation.rules.remind')" /><el-option value="auto" :label="t('sectionTranslation.rules.auto')" /></el-select>
         <div class="rule-actions"><el-button size="small" :disabled="!active" @click="editRule(rule)">{{ t('sectionTranslation.rules.edit') }}</el-button><el-button size="small" text type="danger" :disabled="!active" :aria-label="t('sectionTranslation.rules.deleteFor', {site: rule.site})" @click="removeRule(rule)">{{ t('sectionTranslation.rules.delete') }}</el-button></div>
       </article>
@@ -24,7 +24,6 @@
     <form v-if="draft" class="rule-editor" @submit.prevent="saveDraft">
       <label><span>{{ t('sectionTranslation.rules.website') }}</span><el-input v-model="draft.site" :aria-label="t('sectionTranslation.rules.website')" placeholder="*.example.com/articles/" /></label>
       <label><span>{{ t('sectionTranslation.rules.nextVisit') }}</span><el-select v-model="draft.mode" :aria-label="t('sectionTranslation.rules.nextVisit')"><el-option value="remind" :label="t('sectionTranslation.rules.remind')" /><el-option value="auto" :label="t('sectionTranslation.rules.auto')" /></el-select></label>
-      <label v-if="sectionProfiles.length || draft.profileId" class="profile-editor"><span>{{ t('sectionTranslation.rules.profile') }}</span><el-select :model-value="draft.profileId ?? ''" data-testid="section-rule-profile" :aria-label="t('sectionTranslation.rules.profile')" @update:model-value="draft.profileId = $event || undefined"><el-option value="" :label="t('sectionTranslation.rules.profileDefault')" /><el-option v-if="isMissingProfile(draft.profileId)" :value="draft.profileId" :label="t('sectionTranslation.rules.profileMissing')" disabled /><el-option v-for="profile in sectionProfiles" :key="profile.id" :value="profile.id" :label="profile.hotkey || t('sectionTranslation.rules.profileNoShortcut')" /></el-select><small v-if="isMissingProfile(draft.profileId)" class="rule-profile-missing" role="status">{{ t('sectionTranslation.rules.profileMissingHelp') }}</small></label>
       <details class="rule-advanced" :open="advancedOpen" @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open">
         <summary>{{ t('sectionTranslation.rules.advanced') }}</summary>
         <label class="selector-editor"><span>{{ t('sectionTranslation.rules.selectors') }}</span><el-input v-model="draft.selectorsText" type="textarea" :rows="3" :aria-label="t('sectionTranslation.rules.selectors')" placeholder="article .content" /><small>{{ t('sectionTranslation.rules.selectorsHelp') }}</small></label>
@@ -44,9 +43,6 @@ import {useUiI18n} from '@/src/ui/i18n';
 const props = withDefaults(defineProps<{config: Config; active?: boolean}>(), {active: true});
 const {t} = useUiI18n();
 const rules = computed(() => props.config.sectionTranslationRules);
-const sectionProfiles = computed(() => props.config.quickTranslationProfiles.filter(profile => profile.action === 'section'));
-const sectionProfileIds = computed(() => new Set(sectionProfiles.value.map(profile => profile.id)));
-const isMissingProfile = (profileId: string | undefined): boolean => Boolean(profileId && !sectionProfileIds.value.has(profileId));
 const filter = ref('');
 const filteredRules = computed(() => rules.value.filter(rule => rule.site.toLocaleLowerCase().includes(filter.value.trim().toLocaleLowerCase())));
 const draft = ref<(SectionTranslationRule & {selectorsText: string; existing: boolean}) | null>(null);
@@ -94,7 +90,7 @@ function saveDraft(): void {
     const rule: SectionTranslationRule = {
         id: current.id, enabled: current.enabled, site: normalizeSectionRuleSite(current.site) ?? current.site,
         selectors: current.selectorsText.split('\n').map(line => line.trim()).filter(Boolean).map(line => line.split(/\s*>>>\s*/u).map(selector => selector.trim())),
-        mode: current.mode, ...(current.profileId ? {profileId: current.profileId} : {}),
+        mode: current.mode,
     };
     const invalid = validateSectionTranslationRule(rule);
     if (invalid) {error.value = t(invalid === 'site' ? 'sectionTranslation.rules.invalidSite' : 'sectionTranslation.rules.invalidSelectors'); if (invalid !== 'site') advancedOpen.value = true; return;}

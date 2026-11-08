@@ -28,9 +28,6 @@ describe('browser capability contract', () => {
             offscreenDocument: true,
             extensionDom: true,
             chromeTranslation: true,
-            imageOcr: true,
-            imageTranslation: true,
-            areaTranslation: true,
             selectionTtsExtensionPlayback: true,
             selectionTtsPageFallback: true,
         });
@@ -40,9 +37,6 @@ describe('browser capability contract', () => {
             browser: 'edge',
             offscreenDocument: true,
             chromeTranslation: false,
-            imageOcr: true,
-            imageTranslation: true,
-            areaTranslation: true,
             selectionTtsExtensionPlayback: true,
         });
     });
@@ -57,9 +51,6 @@ describe('browser capability contract', () => {
             expect(resolveBrowserCapabilities(target)).toMatchObject({
                 offscreenDocument: false,
                 chromeTranslation: false,
-                imageOcr: false,
-                imageTranslation: false,
-                areaTranslation: false,
                 selectionTtsExtensionPlayback: false,
                 selectionTtsPageFallback: true,
             });
@@ -71,9 +62,6 @@ describe('browser capability contract', () => {
             offscreenDocument: false,
             extensionDom: true,
             chromeTranslation: false,
-            imageOcr: true,
-            imageTranslation: true,
-            areaTranslation: true,
             selectionTtsExtensionPlayback: true,
             selectionTtsPageFallback: true,
         });
@@ -90,7 +78,7 @@ describe('browser capability contract', () => {
             manifestVersion: 3,
             offscreenDocument: true,
             chromeTranslation: false,
-            imageTranslation: true,
+            selectionTtsExtensionPlayback: true,
         });
         expect(Object.isFrozen(edge)).toBe(true);
         expect(applyRuntimeBrowserConstraints(chrome, 'Mozilla/5.0 Chrome/131.0.0.0')).toBe(chrome);
@@ -112,9 +100,6 @@ describe('browser capability contract', () => {
             browser: 'thunderbird',
             manifestVersion: 2,
             extensionDom: false,
-            imageOcr: false,
-            imageTranslation: false,
-            areaTranslation: false,
             selectionTtsExtensionPlayback: false,
         });
         expect(applyRuntimeBrowserConstraints(firefox, 'Firefox/140.0')).toBe(firefox);
@@ -170,15 +155,6 @@ describe('translation service capability contract', () => {
         expect(isTranslationServiceAvailable(services.chatgptPlan, userscript)).toBe(false);
         expect(getTranslationServiceUnavailableMessage(services.chatgptPlan, userscript)).toContain('脚本版');
         expect(options).toHaveLength(2);
-    });
-
-    it('keeps local models available only with an extension DOM runtime', () => {
-        expect(isTranslationServiceAvailable(services.localTranslation, chrome)).toBe(true);
-        expect(isTranslationServiceAvailable(services.localTranslation, firefox)).toBe(true);
-        const unavailable = {...chrome, extensionDom: false};
-        expect(isTranslationServiceAvailable(services.localTranslation, unavailable)).toBe(false);
-        expect(getTranslationServiceUnavailableMessage(services.localTranslation, unavailable))
-            .toContain('不支持扩展本地模型翻译');
     });
 
     it('keeps normal providers available and gates only Chrome built-in translation', () => {

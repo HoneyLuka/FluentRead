@@ -141,15 +141,6 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
 .settings-card .service-catalog .service-configuration-slot .service-connection-section { margin-top: 0; padding-top: 0; border-top: 0; }
 .settings-card .service-catalog .service-configuration-slot .subsection-heading { margin-right: 0; margin-left: 0; }
 .settings-card .service-catalog .service-configuration-slot .el-row { margin-right: 0 !important; margin-left: 0 !important; }
-.settings-card.translation-center-view {
-  display: flex; width: calc(100% + 80px); margin-right: -40px; margin-left: -40px; padding: 0; border-right: 0; border-left: 0; border-radius: 0;
-  flex-direction: column; overflow: hidden;
-}
-.settings-card.translation-center-view > .settings-main-sections { display: none !important; }
-.settings-card.translation-center-view > #settings-translation-center {
-  display: flex !important; min-height: 0; height: 100%; flex: 1 1 auto; align-items: flex-start; justify-content: center; overflow: hidden;
-}
-.settings-card.translation-center-view .translation-center { width: min(100%, 1480px); height: 100%; max-height: none; overflow: hidden; }
 .settings-card > div:last-child > .el-row,
 .settings-card > div:last-child > div > .el-row,
 .settings-card > div:last-child > div > .el-collapse {
@@ -407,14 +398,9 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
   .sidebar { flex-basis: 210px; width: 210px; }
   .workspace { width: auto; padding: 28px 28px 20px; }
   .settings-card.services-view { width: calc(100% + 56px); margin-right: -28px; margin-left: -28px; }
-  .settings-card.translation-center-view { width: calc(100% + 56px); margin-right: -28px; margin-left: -28px; }
   .topbar { align-items: stretch; flex-direction: column; }
   .topbar-tools { align-items: stretch; justify-content: space-between; }
   .search-box { width: 100%; }
-}
-
-@media (max-width: 900px) {
-  .settings-card.translation-center-view .translation-center { height: auto; max-height: 100%; overflow-y: auto; }
 }
 
 @media (max-width: 700px) {
@@ -443,7 +429,6 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
   .search-box { height: 44px; }
   .settings-card { padding: 20px 8px 14px; border-radius: 20px; }
   .settings-card.services-view { display: flex; width: 100%; margin-right: 0; margin-left: 0; border-right: 1px solid var(--line); border-left: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
-  .settings-card.translation-center-view { display: flex; width: 100%; margin-right: 0; margin-left: 0; border-right: 1px solid var(--line); border-left: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
   .settings-card.services-view .service-catalog { height: 100% !important; min-height: 0 !important; flex: 1 1 auto; }
   /* 窄屏统一滚动服务详情，避免服务标题和模型选择挤占高级表单的可视高度。 */
   .settings-card.services-view .service-catalog .catalog-layout { display: block; min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; }
@@ -552,11 +537,11 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
 .settings-app .search-results small { margin-top: 4px; font-size: 11px; line-height: 1.4; }
 .settings-app .search-results b { flex: none; }
 .settings-app .topbar, .settings-app .settings-page-tabs { width: 100%; max-width: var(--settings-content-width); margin-right: auto; margin-left: auto; }
-.settings-app .workspace:has(.services-view), .settings-app .workspace:has(.translation-center-view), .settings-app .workspace:has(.vocabulary-view) { --settings-content-width: 100%; }
+.settings-app .workspace:has(.services-view) { --settings-content-width: 100%; }
 .settings-app .workspace:has(.about-page) { --settings-content-width: 1320px; }
-.settings-app .settings-card:not(.services-view):not(.translation-center-view):not(.vocabulary-view) > * { width: 100%; max-width: var(--settings-content-width); margin-right: auto; margin-left: auto; }
+.settings-app .settings-card:not(.services-view) > * { width: 100%; max-width: var(--settings-content-width); margin-right: auto; margin-left: auto; }
 .settings-app .settings-card { padding: 0 2px 24px; scrollbar-gutter: stable; overscroll-behavior-y: contain; }
-.settings-app .settings-card.services-view, .settings-app .settings-card.translation-center-view { width: calc(100% + 64px); margin-right: -32px; margin-left: -32px; padding: 0; scrollbar-gutter: auto; }
+.settings-app .settings-card.services-view { width: calc(100% + 64px); margin-right: -32px; margin-left: -32px; padding: 0; scrollbar-gutter: auto; }
 .settings-page-panel { min-width: 0; }
 .settings-app .settings-card .el-row { box-shadow: none; border-radius: 10px; background: var(--surface); }
 .settings-app .settings-card .popup-text { font-size: 13px; font-weight: 550; }
@@ -569,7 +554,7 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
   .settings-app .workspace { --settings-navigation-inset: 24px; padding: 12px 24px 20px; }
   .settings-app .topbar { flex-direction: row; align-items: center; gap: 16px; }
   .settings-app .search-box { width: 210px; }
-  .settings-app .settings-card.services-view, .settings-app .settings-card.translation-center-view { width: calc(100% + 48px); margin-right: -24px; margin-left: -24px; }
+  .settings-app .settings-card.services-view { width: calc(100% + 48px); margin-right: -24px; margin-left: -24px; }
 }
 @media (max-width: 700px) {
   .settings-app .sidebar { display: flex; flex: none; width: 100%; height: auto; padding: 12px 16px; flex-direction: row; align-items: center; gap: 16px; }
@@ -584,7 +569,7 @@ h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.25; letter-spacing: -.0
   .settings-app .search-box { width: 100%; }
   .settings-app .topbar-tools { width: 100%; flex-direction: row; }
   .settings-app .settings-card { padding: 0 0 16px; border-radius: 0; }
-  .settings-app .settings-card.services-view, .settings-app .settings-card.translation-center-view { width: 100%; margin-right: 0; margin-left: 0; }
+  .settings-app .settings-card.services-view { width: 100%; margin-right: 0; margin-left: 0; }
 
 
 }

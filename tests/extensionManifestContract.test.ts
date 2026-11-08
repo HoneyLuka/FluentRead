@@ -1,42 +1,19 @@
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import JSZip from 'jszip';
-import {createRequire} from 'node:module';
 import {dirname, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {describe, expect, it, vi} from 'vitest';
-import ts from 'typescript';
-import {defineUnlistedScript} from 'wxt/utils/define-unlisted-script';
 import {createHash, generateKeyPairSync} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import {FREE_PROVIDER_ORIGINS} from '@/src/core/config/freeProviderOrigins';
 import {GOOGLE_DRIVE_DEFAULT_CLIENT_ID, GOOGLE_DRIVE_EXTENSION_ID, GOOGLE_DRIVE_EXTENSION_PUBLIC_KEY, GOOGLE_DRIVE_SCOPES} from '@/src/platform/google-drive/constants';
 import {createDriveAuth, type DriveAuthPorts} from '@/src/platform/google-drive/auth';
-import type {Entrypoint, EntrypointGroup, UserManifest} from 'wxt';
-import {remoteConfigStorageBuildPlugin, createExtensionManifest, extendRemoteConfigBuildConfig, groupModuleWorkers, finalizeExtensionZip, createSafariBackgroundPage, configureSafariBackgroundPage, configureStableContentUiResources, configureExtensionUiChunks} from '@/wxt.config';
+import type {UserManifest} from 'wxt';
+import {remoteConfigStorageBuildPlugin, createExtensionManifest, extendRemoteConfigBuildConfig, finalizeExtensionZip, createSafariBackgroundPage, configureSafariBackgroundPage, configureStableContentUiResources, configureExtensionUiChunks} from '@/wxt.config';
 import type {InlineConfig} from 'vite';
 
 const PROJECT_ROOT = resolve(__dirname, '..');
-
-describe('native translation sidepanel artifact contract', () => {
-    it.each(['Chrome', 'Firefox'])('%s validates its own final native panel declaration', async browser => {
-        const {verifyTranslationSidepanelManifest} = await import(/* @vite-ignore */ pathToFileURL(resolve(PROJECT_ROOT, 'scripts/testing/verify-extension-manifests.mjs')).href);
-        const manifest = browser === 'Chrome' ? {side_panel: {default_path: 'sidepanel.html'}, permissions: ['sidePanel']}
-            : {sidebar_action: {default_panel: 'sidepanel.html', open_at_install: false}, permissions: []};
-        expect(() => verifyTranslationSidepanelManifest(manifest, ['sidepanel.html'], browser)).not.toThrow();
-        expect(() => verifyTranslationSidepanelManifest(manifest, [], browser)).toThrow('缺少');
-        const wrongPermission = {...manifest, permissions: browser === 'Chrome' ? ['sidePanel', 'sidePanel'] : ['sidePanel']};
-        expect(() => verifyTranslationSidepanelManifest(wrongPermission, ['sidepanel.html'], browser)).toThrow('权限');
-        for (const web_accessible_resources of [['sidepanel.html'], [{resources: ['sidepanel.html'], matches: ['<all_urls>']}]]) {
-            expect(() => verifyTranslationSidepanelManifest({...manifest, web_accessible_resources}, ['sidepanel.html'], browser)).toThrow('不得向网页公开');
-        }
-    });
-    it('rejects a missing Chrome declaration and Firefox installation-time opening', async () => {
-        const {verifyTranslationSidepanelManifest} = await import(/* @vite-ignore */ pathToFileURL(resolve(PROJECT_ROOT, 'scripts/testing/verify-extension-manifests.mjs')).href);
-        expect(() => verifyTranslationSidepanelManifest({permissions: ['sidePanel']}, ['sidepanel.html'], 'Chrome')).toThrow('清单');
-        expect(() => verifyTranslationSidepanelManifest({sidebar_action: {default_panel: 'sidepanel.html', open_at_install: true}}, ['sidepanel.html'], 'Firefox')).toThrow('安装');
-    });
-});
 
 describe('stable public content UI resources', () => {
     const uiFiles = [
@@ -51,7 +28,8 @@ describe('stable public content UI resources', () => {
         {resources: ['content-scripts/unrelated.css', 'private.js'], extension_ids: ['other-extension'], use_dynamic_url: true},
     ];
 
-    it.each(['chrome', 'edge'])('%s 使用稳定 UI 地址，同时完整保留文件、站点、权限和其他资源规则', browser => {
+    it('Chrome 使用稳定 UI 地址，同时完整保留文件、站点、权限和其他资源规则', () => {
+        const browser = 'chrome';
         const env = {browser, manifestVersion: 3 as const};
         const manifest = {...createExtensionManifest(env), web_accessible_resources: generatedRules()};
         const before = structuredClone(manifest);
@@ -76,8 +54,6 @@ describe('stable public content UI resources', () => {
     });
 
     it.each([
-        {browser: 'firefox', manifestVersion: 2 as const},
-        {browser: 'firefox', manifestVersion: 3 as const},
         {browser: 'safari', manifestVersion: 2 as const},
         {browser: 'chrome', manifestVersion: 2 as const},
     ])('保留其他目标 $browser MV$manifestVersion 的原资源规则', env => {
@@ -495,7 +471,7 @@ describe('Safari unsigned delivery contract', () => {
         configureSafariBackgroundPage({browser: 'safari', manifestVersion: 2}, manifest);
         expect(manifest.background).toEqual({page: 'safari-background.html', persistent: false});
         expect(backgroundPage()).toEqual({relativeDest: 'safari-background.html', contents: expect.stringMatching(/^<!doctype html>\n<html>\n<head><meta charset="utf-8">/u)});
-        for (const env of [{browser: 'chrome', manifestVersion: 3}, {browser: 'firefox', manifestVersion: 2}, {browser: 'safari', manifestVersion: 3}] as const) {
+        for (const env of [{browser: 'chrome', manifestVersion: 3}, {browser: 'safari', manifestVersion: 3}] as const) {
             const untouched = {background: {scripts: ['original.js'], persistent: true}};
             configureSafariBackgroundPage(env, untouched);
             expect(untouched.background).toEqual({scripts: ['original.js'], persistent: true});
@@ -545,10 +521,9 @@ describe('Safari unsigned delivery contract', () => {
         expect(source.optional_host_permissions).toBeUndefined();
         expect(verifySafariManifest({...safariFixture(), optional_permissions: [...expected].reverse()})).toBeTruthy();
         for (const env of [{browser: 'chrome', manifestVersion: 3}, {browser: 'chrome', manifestVersion: 2},
-            {browser: 'edge', manifestVersion: 3}, {browser: 'firefox', manifestVersion: 2}, {browser: 'firefox', manifestVersion: 3},
             {browser: 'safari', manifestVersion: 3}] as const) {
             const manifest = createExtensionManifest(env);
-            expect(manifest.optional_permissions).toEqual(env.browser === 'firefox' ? ['downloads'] : undefined);
+            expect(manifest.optional_permissions).toBeUndefined();
             expect(manifest.permissions).not.toContain('downloads'); expect(manifest.optional_host_permissions).toBeUndefined();
             expect(manifest.host_permissions).toEqual(source.host_permissions);
         }
@@ -940,17 +915,6 @@ describe('Chrome unified ZIP packaging', () => {
         } finally {rmSync(directory, {recursive: true, force: true});}
     });
 
-    it.each(['edge', 'firefox'])('%s ZIP 保持原字节，不清理 Chrome 旧包', async (browser) => {
-        const {directory, zipPath, storePath} = await fixture({manifest_version: 3, version: '0.0.37', key: 'control'});
-        try {
-            const before = readFileSync(zipPath);
-            writeFileSync(storePath, 'retained store archive');
-            expect(await finalizeExtensionZip(browser, zipPath)).toBeUndefined();
-            expect(readFileSync(zipPath)).toEqual(before);
-            expect(readFileSync(storePath, 'utf8')).toBe('retained store archive');
-        } finally {rmSync(directory, {recursive: true, force: true});}
-    });
-
     it('缺少清单时拒绝交付，不改写原 ZIP 或删除旧包', async () => {
         const {directory, zipPath, storePath} = await fixture({manifest_version: 3});
         try {
@@ -1077,95 +1041,11 @@ describe('Chrome unified ZIP packaging', () => {
     });
 });
 
-function buildEntrypoint(name: string, type: Entrypoint['type'] = 'unlisted-script'): Entrypoint {
-    return {name, type, inputPath: `/entrypoints/${name}.ts`, outputDir: '/output', options: {}} as Entrypoint;
-}
-
-describe('module worker build groups', () => {
-    it('三个已知模块 Worker 共享构建，保留其顺序及其他构建组的对象', () => {
-        const workers = ['localTranslationWorker', 'localTtsWorker', 'videoTranscriptionWorker'].map(name => buildEntrypoint(name));
-        const background = buildEntrypoint('background', 'background');
-        const content = buildEntrypoint('content', 'content-script');
-        const classic = buildEntrypoint('otherWorker');
-        const pages = [buildEntrypoint('options', 'options'), buildEntrypoint('popup', 'popup')];
-        const groups: EntrypointGroup[] = [background, workers[0], content, workers[1], classic, workers[2], pages];
-
-        groupModuleWorkers(groups);
-
-        expect(groups).toEqual([background, workers, content, classic, pages]);
-        expect(groups[1]).not.toBe(workers);
-        for (const entry of [background, content, classic, pages]) expect(groups).toContain(entry);
-        for (const worker of workers) expect(groups[1]).toContain(worker);
-        const grouped = [...groups];
-        groupModuleWorkers(groups);
-        expect(groups).toEqual(grouped);
-        expect(groups[1]).toBe(grouped[1]);
-    });
-
-    it('部分构建仍可以组合两个模块 Worker', () => {
-        const workers = ['videoTranscriptionWorker', 'localTranslationWorker'].map(name => buildEntrypoint(name));
-        const groups: EntrypointGroup[] = [...workers];
-        groupModuleWorkers(groups);
-        expect(groups).toEqual([workers]);
-    });
-
-    it('不足两个可组合入口时保留原有构建方式', () => {
-        for (const groups of [[], [buildEntrypoint('localTtsWorker')], [buildEntrypoint('unknown')]]) {
-            const before = [...groups];
-            groupModuleWorkers(groups);
-            expect(groups).toEqual(before);
-        }
-    });
-
-    it('同名的内容脚本、后台或已分组入口不会被改成模块 Worker', () => {
-        const groups: EntrypointGroup[] = [
-            buildEntrypoint('localTranslationWorker', 'content-script'),
-            buildEntrypoint('localTtsWorker', 'background'),
-            [buildEntrypoint('videoTranscriptionWorker')],
-        ];
-        const before = [...groups];
-        groupModuleWorkers(groups);
-        expect(groups).toEqual(before);
-    });
-});
-
 function sourceBody(path: string): string {
     const source = readFileSync(resolve(PROJECT_ROOT, path), 'utf8');
     const header = source.match(/^\/\*\*[\s\S]*?\*\/\s*/u)?.[0];
     return header?.includes(`@file ${path}`) ? source.slice(header.length) : source;
 }
-
-describe('TTS worker entrypoint metadata isolation', () => {
-    it('WXT 的实际元数据转换移除 TTS 运行时导入，避免在 Node 中装载另一版 ONNX', async () => {
-        const transformUrl = pathToFileURL(resolve(dirname(createRequire(import.meta.url).resolve('wxt')), 'core/utils/transform.mjs')).href;
-        const {removeMainFunctionCode} = await import(/* @vite-ignore */ transformUrl) as {
-            removeMainFunctionCode(source: string): {code: string};
-        };
-        const source = sourceBody('entrypoints/localTtsWorker.ts');
-        const metadata = removeMainFunctionCode(source).code;
-        expect(metadata).toContain('defineUnlistedScript');
-        expect(metadata).not.toContain('startLocalTtsWorkerApp');
-        expect(metadata).not.toContain('@/src/app/offscreen/localTtsWorker');
-    });
-
-    it('真实入口保留静态导入，并在 main 调用时同步启动 Worker 一次', () => {
-        const source = sourceBody('entrypoints/localTtsWorker.ts');
-        expect(source).toContain("import {startLocalTtsWorkerApp} from '@/src/app/offscreen/localTtsWorker';");
-        const start = vi.fn();
-        const requireApp = vi.fn((path: string) => {
-            expect(path).toBe('@/src/app/offscreen/localTtsWorker');
-            return {startLocalTtsWorkerApp: start};
-        });
-        const exports: {default?: {main?: () => void}} = {};
-        const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
-        new Function('require', 'exports', 'defineUnlistedScript', compiled)(requireApp, exports, defineUnlistedScript);
-        expect(requireApp).toHaveBeenCalledOnce();
-        expect(start).not.toHaveBeenCalled();
-        expect(exports.default!.main!()).toBeUndefined();
-        expect(start).toHaveBeenCalledOnce();
-        expect(start).toHaveBeenCalledWith();
-    });
-});
 
 function permissionsFor(browser: string, manifestVersion: 2 | 3): string[] {
     const manifest = createExtensionManifest({browser, manifestVersion} as Parameters<typeof createExtensionManifest>[0]);
@@ -1173,8 +1053,8 @@ function permissionsFor(browser: string, manifestVersion: 2 | 3): string[] {
 }
 
 describe('extension manifest capability contract', () => {
-    it.each(['chrome', 'firefox', 'edge'] as const)('%s 安装名称使用浏览器本地化 metadata，不复用技术包名', (browser) => {
-        const manifest = createExtensionManifest({browser, manifestVersion: browser === 'firefox' ? 2 : 3});
+    it.each(['chrome', 'safari'] as const)('%s 安装名称使用浏览器本地化 metadata，不复用技术包名', (browser) => {
+        const manifest = createExtensionManifest({browser, manifestVersion: browser === 'safari' ? 2 : 3});
         expect(manifest.name).toBe('__MSG_extensionName__');
         expect(manifest.description).toBe('__MSG_extensionDescription__');
         expect(manifest.default_locale).toBe('en');
@@ -1188,46 +1068,12 @@ describe('extension manifest capability contract', () => {
         const digest = createHash('sha256').update(Buffer.from(GOOGLE_DRIVE_EXTENSION_PUBLIC_KEY, 'base64')).digest('hex').slice(0, 32);
         expect([...digest].map(value => String.fromCharCode(97 + parseInt(value, 16))).join('')).toBe(GOOGLE_DRIVE_EXTENSION_ID);
         expect(permissionsFor('chrome', 3).filter(permission => permission === 'identity')).toHaveLength(1);
-        for (const browser of ['edge', 'firefox', 'safari']) {
-            const manifest = createExtensionManifest({browser, manifestVersion: browser === 'firefox' ? 2 : 3});
+        for (const browser of ['safari']) {
+            const manifest = createExtensionManifest({browser, manifestVersion: 2});
             expect(manifest.oauth2).toBeUndefined(); expect(manifest.key).toBeUndefined();
             expect(manifest.permissions).not.toContain('identity');
         }
     });
-    it('builds a separate Thunderbird package with mail display access and no browser page injection', async () => {
-        const packageUrl = pathToFileURL(resolve(PROJECT_ROOT, 'scripts/thunderbird/package.mjs')).href;
-        const {createThunderbirdManifest} = await import(/* @vite-ignore */ packageUrl) as {
-            createThunderbirdManifest(source: any): any;
-        };
-        const firefox = {
-            manifest_version: 2,
-            name: 'FluentRead',
-            version: '0.0.35',
-            background: {scripts: ['background.js']},
-            permissions: ['storage', '<all_urls>'],
-            browser_specific_settings: {gecko: {
-                id: '{3096bd53-3bda-4556-b076-ebf47442a5c1}',
-                strict_min_version: '140.0',
-                data_collection_permissions: {required: ['websiteContent']},
-            }},
-            content_scripts: [{matches: ['<all_urls>'], js: ['content-scripts/content.js']}],
-        };
-        const mail = createThunderbirdManifest(firefox);
-        expect(mail.manifest_version).toBe(2);
-        expect(mail.background).toEqual(firefox.background);
-        expect(mail.content_scripts).toBeUndefined();
-        expect(mail.permissions).toContain('messagesModify');
-        expect(mail.permissions).not.toContain('contextMenus');
-        expect(mail.permissions.filter((permission: string) => permission === 'messagesModify')).toHaveLength(1);
-        expect(mail.browser_specific_settings.gecko.id).not.toBe(firefox.browser_specific_settings.gecko.id);
-        expect(mail.browser_specific_settings.gecko.strict_min_version).toBe('140.0');
-        expect(mail.browser_specific_settings.gecko.data_collection_permissions).toBeUndefined();
-        expect(mail.message_display_action.default_icon['16']).toBe('icon/16.png');
-        expect(firefox.content_scripts).toHaveLength(1);
-        expect(() => createThunderbirdManifest({...firefox, manifest_version: 3})).toThrow('MV2');
-        expect(() => createThunderbirdManifest({...firefox, browser_specific_settings: {}})).toThrow('Gecko');
-    });
-
     it('旧 QQ 与受限正文共用子 frame 入口，通用网页仍保持顶层注入', () => {
         const entry = sourceBody('entrypoints/supportedFrame.content.ts');
         expect(entry).toContain("'https://mail.qq.com/cgi-bin/readmail*'");
@@ -1260,21 +1106,17 @@ describe('extension manifest capability contract', () => {
     it('declares the literal all-URLs host permission required by captureVisibleTab', () => {
         for (const [browser, manifestVersion] of [
             ['chrome', 3],
-            ['edge', 3],
-            ['firefox', 2],
+            ['safari', 2],
         ] as const) {
             const manifest = createExtensionManifest({browser, manifestVersion} as Parameters<typeof createExtensionManifest>[0]);
             expect(manifest.host_permissions, `${browser}-mv${manifestVersion}`).toContain('<all_urls>');
         }
     });
 
-    it('declares Offscreen exactly once only for supported Chrome and Edge MV3 builds', () => {
+    it('declares Offscreen exactly once only for supported Chrome MV3 builds', () => {
         for (const [browser, manifestVersion, expected] of [
             ['chrome', 3, 1],
-            ['edge', 3, 1],
             ['chrome', 2, 0],
-            ['firefox', 2, 0],
-            ['firefox', 3, 0],
             ['opera', 3, 0],
         ] as const) {
             const permissions = permissionsFor(browser, manifestVersion);
@@ -1305,22 +1147,6 @@ describe('extension manifest capability contract', () => {
         expect(source).toContain('manifest: createExtensionManifest');
         expect(source).toContain("...(capabilities.offscreenDocument ? ['offscreen'] : [])");
         expect(source).not.toContain("permissions: ['storage', 'alarms', 'contextMenus', 'offscreen']");
-    });
-
-    it('只给 Firefox 声明稳定 AMO 身份、最低版本和准确的数据传输分类', () => {
-        const firefox = createExtensionManifest({browser: 'firefox', manifestVersion: 2} as never) as any;
-        const chrome = createExtensionManifest({browser: 'chrome', manifestVersion: 3} as never) as any;
-
-        expect(firefox.browser_specific_settings?.gecko).toEqual({
-            id: '{3096bd53-3bda-4556-b076-ebf47442a5c1}',
-            strict_min_version: '140.0',
-            data_collection_permissions: {
-                required: ['websiteContent', 'authenticationInfo', 'personalCommunications'],
-            },
-        });
-        expect(chrome.browser_specific_settings).toBeUndefined();
-        // 不为消除 Android 最低版本提示而未经设备验收就声明移动端支持。
-        expect(firefox.browser_specific_settings?.gecko_android).toBeUndefined();
     });
 
     it('固定发布包英文名称，并为 Firefox 保留共享 OCR 资产', () => {
@@ -1364,21 +1190,6 @@ describe('extension manifest capability contract', () => {
             '-0.0.35-firefox.zip',
             'legacy-v0.0.35-sources.zip',
         ]);
-    });
-
-    it('从任意 YouTube 起始页预注入 timedtext bridge，但不扩大到非 YouTube 站点', () => {
-        const source = sourceBody('entrypoints/youtubeBridge.content.ts');
-        const matches = [...source.matchAll(/['"](\*:\/\/[^'"]+)['"]/gu)].map((match) => match[1]);
-
-        expect(matches).toEqual([
-            '*://*.youtube.com/*',
-            '*://youtube.com/*',
-        ]);
-        expect(source).toContain("runAt: 'document_start'");
-        expect(source).toContain("world: 'MAIN'");
-        expect(matches).not.toContain('*://*/*');
-        expect(matches.some((match) => match.includes('youtube-nocookie'))).toBe(false);
-        expect(matches.every((match) => match.includes('youtube'))).toBe(true);
     });
 
     it('网页及扩展 UI 构建组使用远程配置存储，后台和未知入口保留完整运行时', () => {

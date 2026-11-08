@@ -7,7 +7,6 @@
 import {resolveContextMenuPresentation, type ContextMenuPlanItem} from '@/src/core/context-menu/domain';
 import {config} from '@/src/services/config/store';
 import {isExtensionDisabledOnSite} from '@/src/core/site-rules/domain';
-import {getPdfSourceUrl} from '@/src/features/document-translation/core/pdfSource';
 import {runContextMenuAction, type ContextMenuClickInfo, type ContextMenuClickTab} from './contextMenuActions';
 import {reportContextMenuFailure} from './contextMenuFeedback';
 import {withContextMenuDeadline} from './contextMenuDelivery';
@@ -42,10 +41,8 @@ export function createContextMenuClickHandler({ready, getSettings, getPlan, tabT
                 : tabTranslationStates.get(tabId).isSiteDisabled;
             const execute = async (): Promise<void> => {
                 if (!currentDocument() || snapshot !== getSettings() || items !== getPlan()) return;
-                const isPdf = item.action === 'translatePage'
-                    && [info.pageUrl, tab.url].some(url => getPdfSourceUrl(url || '') !== null);
-                // 选区、图片、圈选和 PDF 不依赖顶层全文状态；嵌入 frame 不应多等一次无关查询。
-                const state = item.action === 'translatePage' && !isPdf && !siteDisabled()
+                // 选区不依赖顶层全文状态；嵌入 frame 不应多等一次无关查询。
+                const state = item.action === 'translatePage' && !siteDisabled()
                     ? await withContextMenuDeadline(readTabTranslationState(tabId, true), 3_000)
                     : tabTranslationStates.get(tabId);
                 if (!currentDocument() || snapshot !== getSettings() || items !== getPlan()) return;

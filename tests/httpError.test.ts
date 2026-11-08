@@ -90,38 +90,8 @@ it('preserves bounded Retry-After durations without reflecting raw headers', () 
     } finally { vi.restoreAllMocks(); }
 });
 
-it('图片输入错误正文过大时限量分类，不等待第三方响应完成', async () => {
-    let controller!: ReadableStreamDefaultController<Uint8Array>;
-    const body = new ReadableStream<Uint8Array>({start(stream) {controller = stream; stream.enqueue(new Uint8Array(128 * 1024));}});
-    const response = new Response(body, {status: 400});
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-        const {createImageInputHttpError} = await import('@/src/platform/http/errors');
-        const outcome = await Promise.race([
-            createImageInputHttpError(response),
-            new Promise<'unsettled'>(resolve => {timer = setTimeout(() => resolve('unsettled'), 300);}),
-        ]);
-        expect(outcome).toMatchObject({statusCode: 400});
-    } finally {clearTimeout(timer); controller.close();}
-});
 
-it.each([400, 422])('图片不支持的短错误 %s 仍能识别，原始正文可供 SDK 读取', async status => {
-    const {createImageInputHttpError} = await import('@/src/platform/http/errors');
-    const text = JSON.stringify({error: {message: 'image_url is not supported by this model'}});
-    const response = new Response(text, {status});
-    const error = await createImageInputHttpError(response, '请求失败');
-    expect(error).toMatchObject({statusCode: status, imageInputUnsupported: true});
-    expect(response.bodyUsed).toBe(false); expect(await response.text()).toBe(text);
-});
 
-it('超限内容不猜测能力，原始正文仍可读取且不会泄露到错误中', async () => {
-    const {createImageInputHttpError} = await import('@/src/platform/http/errors');
-    const text = JSON.stringify({padding: 'SENSITIVE_SENTINEL'.repeat(2500), message: 'image_url is not supported by this model'});
-    const response = new Response(text, {status: 400});
-    const error = await createImageInputHttpError(response);
-    expect(error).toMatchObject({statusCode: 400}); expect(error).not.toHaveProperty('imageInputUnsupported');
-    expect(error.message).not.toContain('SENSITIVE_SENTINEL'); expect(await response.text()).toBe(text);
-});
 
 it('错误正文停滞时一秒内按 HTTP 状态返回，非阻塞取消读锁且消费迟到拒绝', async () => {
     vi.useFakeTimers();
@@ -150,19 +120,6 @@ it('无正文、无关状态、克隆失败和无效 JSON 均只保留安全状�
     expect(clone).toHaveBeenCalledOnce();
 });
 
-it.each([32_768, 32_769])('多块正文 %s 字节严格按阈值分类，不消耗原流', async length => {
-    const {createImageInputHttpError} = await import('@/src/platform/http/errors');
-    const prefix = '{"message":"image_url is not supported by this model","padding":"';
-    const suffix = '"}';
-    const text = prefix + 'a'.repeat(length - prefix.length - suffix.length) + suffix;
-    const bytes = new TextEncoder().encode(text);
-    const body = new ReadableStream<Uint8Array>({start(stream) {
-        stream.enqueue(bytes.subarray(0, 13_000)); stream.enqueue(bytes.subarray(13_000)); stream.close();
-    }});
-    const response = new Response(body, {status: 400}); const error = await createImageInputHttpError(response);
-    expect(Boolean((error as Error & {imageInputUnsupported?: boolean}).imageInputUnsupported)).toBe(length === 32_768);
-    expect(await response.text()).toBe(text);
-});
 
 it('第三方读取失败与同步取消异常不会覆盖状态，始终尝试释放锁', async () => {
     const {createImageInputHttpError} = await import('@/src/platform/http/errors');

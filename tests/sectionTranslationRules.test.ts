@@ -63,16 +63,15 @@ describe('局部区域规则的输入与迁移边界', () => {
 
     it('校验返回字段位置，不修正错误自动模式或损坏定位', () => {
         expect(validateSectionTranslationRule(rule())).toBe('');
-        expect(validateSectionTranslationRule(rule({profileId: 'quick-1'}))).toBe('');
-        for (const [patch, field] of [[null, 'id'], [{id: ''}, 'id'], [{enabled: 'true'}, 'enabled'], [{site: '*.com'}, 'site'], [{selectors: []}, 'selectors'], [{selectors: Array(17).fill(['#a'])}, 'selectors'], [{selectors: [['body']]}, 'selectors'], [{mode: 'sometimes'}, 'mode'], [{profileId: ''}, 'profile']] as const) {
+        for (const [patch, field] of [[null, 'id'], [{id: ''}, 'id'], [{enabled: 'true'}, 'enabled'], [{site: '*.com'}, 'site'], [{selectors: []}, 'selectors'], [{selectors: Array(17).fill(['#a'])}, 'selectors'], [{selectors: [['body']]}, 'selectors'], [{mode: 'sometimes'}, 'mode']] as const) {
             expect(validateSectionTranslationRule(patch === null ? null : {...rule(), ...patch})).toBe(field);
         }
     });
 
     it('只保留白名单、去重规则和路径，克隆数组并限制数量', () => {
-        const input = {...rule({site: 'EXAMPLE.com/docs///', profileId: 'quick-1'}), token: 'hidden', request: {apiKey: 'hidden'}, selectors: [[' #comments '], [' #comments ']]};
+        const input = {...rule({site: 'EXAMPLE.com/docs///'}), token: 'hidden', request: {apiKey: 'hidden'}, selectors: [[' #comments '], [' #comments ']]};
         const normalized = normalizeSectionTranslationRules([null, input, {...rule(), site: 'example.com/other/'}]);
-        expect(normalized).toEqual([rule({site: 'example.com/docs/', profileId: 'quick-1', selectors: [['#comments']]})]);
+        expect(normalized).toEqual([rule({site: 'example.com/docs/', selectors: [['#comments']]})]);
         normalized[0].selectors[0][0] = '#changed';
         expect(input.selectors[0][0]).toBe(' #comments ');
         expect(normalizeSectionTranslationRules({})).toEqual([]);

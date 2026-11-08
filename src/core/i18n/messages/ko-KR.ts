@@ -5,16 +5,12 @@
  * 主要内容：保持语言名称使用各自原生写法，并为尚未 key 化的旧 UI 提供韩语映射。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入或翻译结果。
  */
-import videoLearningText from './video-learning/ko-KR.json';
 import selfHelpText from './self-help/ko-KR.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
 import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesKoreanMessages} from './sectionTranslationRulesAsian';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/ko-KR.json';
 import settingsCopyText from './settings-copy/ko-KR.json';
 import brandTaglines from './brand-taglines.json';
 import googleDriveText from './google-drive/ko-KR.json';
@@ -25,11 +21,8 @@ import {legacyTextOverrides} from './legacy-overrides';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsKoreanMessages} from './localTts';
 import {translationStatsKoreanMessages} from './translationStats';
-import {localTranslationKoreanMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -38,16 +31,11 @@ export const koKRMessages = {
     "feedback.serviceHint": "선택한 서비스의 연결 또는 모델 설정을 확인한 후 다시 시도하세요.",
     "feedback.retryHint": "잠시 후 다시 시도하세요. 원문과 현재 선택 영역은 유지됩니다.",
     ...countForms['ko-KR'],
-    ...personalCorrectionMessages['ko-KR'],
     "document.config.loadFailed": "설정을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.",
     "popup.compact.translate": "번역",
     "popup.compact.restore": "복원",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['ko-KR'],
-    ...pdfReadingMessages['ko-KR'],
-    ...informationHighlightMessages['ko-KR'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "출처 요청 헤더 제거",
     "settings.headers.help": "기본 목록은 비어 있습니다. 모든 서비스에서 공유되며 FluentRead가 정확히 일치하는 도메인으로 보내는 요청에만 적용됩니다. 하위 도메인은 별도로 추가하세요. 항목을 삭제하거나 체크를 해제하면 기본 동작으로 돌아갑니다.",
@@ -413,7 +401,6 @@ export const koKRMessages = {
     "settings.excludedLanguages.hint": "다음 번역부터 적용됩니다. 짧은 텍스트나 언어를 식별할 수 없는 내용은 계속 번역합니다.",
     "options.userscriptUnavailableTitle": "유저스크립트에서 사용할 수 없음",
     "options.userscriptUnavailableDescription": "이 기능에는 브라우저 확장 프로그램의 실행 환경이 필요합니다. FluentRead 확장 프로그램을 설치해 사용하세요.",
-    ...localTtsKoreanMessages,
     ...translationStatsKoreanMessages,
     "settings.services.library.freeReady": "API 키 없이 사용 가능한 무료 서비스를 자동으로 선택합니다.",
     "settings.services.library.keepOne": "서비스를 하나 이상 활성화해 두세요.",
@@ -556,7 +543,6 @@ export const koKRMessages = {
     "writing.demo.reviewHint": "대화를 참고하여 초안을 작성합니다. 내용을 검토하고 수정할 수 있습니다.",
     "writing.demo.insertHint": "초안이 답장 입력란에 삽입되었습니다. 확인 후 직접 전송하세요.",
 
-    ...localTranslationKoreanMessages,
     "settings.requestLimits.modelTitle": "모델 요청 제한",
     "settings.requestLimits.globalTitle": "요청 제한",
     "settings.requestLimits.globalHelp": "개별 설정이 없는 서비스와 모델은 이 제한을 공유합니다.",

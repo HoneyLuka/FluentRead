@@ -58,45 +58,34 @@ import {
   CONTEXT_MENU_ENTRIES,
   type ContextMenuActionId,
 } from '@/src/core/context-menu/domain';
-import { browserCapabilities } from '@/src/platform/browser/capabilities';
 import type { Config } from '@/src/core/config/model';
 import { useUiI18n } from '@/src/ui/i18n';
 
 const props = withDefaults(defineProps<{config: Config; active?: boolean}>(), {active: true});
-const {active, capture} = useSettingsActionContext(() => props.active, () => [props.config, props.config.contextMenuEnabled, props.config.selectionTranslatorMode, props.config.disableSelectionTranslator, props.config.selectionAreaEnabled, props.config.disableImageTranslator, browserCapabilities.imageTranslation, browserCapabilities.areaTranslation]);
+const {active, capture} = useSettingsActionContext(() => props.active, () => [props.config, props.config.contextMenuEnabled, props.config.selectionTranslatorMode, props.config.disableSelectionTranslator]);
 const masterChange = computed(() => {const current = capture();return (value: unknown) => {if (current() && typeof value === 'boolean') props.config.contextMenuEnabled = value};});
 const config = computed(() => props.config);
 const { t } = useUiI18n();
-const iconUrl = globalThis.__FLUENTREAD_ICON_DATA__ || '/icon/16.png';
+const iconUrl = '/icon/16.png';
 
 // 每个入口先说明“什么时候会看到它”，再说明它做什么；不可用时补上前置条件，避免只能靠猜。
 const ENTRY_COPY: Readonly<Record<ContextMenuActionId, {label: string; description: string; unavailable: string}>> = {
   translateSelection: {label: 'contextMenu.translateSelection', description: 'contextMenuSettings.selectionDescription', unavailable: 'contextMenuSettings.selectionUnavailable'},
   translatePage: {label: 'contextMenu.translatePage', description: 'contextMenuSettings.pageDescription', unavailable: ''},
-  translateImage: {label: 'contextMenu.translateImage', description: 'contextMenuSettings.imageDescription', unavailable: 'contextMenuSettings.imageUnavailable'},
-  translateArea: {label: 'contextMenu.translateArea', description: 'contextMenuSettings.areaDescription', unavailable: 'contextMenuSettings.areaUnavailable'},
   toggleSite: {label: 'contextMenuSettings.siteToggle', description: 'contextMenuSettings.siteToggleDescription', unavailable: ''},
 };
 
 function isAvailable(id: ContextMenuActionId): boolean {
   if (id === 'translateSelection') return config.value.selectionTranslatorMode !== 'disabled' && config.value.disableSelectionTranslator !== true;
-  if (id === 'translateArea') return browserCapabilities.areaTranslation && config.value.selectionAreaEnabled === true;
-  if (id === 'translateImage') return browserCapabilities.imageTranslation && config.value.disableImageTranslator !== true;
   return true;
 }
 
 function readEntryPreference(id: ContextMenuActionId, defaultEnabled: boolean): boolean {
-  // 图片入口与图片翻译设置共用同一个开关，避免同一件事出现两个互相矛盾的选项。
-  if (id === 'translateImage') return config.value.imageTranslationContextMenuEnabled !== false;
   return config.value.contextMenuEntries?.[id] ?? defaultEnabled;
 }
 
 function writeEntryPreference(id: ContextMenuActionId, value: unknown): void {
   if (!active.value || !config.value.contextMenuEnabled || typeof value !== 'boolean' || !CONTEXT_MENU_ENTRIES.some(entry => entry.id === id) || !isAvailable(id)) return;
-  if (id === 'translateImage') {
-    config.value.imageTranslationContextMenuEnabled = value;
-    return;
-  }
   config.value.contextMenuEntries = {...config.value.contextMenuEntries, [id]: value};
 }
 

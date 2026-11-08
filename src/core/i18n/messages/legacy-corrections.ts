@@ -6,12 +6,6 @@
  */
 import type {RegisteredUiLanguage} from '../types';
 import {createSiteRuleText} from './siteRules';
-import reencounterEnUS from './reencounter/en-US.json';
-import reencounterJaJP from './reencounter/ja-JP.json';
-import reencounterKoKR from './reencounter/ko-KR.json';
-import reencounterFrFR from './reencounter/fr-FR.json';
-import reencounterRuRU from './reencounter/ru-RU.json';
-import reencounterEsES from './reencounter/es-ES.json';
 
 /** 中文原文，随后依次为 English、日本語、한국어、Français、Русский、Español。 */
 type LegacyCorrectionRow = readonly [source: string, enUS: string, jaJP: string, koKR: string, frFR: string, ruRU: string, esES: string];
@@ -35,7 +29,6 @@ export const correctionRows: readonly LegacyCorrectionRow[] = [
     ["未点中文字，请点击终点", "No text was clicked. Click the end of the text", "テキスト上をクリックしていません。終点をクリックしてください", "텍스트를 클릭하지 못했습니다. 끝점을 클릭하세요", "Aucun texte à cet endroit. Cliquez sur la fin du texte", "Вы не попали по тексту. Щёлкните конец текста", "No has hecho clic en el texto. Haz clic en el final del texto"],
     ["起点与终点相同，请换一个位置", "Start and end are the same. Choose another position", "始点と終点が同じです。別の位置を選んでください", "시작점과 끝점이 같습니다. 다른 위치를 선택하세요", "Le début et la fin sont identiques. Choisissez une autre position", "Начало и конец совпадают. Выберите другую позицию", "El inicio y el final coinciden. Elige otra posición"],
     // 内容挂载器仍发送旧错误字符串；精确别名复用语义资源，避免反馈边界维护第二份译文。
-    ['收藏暂时无法读取', reencounterEnUS['reencounter.readFailed'], reencounterJaJP['reencounter.readFailed'], reencounterKoKR['reencounter.readFailed'], reencounterFrFR['reencounter.readFailed'], reencounterRuRU['reencounter.readFailed'], reencounterEsES['reencounter.readFailed']],
     // 个人校订、免费基础讲解与阅读失败恢复的现用界面文案。
     ["已保存的校订", "Saved corrections", "保存済みの校訂", "저장한 교정", "Corrections enregistrées", "Сохранённые исправления", "Correcciones guardadas"],
     ["关闭校订", "Close correction", "校訂を閉じる", "교정 닫기", "Fermer la correction", "Закрыть исправление", "Cerrar la corrección"],

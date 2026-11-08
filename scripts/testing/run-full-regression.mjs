@@ -84,20 +84,6 @@ const LOCAL_BROWSER_FIXTURES = [
         supportsHeaded: false,
     },
     {
-        id: 'video-subtitle-fixture',
-        label: 'video subtitle fixture browser regression',
-        script: 'scripts/run-video-subtitle-fixture-test.cjs',
-        backgroundArgs: ['--background'],
-        supportsHeaded: false,
-    },
-    {
-        id: 'document-translation',
-        label: 'document translation browser regression',
-        script: 'scripts/run-document-translation-test.cjs',
-        backgroundArgs: ['--background', 'true'],
-        supportsHeaded: false,
-    },
-    {
         id: 'settings-center-ui',
         label: 'settings center UI browser regression',
         script: 'scripts/testing/run-settings-center-ui-test.cjs',
@@ -119,20 +105,12 @@ const LOCAL_BROWSER_FIXTURES = [
         backgroundArgs: ['--background'],
         supportsHeaded: true,
     },
-    {
-        id: 'userscript-smoke',
-        label: 'userscript browser smoke regression',
-        script: 'scripts/run-userscript-smoke-test.cjs',
-        artifact: '.output/userscript/fluent-read.user.js',
-        backgroundArgs: ['--background'],
-        supportsHeaded: true,
-    },
 ];
 
 const NETWORK_MATRIX = {
     id: 'site-translation-matrix',
     label: 'site translation network matrix',
-    script: 'scripts/run-site-translation-matrix.cjs',
+    script: 'scripts/run-site-translation-test.cjs',
     backgroundArgs: ['--background'],
     supportsHeaded: true,
 };
@@ -141,7 +119,7 @@ function printUsage() {
     console.log([
         '用法: node scripts/testing/run-full-regression.mjs [--dry-run] [--browser] [--network --allow-network] [options]',
         '',
-        '默认/local 只执行确定性流水线：audit、prepare、compile、完整 Vitest 与 strict coverage 单轮、Chrome/Firefox/userscript build、docs/Storybook typecheck、build 与产物校验。',
+        '默认/local 只执行确定性流水线：audit、prepare、compile、完整 Vitest 与 strict coverage 单轮、Chrome build、docs/Storybook typecheck、build 与产物校验。',
         '',
         '显式门禁：',
         '  --browser                 追加本地真实浏览器 fixtures。',
@@ -338,44 +316,12 @@ function deterministicSteps(options) {
             dependsOn: ['wxt-prepare'],
         }),
         step({
-            id: 'firefox-build',
-            phase: 'local',
-            label: 'firefox build',
-            command: 'pnpm',
-            args: ['build:firefox'],
-            dependsOn: ['wxt-prepare'],
-        }),
-        step({
-            id: 'firefox-zip',
-            phase: 'local',
-            label: 'firefox release archives',
-            command: 'pnpm',
-            args: ['zip:firefox'],
-            dependsOn: ['wxt-prepare'],
-        }),
-        step({
             id: 'extension-manifest-verifier',
             phase: 'local',
-            label: 'Chrome/Firefox manifest capability verifier',
+            label: 'Chrome manifest capability verifier',
             command: 'node',
-            args: ['scripts/testing/verify-extension-manifests.mjs', '--require-firefox-archives'],
-            dependsOn: ['chrome-build', 'firefox-zip'],
-        }),
-        step({
-            id: 'userscript-build',
-            phase: 'local',
-            label: 'userscript build',
-            command: 'pnpm',
-            args: ['build:userscript'],
-            dependsOn: ['wxt-prepare'],
-        }),
-        step({
-            id: 'userscript-verifier',
-            phase: 'local',
-            label: 'userscript verifier',
-            command: 'node',
-            args: ['scripts/verify-userscript-build.mjs'],
-            dependsOn: ['userscript-build'],
+            args: ['scripts/testing/verify-extension-manifests.mjs'],
+            dependsOn: ['chrome-build'],
         }),
         step({
             id: 'docs-typecheck',
@@ -475,7 +421,7 @@ function browserSteps(options) {
         command: 'node',
         args: browserFixtureArgs(fixture, options),
         gates: ['--browser'],
-        dependsOn: fixture.artifact ? ['userscript-build', 'userscript-verifier'] : ['chrome-build'],
+        dependsOn: ['chrome-build'],
         policy: {
             ...browserPolicy(fixture, options),
             artifactsDir: path.join(options.artifactsDir, fixture.id),

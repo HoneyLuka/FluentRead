@@ -1,13 +1,11 @@
 /**
  * @file src/app/background/tabBroadcast.ts
  * 文件职责：为后台无值变更通知选择实际内容脚本接收者，避免 Safari 的全标签查询触发额外站点授权。
- * 主要内容：由可信配置读取发送方登记标签，Safari 仅在 storage.session 保存整数标签 ID，以串行队列合并后台唤醒、并发登记、关闭及存储重试；五种失效意图按可取消安装所有者在内存合并，其他浏览器保留原标签查询。
+ * 主要内容：由可信配置读取发送方登记标签，Safari 仅在 storage.session 保存整数标签 ID，以串行队列合并后台唤醒、并发登记、关闭及存储重试；失效意图按可取消安装所有者在内存合并，其他浏览器保留原标签查询。
  * 模块边界：不存储 URL、正文或凭据，不按顶层网址或 TTL 丢弃接收者，不建立端口或定时器；真实浏览器事件和会话存储由 composition root 注入。
  */
 import {CONFIG_STORAGE_CHANGED_MESSAGE} from '@/src/platform/storage/configStorage';
 import {TRANSLATION_CACHE_CLEARED_MESSAGE} from './handlers/translationCache';
-import {VOCABULARY_BOOK_CHANGED_MESSAGE, type VocabularyBookChangedMessage} from '@/src/features/vocabulary/protocol';
-import {PERSONAL_CORRECTIONS_CHANGED} from '@/src/services/personal-corrections/protocol';
 
 export const TAB_BROADCAST_SESSION_KEY = 'fluentReadBroadcastRecipientTabIds' as const;
 export interface TabBroadcastSender {id?: string; url?: string; tab?: {id?: number}}
@@ -28,20 +26,13 @@ export interface TabBroadcastDependencies {
     writeSessionRecipients(tabIds: number[]): Promise<void>;
     warn(message: string): void;
 }
-type Invalidation = {type: string; key?: 'local:config'; reason?: VocabularyBookChangedMessage['reason']; entryId?: string};
+type Invalidation = {type: string; key?: 'local:config'};
 interface InvalidationOwner {message: Invalidation; sequence: number; signal?: AbortSignal; waiters: Array<() => void>}
-const VOCABULARY_REASONS = new Set<VocabularyBookChangedMessage['reason']>([
-    'upsert', 'note', 'review', 'manual-mastered', 'relearn', 'remove', 'undo', 'clear', 'import',
-]);
 function invalidationIntent(message: unknown): Invalidation {
     if (message && typeof message === 'object' && !Array.isArray(message)) {
-        const {type, key, reason, entryId} = message as {type?: unknown; key?: unknown; reason?: unknown; entryId?: unknown};
+        const {type, key} = message as {type?: unknown; key?: unknown};
         if (type === CONFIG_STORAGE_CHANGED_MESSAGE && key === 'local:config') return {type, key};
-        if (type === 'fluentReadReadingModelInputsChanged' || type === TRANSLATION_CACHE_CLEARED_MESSAGE
-            || type === PERSONAL_CORRECTIONS_CHANGED) return {type};
-        if (type === VOCABULARY_BOOK_CHANGED_MESSAGE && VOCABULARY_REASONS.has(reason as VocabularyBookChangedMessage['reason'])) {
-            return {type, reason: reason as VocabularyBookChangedMessage['reason'], ...(typeof entryId === 'string' ? {entryId} : {})};
-        }
+        if (type === TRANSLATION_CACHE_CLEARED_MESSAGE) return {type};
     }
     throw new TypeError('不支持的网页失效通知');
 }

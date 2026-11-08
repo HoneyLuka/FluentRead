@@ -22,7 +22,6 @@ import {
 import {configStorage} from '@/src/platform/storage/configStorageRuntime';
 import type {BackgroundMessageHandler} from '@/src/services/messaging/backgroundRouter';
 import {createGoogleDriveSyncRuntime} from './googleDriveSyncRuntime';
-import {createWebDavBackupRuntime} from './webDavBackupRuntime';
 import {createConfigAutoBackupRestoreHandler} from './handlers/configAutoBackup';
 import {createConfigStorageReadHandler, createPopupStartupHandler} from './handlers/configStorage';
 import {createConfigCountIncrementHandler} from './handlers/configCount';
@@ -51,7 +50,6 @@ export function createConfigBackgroundHandlers<TContext extends ConfigPersistenc
     });
     return [
         createGoogleDriveSyncRuntime(mutations),
-        createWebDavBackupRuntime(mutations),
         createPopupStartupHandler({
             ready: configReady,
             getSetupCompleted: () => config.uiLanguageSetupCompleted,

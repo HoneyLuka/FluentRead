@@ -1,5 +1,3 @@
-import {readFileSync} from 'node:fs'
-import {resolve} from 'node:path'
 import {parseHTML} from 'linkedom'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 vi.mock('@/src/platform/browser/translationSidepanel', () => ({canOpenTranslationSidepanel: () => false}))
@@ -8,7 +6,6 @@ vi.mock('@/src/platform/browser/translationSidepanel', () => ({canOpenTranslatio
 import * as runtime from 'vue'
 import InterfaceSettings from '@/src/features/settings/ui/InterfaceSettings.vue'
 import PopupPreview from '@/src/features/settings/ui/components/PopupPreview.vue'
-import {popupQuickFeatureIconPaths} from '@/src/ui/popupQuickFeatureIcons'
 let document: Document, win: any, host: HTMLElement
 let app: import('vue').App, state: Record<string, any>
 let props: {config: Record<string, any>; active: boolean; activePanel?: string}, visible: import('vue').Ref<boolean>
@@ -27,7 +24,6 @@ vi.mock('@/src/features/settings/ui/components/SettingsGroup.vue', () => ({defau
 vi.mock('@/src/features/settings/ui/components/SettingsItem.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
 vi.mock('@/src/features/settings/ui/components/InterfaceSkinPreview.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
 vi.mock('@/src/features/settings/ui/components/PopupLayoutPreview.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
-vi.mock('@/src/features/settings/ui/VideoSentenceLearningAppearanceSettings.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
 vi.mock('@/src/features/settings/ui/TranslationLoadingStyleSettings.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
 vi.mock('@/src/features/settings/ui/TranslationStyleSettings.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
 vi.mock('@/src/features/settings/ui/SentenceHighlightStyleSettings.vue', () => ({default: {setup(_: unknown, {slots}: any) {return () => runtime.h('div', null, [slots.copy?.(), slots.default?.()])}}}))
@@ -82,9 +78,8 @@ beforeEach(async () => {
   props = runtime.reactive({active: true, config: {interfaceFont: 'inter', interfaceSkin: 'default',
     interfaceVisibility: {popupQuickFeatures: true, popupSiteRule: true, popupFooter: true},
     popupModuleOrder: ['translation', 'siteRule', 'quickFeatures', 'footer'],
-    popupQuickFeatureOrder: ['hover', 'selection', 'appearance', 'image', 'document', 'highlight'],
-    popupQuickFeatureVisibility: {hover: true, selection: true, appearance: false, image: true, document: true, highlight: true},
-    informationHighlight: {mode: 'surprisal-local', density: 'high', color: 'mint', style: 'underline'}}})
+    popupQuickFeatureOrder: ['hover', 'selection', 'appearance'],
+    popupQuickFeatureVisibility: {hover: true, selection: true, appearance: true}}})
   visible = runtime.ref(true);app = renderer.createApp({setup: () => () => runtime.h(runtime.KeepAlive, null, {default: () => visible.value
     ? runtime.h(component, {...props, ref: (vm: any) => {if (vm) state = vm.$.setupState}}) : runtime.h({render: () => null}, {key: 'other'})})})
   configure(app);host=mountPoint();app.mount(host);await settle()
@@ -152,14 +147,14 @@ describe('实际界面字体设置与所属确认', () => {
   it('布局修改只在所属界面生效；合法顺序和显隐仍按注册表归一化', async () => {
     props.active = false;await settle();const previous = JSON.stringify(props.config)
     state.setPopupModuleOrder(['footer']);state.setPopupModuleVisibility('quickFeatures', false)
-    state.setPopupQuickFeatureOrder(['image']);state.setPopupQuickFeatureVisibility('image', false)
+    state.setPopupQuickFeatureOrder(['appearance']);state.setPopupQuickFeatureVisibility('appearance', false)
     expect(JSON.stringify(props.config)).toBe(previous)
     props.active = true;props.activePanel = 'layout';await settle();state.setPopupModuleOrder(['footer', 'footer', 'unknown'])
-    state.setPopupModuleVisibility('quickFeatures', false);state.setPopupQuickFeatureOrder(['image', 'image', 'unknown'])
-    state.setPopupQuickFeatureVisibility('image', false)
+    state.setPopupModuleVisibility('quickFeatures', false);state.setPopupQuickFeatureOrder(['appearance', 'appearance', 'unknown'])
+    state.setPopupQuickFeatureVisibility('appearance', false)
     expect(props.config.popupModuleOrder[0]).toBe('footer');expect(props.config.popupModuleOrder).toHaveLength(4)
-    expect(props.config.interfaceVisibility.popupQuickFeatures).toBe(false);expect(props.config.popupQuickFeatureOrder).toHaveLength(5)
-    expect(props.config.popupQuickFeatureVisibility.image).toBe(false)
+    expect(props.config.interfaceVisibility.popupQuickFeatures).toBe(false);expect(props.config.popupQuickFeatureOrder).toHaveLength(3)
+    expect(props.config.popupQuickFeatureVisibility.appearance).toBe(false)
   })
   it('布局键盘导航在隐藏时不抢焦点，激活后支持方向键和 Home/End', async () => {
     const focus = [vi.fn(), vi.fn()], preventDefault = vi.fn()
@@ -201,18 +196,7 @@ describe('实际界面字体设置与所属确认', () => {
     state.selectInterfaceSkin('unknown');expect(props.config.interfaceSkin).toBe('compact')
     visible.value = false;await settle();state.handleSkinKeydown(key);expect(focus).not.toHaveBeenCalled()
   })
-  it('扩展和 userscript 的 Popup 布局均隐藏历史高亮入口，不写回非法 id 或改动阅读偏好', async () => {
-    expect(state.popupQuickFeatureEditorItems.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-    const saved = JSON.stringify(props.config)
-    state.setPopupQuickFeatureVisibility('highlight', false); expect(JSON.stringify(props.config)).toBe(saved)
-    capabilities.browser = 'userscript'; await settle()
-    expect(state.popupQuickFeatureEditorItems.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-    state.setPopupQuickFeatureVisibility('highlight', false)
-    expect(JSON.stringify(props.config)).toBe(saved)
-    capabilities.browser = 'chrome'; await settle()
-    expect(state.popupQuickFeatureEditorItems.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-  })
-  it('所有皮肤样例与传入布局都不预览已移除的高亮或未知入口，保留传入对象', async () => {
+  it('所有皮肤样例与传入布局都不预览未知入口，保留传入对象', async () => {
     const component = PopupPreview as runtime.Component
     let preview: Record<string, any> = {}
     const inputs = runtime.reactive({skin: {value: 'default'}, quickFeatures: undefined as undefined | {id: string; label: string}[]})
@@ -220,57 +204,13 @@ describe('实际界面字体设置与所属确认', () => {
     previewApp.provide(runtime.ssrContextKey, {modules: new Set<string>()}); previewApp.config.warnHandler = () => {}
     try {
       previewApp.mount(mountPoint()); await settle()
-      expect(preview.orderedQuickFeatures.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-      capabilities.browser = 'userscript'; await settle()
-      expect(preview.orderedQuickFeatures.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-      inputs.quickFeatures = [{id: 'highlight', label: 'Saved extension preference'}, {id: 'selection', label: 'Selection'}, {id: 'future', label: 'Unknown'}]; await settle()
+      expect(preview.orderedQuickFeatures.length).toBeGreaterThan(0)
+      inputs.quickFeatures = [{id: 'image', label: 'Removed feature preference'}, {id: 'selection', label: 'Selection'}, {id: 'future', label: 'Unknown'}]; await settle()
       expect(preview.orderedQuickFeatures.map((item: {id: string}) => item.id)).toEqual(['selection'])
-      capabilities.browser = 'chrome'; await settle()
-      expect(preview.orderedQuickFeatures.map((item: {id: string}) => item.id)).toEqual(['selection'])
-      expect(inputs.quickFeatures.map(item => item.id)).toEqual(['highlight', 'selection', 'future'])
+      expect(inputs.quickFeatures.map(item => item.id)).toEqual(['image', 'selection', 'future'])
     } finally {previewApp.unmount()}
   })
-  it('userscript 构建条件独立阻止高亮配置与预览，并移除专属图标数据', async () => {
-    app.unmount();vi.stubEnv('BROWSER','userscript')
-    const saved = JSON.stringify(props.config)
-    const component = InterfaceSettings as runtime.Component
-    app = createTestRenderer().createApp({setup: () => () => runtime.h(component, {...props, ref: (vm: any) => {if (vm) state = vm.$.setupState}})})
-    configure(app);host=mountPoint();app.mount(host);await settle()
-    expect(capabilities.browser).toBe('chrome')
-    expect(state.popupQuickFeatureEditorItems.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-    state.setPopupQuickFeatureVisibility('highlight', false); expect(JSON.stringify(props.config)).toBe(saved)
-    const previewComponent = PopupPreview as runtime.Component
-    let preview: Record<string, any> = {}
-    const previewApp = createTestRenderer().createApp({setup: () => () => runtime.h(previewComponent,
-      {skin: {value: 'default'}, ref: (vm: any) => {if (vm) preview = vm.$.setupState}})})
-    previewApp.provide(runtime.ssrContextKey, {modules: new Set<string>()}); previewApp.config.warnHandler = () => {}
-    try {
-      previewApp.mount(mountPoint()); await settle()
-      expect(preview.orderedQuickFeatures.some((item: {id: string}) => item.id === 'highlight')).toBe(false)
-      expect(popupQuickFeatureIconPaths).not.toHaveProperty('highlight')
-    } finally {previewApp.unmount()}
-  })
-  it.each(['missing', 'empty', 'embedded'] as const)('实际 Popup 预览图标 %s 时复用官方脚本资源或扩展回退', async kind => {
-    const original = Object.getOwnPropertyDescriptor(globalThis, '__FLUENTREAD_ICON_DATA__')
-    const officialIcon = `data:image/png;base64,${readFileSync(resolve(process.cwd(), 'public/icon/64.png')).toString('base64')}`
-    try {
-      if (kind === 'missing') delete globalThis.__FLUENTREAD_ICON_DATA__
-      else Object.defineProperty(globalThis, '__FLUENTREAD_ICON_DATA__', {configurable: true, writable: true, value: kind === 'empty' ? '' : officialIcon})
-      const component = PopupPreview as runtime.Component
-      const previewApp = createTestRenderer().createApp({render: () => runtime.h(component, {skin: {value: 'default'}})})
-      previewApp.config.warnHandler = () => {}
-      const root = mountPoint();previewApp.mount(root);await settle()
-      const logos = root.querySelectorAll('img.preview-logo')
-      expect(logos).toHaveLength(1)
-      expect(logos[0].getAttribute('src')).toBe(kind === 'embedded' ? officialIcon : '/icon/128.png')
-      expect(logos[0].getAttribute('width')).toBe('32')
-      expect(logos[0].getAttribute('height')).toBe('32')
-      previewApp.unmount()
-    } finally {
-      if (original) Object.defineProperty(globalThis, '__FLUENTREAD_ICON_DATA__', original)
-      else delete globalThis.__FLUENTREAD_ICON_DATA__
-    }
-  })
+
 })
 
 async function dispatchUi(node: Element, type: string, values: Record<string, unknown> = {}) {
@@ -325,10 +265,10 @@ it('drags actual module and feature cards using their geometry and rejects dragg
   await dispatchUi(last, 'drop', {dataTransfer: transfer, clientY: 30});expect(props.config.popupModuleOrder.at(-1)).toBe('translation');expect(modules.querySelector('.dragging')).toBeNull();
   await dispatchUi(last.querySelector('.popup-layout-hide')!, 'dragstart', {dataTransfer: transfer});expect(modules.querySelector('.dragging')).toBeNull();
   await dispatchUi(host.querySelector('#popup-layout-features-tab')!, 'click');
-  const features = host.querySelector('.popup-layout-editor--quickFeature')!, source = features.querySelector('[data-popup-quick-feature-layout="hover"]')!, target = features.querySelector('[data-popup-quick-feature-layout="image"]')!;
+  const features = host.querySelector('.popup-layout-editor--quickFeature')!, source = features.querySelector('[data-popup-quick-feature-layout="hover"]')!, target = features.querySelector('[data-popup-quick-feature-layout="appearance"]')!;
   Object.defineProperty(target, 'getBoundingClientRect', {value: () => geometry});
   await dispatchUi(source, 'dragstart', {dataTransfer: transfer});await dispatchUi(target, 'dragover', {dataTransfer: transfer, clientX: 80});await dispatchUi(target, 'drop', {dataTransfer: transfer, clientX: 80});
-  expect(props.config.popupQuickFeatureOrder).toEqual(['selection', 'image', 'appearance', 'hover', 'document']);
+  expect(props.config.popupQuickFeatureOrder).toEqual(['selection', 'appearance', 'hover']);
   await dispatchUi(source, 'dragstart', {dataTransfer: transfer});await dispatchUi(features, 'keydown', {key: 'Escape'});expect(features.querySelector('.dragging')).toBeNull();
   await dispatchUi(source, 'dragend');expect(features.querySelector('.dragging')).toBeNull();
 });

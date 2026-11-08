@@ -94,7 +94,7 @@ beforeEach(async () => {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('非 Safari 免费池不依赖权限策略', () => {
-    it.each(['chrome', 'firefox', 'userscript'])('%s 保留完整候选、连接检查与权重且不调用 Safari 权限端口', async browser => {
+    it.each(['chrome', 'firefox'])('%s 保留完整候选、连接检查与权重且不调用 Safari 权限端口', async browser => {
         vi.stubEnv('BROWSER', browser);
         const port = await import('@/src/platform/browser/freeProviderPermissions');
         const readAccess = vi.spyOn(port, 'readFreePoolAccess').mockRejectedValue(new Error('Safari-only permission port'));
@@ -647,27 +647,6 @@ describe('免费翻译服务', () => {
         await expect(settle(freeTranslation(withProviderSnapshot(request, mockConfig)))).resolves.toEqual(origins.map(target));
         expect(microsoftMock).toHaveBeenCalledOnce(); expect(googleOwnerMock).toHaveBeenCalledTimes(2); expect(googleMock).not.toHaveBeenCalled();
         expect((await getFreeTranslationWeightSnapshot(createTranslationProviderConfigSnapshot(providerConfigFixture(mockConfig)))).entries.find(entry => entry.providerId === 'microsoft')?.status).toBe('ready');
-    });
-
-    it.each(['missing', 'duplicate', 'foreign'])('文档强调标记被候选%s时在获胜前换线，恢复后仍为原始Markdown语法', async kind => {
-        mockConfig.freeTranslationOrder = ['youdaoFree', 'google'];
-        const {prepareGlossaryRequest} = await import('@/src/services/translation/glossaryProtection');
-        const {parseDocument, renderDocument} = await import('@/src/features/document-translation/core/document');
-        const document = parseDocument('sample.md', 'Translate this paragraph and keep **bold** text.', {markdownSentences: true});
-        const packet = prepareGlossaryRequest({origin: document.segments[0].source},
-            createTranslationProviderConfigSnapshot({...mockConfig, glossaryMatchContext: {context: 'document', sourceLanguage: 'en', targetLanguage: 'zh-hans'}} as unknown as TranslationConfigSource));
-        expect(readSnapshot(packet.message).glossaryProtectedTokens).toBeUndefined();
-        expect(packet.message.origin).toBe('Translate this paragraph and keep <g1>bold</g1> text.');
-        chineseMock.mockImplementation(async (_id: string, text: string) => `译文:${kind === 'missing' ? text.replace('<g1>', '')
-            : text + (kind === 'duplicate' ? '<g1>重复</g1>' : '<g2/>')}`);
-        // 此句是实际匿名 Transmart A/B 返回；单测复用记录值验证请求和 Markdown 恢复，网络证据另存 /private/tmp。
-        googleMock.mockResolvedValue('翻译这一段，并保留<g1>粗体</g1>文本。');
-        const result = await settle(freeTranslation(withProviderSnapshot(packet.message, mockConfig)));
-        expect(renderDocument(document, [packet.restore(result) as string], 'translated'))
-            .toBe('翻译这一段，并保留**粗体**文本。');
-        expect(chineseMock).toHaveBeenCalledOnce();
-        expect(googleMock).toHaveBeenCalledOnce();
-        expect((await getFreeTranslationWeightSnapshot(createTranslationProviderConfigSnapshot(providerConfigFixture(mockConfig)))).entries.find(entry => entry.providerId === 'youdaoFree')?.status).toBe('ready');
     });
 
     it('文档候选必须保留嵌套父子关系，并把合法全角和实体恢复为canonical标签', async () => {

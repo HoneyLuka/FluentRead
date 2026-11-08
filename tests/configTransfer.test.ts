@@ -77,15 +77,9 @@ describe('configuration transfer helpers', () => {
 
   it('简繁配置经导入、导出和再次导入后仍按独立语言保存', () => {
     const imported = prepareConfigForImport({
-      ...validConfig, from: 'zh-CN', to: 'zh-TW', inputBoxTranslationTarget: 'zh-HK',
-      translationCenterSourceLanguage: 'zh-Hans-TW', translationCenterTargetLanguage: 'zh-Hant-CN',
-      quickTranslationProfiles: [{id: 'traditional', action: 'hover', hotkey: 'Alt+T', targetLanguage: 'zh-MO'}],
+      ...validConfig, from: 'zh-CN', to: 'zh-TW',
     }, validConfig)
-    expect(imported).toMatchObject({
-      from: 'zh-Hans', to: 'zh-Hant', inputBoxTranslationTarget: 'zh-Hant',
-      translationCenterSourceLanguage: 'zh-Hans', translationCenterTargetLanguage: 'zh-Hant',
-      quickTranslationProfiles: [expect.objectContaining({targetLanguage: 'zh-Hant'})],
-    })
+    expect(imported).toMatchObject({from: 'zh-Hans', to: 'zh-Hant'})
     const exported = prepareConfigForExport(imported)
     expect(prepareConfigForImport(exported, validConfig)).toEqual(imported)
   })
@@ -252,11 +246,6 @@ describe('configuration transfer helpers', () => {
       from: 'en',
       to: 'ja',
       service: 'openai',
-      documentService: 'openai',
-      documentModel: {openai: 'document-model-sentinel'},
-      documentCustomModel: {openai: 'document-custom-model-sentinel'},
-      videoTranslationEnabled: true,
-      videoService: 'openai',
       token: {openai: 'schema-token-sentinel'},
       requireApiKey: {openai: true},
       appid: 'schema-appid-sentinel',
@@ -272,9 +261,6 @@ describe('configuration transfer helpers', () => {
       alwaysTranslateDomains: ['schema.example'],
       disabledExtensionDomains: ['disabled.example'],
       theme: 'dark',
-      translationCenterServices: ['openai'],
-      translationCenterSourceLanguage: 'en',
-      translationCenterTargetLanguage: 'ja',
       count: 73,
       persistCredentials: true,
     })
@@ -287,46 +273,11 @@ describe('configuration transfer helpers', () => {
     const target = normalizeConfig({...new Config(), count: 911, persistCredentials: false})
     const imported = prepareConfigForImport(exported, target)
     for (const key of Object.keys(source) as Array<keyof Config>) {
-      if (key === 'count' || key === 'videoServiceDefaultMigrated') continue
+      if (key === 'count') continue
       expect(imported[key], `字段 ${key} 未完成完整导出/导入往返`).toEqual(source[key])
     }
     expect(imported.count).toBe(target.count)
     expect(imported).not.toHaveProperty('persistCredentials')
-    expect(imported.videoServiceDefaultMigrated).toBe(target.videoServiceDefaultMigrated)
-  })
-
-  it('完整导出与旧公开配置文件都保留快捷翻译方案，并在导入时精确替换目标端方案', () => {
-    const source = normalizeConfig({
-      ...new Config(),
-      quickTranslationProfiles: [
-        {
-          id: 'hover-openai', enabled: true, action: 'hover', hotkey: 'Ctrl+T',
-          service: services.openai, model: 'quick-model', targetLanguage: 'ja',
-          displayMode: 'bilingual', fullPageMode: 'inherit',
-        },
-        {
-          id: 'page-default', enabled: true, action: 'full-page', hotkey: 'Ctrl+Y',
-          service: '', model: '', targetLanguage: '',
-          displayMode: 'translation-only', fullPageMode: 'all',
-        },
-      ],
-    })
-    const expected = source.quickTranslationProfiles
-    const fullExport = prepareConfigForExport(source)
-    const publicExport = publicConfigFile(source)
-    const current = normalizeConfig({
-      ...new Config(),
-      quickTranslationProfiles: [{
-        id: 'old', enabled: true, action: 'hover', hotkey: 'Alt+X',
-        service: services.microsoft, model: '', targetLanguage: 'en',
-        displayMode: 'inherit', fullPageMode: 'inherit',
-      }],
-    })
-
-    expect(fullExport.quickTranslationProfiles).toEqual(expected)
-    expect(publicExport.quickTranslationProfiles).toEqual(expected)
-    expect(isConfigImportValid(fullExport)).toBe(true)
-    expect(prepareConfigForImport(fullExport, current).quickTranslationProfiles).toEqual(expected)
   })
 
   it('完整备份精确替换凭据快照，不保留目标端多余 token、extra 或标量密钥', () => {
@@ -390,15 +341,14 @@ describe('configuration transfer helpers', () => {
   it('导入新版公开配置时保留当前已保存凭据并忽略旧策略字段', () => {
     const currentSecret = 'current-saved-secret'
     const prepared = prepareConfigForImport(
-      {...validConfig, to: 'ja', count: 1, persistCredentials: true, videoServiceDefaultMigrated: false},
-      {...validConfig, token: {openai: currentSecret}, count: 42, persistCredentials: false, videoServiceDefaultMigrated: true},
+      {...validConfig, to: 'ja', count: 1, persistCredentials: true},
+      {...validConfig, token: {openai: currentSecret}, count: 42, persistCredentials: false},
     )
 
     expect(prepared.to).toBe('ja')
     expect(prepared.token.openai).toBe(currentSecret)
     expect(prepared.count).toBe(42)
     expect(prepared).not.toHaveProperty('persistCredentials')
-    expect(prepared.videoServiceDefaultMigrated).toBe(true)
   })
 
   it('导入旧文件时迁移其中凭据，并忽略已废弃的持久化开关', () => {
@@ -703,18 +653,6 @@ describe('configuration transfer helpers', () => {
     expect(publicExport.apiKeyRecoveryMs).toBe(5 * 60_000)
     expect(fullExport.apiKeyRecoveryMs).toBe(5 * 60_000)
     expect(prepareConfigForImport(publicExport, new Config()).apiKeyRecoveryMs).toBe(5 * 60_000)
-  })
-
-  it('DeepLX 视频服务可以经过新版导出与导入往返而不触发旧默认迁移', () => {
-    const exported = prepareConfigForExport(normalizeConfig({
-      ...validConfig,
-      videoService: 'deeplx',
-      videoServiceDefaultMigrated: true,
-    }))
-    const prepared = prepareConfigForImport(exported, normalizeConfig(validConfig))
-
-    expect(exported.videoServiceDefaultMigrated).toBe(true)
-    expect(prepared.videoService).toBe('deeplx')
   })
 })
 

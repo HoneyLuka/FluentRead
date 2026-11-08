@@ -168,7 +168,7 @@ export function createTranslationIdentityPolicy(deps: TranslationIdentityPorts) 
             ...(pageContext.trim() && (isAIContextEnabled(execution, modelOverride) || subtitleContext)
                 ? {pageContextValidationPolicy: {version: 2}}
                 : {}),
-            ...((service === 'chromeTranslator' || service === 'localTranslation')
+            ...(service === 'chromeTranslator'
                 && sourceLanguage === 'auto'
                 && sourceLanguageDetectionText?.trim()
                 ? {sourceLanguageDetectionText}

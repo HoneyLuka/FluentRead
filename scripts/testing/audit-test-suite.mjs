@@ -11,7 +11,7 @@ const MATRIX_PATH = path.join(PROJECT_ROOT, 'tests/test-matrix.json');
 const TEST_ROOT = path.join(PROJECT_ROOT, 'tests');
 const GROUPS = ['architecture', 'unit', 'functional', 'regression'];
 const TEST_GLOBALS = new Set(['describe', 'it', 'test']);
-const SOURCE_ROOTS = ['entrypoints', 'scripts', 'src', 'userscript'];
+const SOURCE_ROOTS = ['entrypoints', 'scripts', 'src'];
 
 async function listTestFiles(dir = TEST_ROOT) {
     const entries = await readdir(dir);

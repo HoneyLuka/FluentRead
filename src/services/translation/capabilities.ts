@@ -59,7 +59,6 @@ export function isTranslationServiceAvailable(
     capabilities: BrowserCapabilities = browserCapabilities,
 ): boolean {
     if (service === services.chromeTranslator) return capabilities.chromeTranslation;
-    if (service === services.localTranslation) return capabilities.extensionDom;
     if (service === services.chatgptPlan) return chatGPTPlanDevelopmentEnabled && capabilities.browser !== 'userscript';
     return true;
 }
@@ -72,9 +71,7 @@ export function getTranslationServiceUnavailableMessage(
     if (service === services.chatgptPlan) return capabilities.browser === 'userscript'
         ? 'ChatGPT 套餐暂不可用；脚本版不支持此服务，请切换到其他翻译服务。'
         : CHATGPT_PLAN_UNAVAILABLE_MESSAGE;
-    return service === services.localTranslation
-        ? LOCAL_TRANSLATION_UNAVAILABLE_MESSAGE
-        : CHROME_TRANSLATOR_UNAVAILABLE_MESSAGE;
+    return CHROME_TRANSLATOR_UNAVAILABLE_MESSAGE;
 }
 
 export function filterAvailableTranslationServices<TOption extends {readonly value: string}>(

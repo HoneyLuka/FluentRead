@@ -1,30 +1,23 @@
 import {parseHTML} from 'linkedom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
-const corrections = vi.hoisted(() => ({lookup: vi.fn()}));
-vi.mock('@/src/services/config/store', () => ({config: {style: 0, to: 'zh-Hans', display: 1, on: true, personalCorrectionsEnabled: true}}));
-vi.mock('@/src/services/personal-corrections/public', () => ({personalCorrections: {lookup: corrections.lookup}}));
+vi.mock('@/src/services/config/store', () => ({config: {style: 0, to: 'zh-Hans', display: 1, on: true}}));
 vi.mock('@/src/core/config/catalog', () => ({options: {styles: []}}));
 import {applyTranslationsToSnapshot, collectLiveTranslationTextSlots, createTranslationSourceSnapshot,
     getCurrentTranslationCore} from '@/src/core/translation/public';
 import {appendBilingualTranslation, appendSingleTranslationSlots} from '@/src/features/full-page-translation/content/renderer';
 import {createPageTranslationDisplayModeSync, refreshTranslationDisplayMode, refreshTranslationPresentation, syncPageTranslationDisplayMode, syncTranslationDisplayMode} from '@/src/features/full-page-translation/content/displayMode';
-import {createMaterialId} from '@/src/core/personal-corrections/public';
-import {disableVisiblePersonalCorrections, invalidateStalePersonalCorrectionContexts, readPersonalCorrectionPair,
-    refreshVisiblePersonalCorrections, registerPersonalCorrectionResult, watchPersonalCorrectionContext} from '@/src/features/full-page-translation/content/personalCorrections';
 import {config} from '@/src/services/config/store';
 import {beginTranslation, createBilingualTranslationReplay, getTranslationState, markTranslationComplete,
     restoreAllTranslations, restoreTranslation, setBilingualContent, setLiveTranslationSourceSnapshot,
     setRenderedStyleAttribute, setSingleTextSlotHosts, type BilingualTranslationReplay} from '@/src/features/full-page-translation/content/state';
 import {isTranslationArtifactCurrent, statefulSourceAndTextSlotsAreCurrent} from '@/src/features/full-page-translation/content/translationStability';
-import * as translationState from '@/src/features/full-page-translation/content/state';
 
 let document: Document;
 beforeEach(() => {
     config.display = 1;
     config.translationOnlyDomains = [];
-    config.on = true; config.personalCorrectionsEnabled = true;
-    corrections.lookup.mockReset().mockResolvedValue({suggestions: [], conflicts: []});
+    config.on = true;
     document = parseHTML('<html><head><base href="https://example.com/"></head><body><main></main></body></html>').document;
     const realm = document.defaultView as unknown as Record<string, unknown>;
     for (const name of ['Node', 'Element', 'HTMLElement', 'MutationObserver', 'ShadowRoot']) vi.stubGlobal(name, realm[name]);
@@ -34,7 +27,7 @@ beforeEach(() => {
         return parseHTML(`<html><head></head><body>${source}</body></html>`).document;
     }});
 });
-afterEach(() => {restoreAllTranslations(); disableVisiblePersonalCorrections(); vi.unstubAllGlobals();});
+afterEach(() => {restoreAllTranslations(); vi.unstubAllGlobals();});
 
 function committed(mode: 'bilingual' | 'single' = 'bilingual', overrides: Partial<BilingualTranslationReplay> = {},
     html = ' First sentence. <a href="https://example.com/before">Read details.</a><code>protected()</code> ', synthetic = false) {
@@ -115,218 +108,6 @@ describe('已提交网页译文显示切换', () => {
         fixture.nodes[0]!.data = 'Use';
         expect(statefulSourceAndTextSlotsAreCurrent(fixture.owner, fixture.state)).toBe(false);
         expect(refreshTranslationDisplayMode(fixture.owner, fixture.state)).toBe(false);
-    });
-
-    function corrected(baseline = true) {
-        const fixture = committed('bilingual', {}, 'The team is ready.');
-        const heading = document.createElement('h2'); heading.textContent = 'Team';
-        fixture.owner.before(heading);
-        registerPersonalCorrectionResult(fixture.owner, fixture.state, {query: {source: fixture.sources[0],
-            sourceLanguage: 'en', targetLanguage: 'zh-Hans', context: 'Team', materialId: createMaterialId(location.href)},
-            ...(baseline ? {baseline: fixture.translations} : {})});
-        expect(readPersonalCorrectionPair(fixture.state.bilingualContent!)!.apply('读者确认的译文。', 'saved')).toBe(true);
-        expect(syncTranslationDisplayMode(fixture.owner, fixture.state, 0)).toBe(true);
-        return {...fixture, heading};
-    }
-
-    it.each([false, true])('无关动态节点不枚举全页译文，已有个人校订=%s', hasCorrection => {
-        const correctedPair = hasCorrection ? corrected() : undefined;
-        const main = document.querySelector('main')!;
-        for (let index = 0; index < 300; index++) {
-            const owner = document.createElement('p'); owner.textContent = `Ordinary translated paragraph ${index}.`;
-            main.appendChild(owner);
-            expect(beginTranslation(owner, 'bilingual')).not.toBeNull();
-        }
-        let mutations!: (records: MutationRecord[]) => void;
-        vi.stubGlobal('MutationObserver', class {
-            constructor(callback: typeof mutations) {mutations = callback;}
-            observe() {} disconnect() {}
-        });
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        const addedNodes = Array.from({length: 40}, () => document.createElement('div'));
-        const deref = vi.spyOn(WeakRef.prototype, 'deref');
-        try {
-            mutations([{type: 'childList', target: document.body, addedNodes, removedNodes: []} as unknown as MutationRecord]);
-            console.info(JSON.stringify({metric: 'personal-correction-unrelated-owner-dereferences', hasCorrection,
-                activeOwners: 300 + Number(hasCorrection), changedElements: addedNodes.length, actual: deref.mock.calls.length}));
-            expect(deref.mock.calls.length).toBe(Number(hasCorrection));
-            if (correctedPair) expect(getTranslationState(correctedPair.owner)).toBe(correctedPair.state);
-            expect(corrections.lookup).not.toHaveBeenCalled();
-        } finally {deref.mockRestore(); controller.abort();}
-    });
-
-    it.each([false, true])('五万节点变更的索引探针有界，个人单元在子树内=%s', containsCorrection => {
-        const correctedPair = corrected();
-        const root = document.createElement('section'); root.innerHTML = '<i></i>'.repeat(50_000);
-        const heading = document.createElement('h2'); heading.textContent = 'Another team';
-        document.querySelector('main')!.append(heading, root);
-        if (containsCorrection) root.appendChild(correctedPair.owner);
-        let mutations!: (records: MutationRecord[]) => void;
-        vi.stubGlobal('MutationObserver', class {
-            constructor(callback: typeof mutations) {mutations = callback;}
-            observe() {} disconnect() {}
-        });
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        const indexed = vi.spyOn(translationState, 'getTranslationOwnersForIndexedNode');
-        const deref = vi.spyOn(WeakRef.prototype, 'deref');
-        try {
-            mutations([{type: 'childList', target: document.body, addedNodes: [root], removedNodes: []} as unknown as MutationRecord]);
-            console.info(JSON.stringify({metric: 'personal-correction-large-subtree-probe', changedElements: 50_001,
-                containsCorrection, indexedProbes: indexed.mock.calls.length, ownerDereferences: deref.mock.calls.length}));
-            expect(indexed).toHaveBeenCalledTimes(64);
-            if (containsCorrection) expect(getTranslationState(correctedPair.owner)).toBeUndefined();
-            else {expect(deref).toHaveBeenCalledTimes(1); expect(getTranslationState(correctedPair.owner)).toBe(correctedPair.state);}
-            expect(corrections.lookup).not.toHaveBeenCalled();
-        } finally {deref.mockRestore(); indexed.mockRestore(); controller.abort();}
-    });
-
-    it('三百个已登记校订单元只按批次检查当前根，不随四十个无关节点重复', () => {
-        const main = document.querySelector('main')!;
-        for (let index = 0; index < 300; index++) {
-            const owner = document.createElement('p'); owner.textContent = `Translated paragraph ${index}.`;
-            main.appendChild(owner);
-            const attempt = beginTranslation(owner, 'bilingual')!;
-            expect(markTranslationComplete(owner, attempt.state, attempt.generation, false)).toBe(true);
-            registerPersonalCorrectionResult(owner, attempt.state, {query: {source: owner.textContent,
-                sourceLanguage: 'en', targetLanguage: 'zh-Hans', context: '', materialId: createMaterialId(location.href)}});
-        }
-        let mutations!: (records: MutationRecord[]) => void;
-        vi.stubGlobal('MutationObserver', class {
-            constructor(callback: typeof mutations) {mutations = callback;}
-            observe() {} disconnect() {}
-        });
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        const deref = vi.spyOn(WeakRef.prototype, 'deref');
-        try {
-            mutations([{type: 'childList', target: document.body,
-                addedNodes: Array.from({length: 40}, () => document.createElement('div')), removedNodes: []} as unknown as MutationRecord]);
-            console.info(JSON.stringify({metric: 'personal-correction-dense-metadata', activeOwners: 300,
-                metadataOwners: 300, changedElements: 40, ownerDereferences: deref.mock.calls.length}));
-            expect(deref.mock.calls.length).toBe(300);
-            expect(corrections.lookup).not.toHaveBeenCalled();
-        } finally {deref.mockRestore(); controller.abort();}
-    });
-
-    it.each(['closed', 'open-to-closed', 'closed-to-closed', 'nested-open'] as const)('%s 根内既有个人译文随当前 host 移动失效', placement => {
-        const {owner, state, sourceHTML} = corrected();
-        const main = document.querySelector('main')!;
-        const shadow = (mode: ShadowRootMode, parent: ParentNode = main) => {
-            const host = document.createElement('x-reader'); parent.appendChild(host);
-            const root = host.attachShadow({mode});
-            // linkedom 隐藏 closed root，但未提供标准 mode 属性；补齐真实浏览器的只读字段。
-            Object.defineProperty(root, 'mode', {value: mode});
-            return {host, root};
-        };
-        if (placement === 'open-to-closed') shadow('open').root.appendChild(owner);
-        if (placement === 'closed-to-closed') shadow('closed').root.appendChild(owner);
-        const target = shadow('closed');
-        if (placement === 'nested-open') shadow('open', target.root).root.appendChild(owner);
-        else target.root.appendChild(owner);
-        if (placement === 'closed') registerPersonalCorrectionResult(owner, state, {query: {source: 'The team is ready.',
-            sourceLanguage: 'en', targetLanguage: 'zh-Hans', context: 'Team', materialId: createMaterialId(location.href)}, recordId: 'saved'});
-        let mutations!: (records: MutationRecord[]) => void;
-        vi.stubGlobal('MutationObserver', class {
-            constructor(callback: typeof mutations) {mutations = callback;}
-            observe() {} disconnect() {}
-        });
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        const record = (element: Element) => [{type: 'childList', target: main, addedNodes: [element], removedNodes: []}] as unknown as MutationRecord[];
-        mutations(record(document.createElement('div')));
-        expect(getTranslationState(owner)).toBe(state);
-        mutations(record(target.host));
-        expect(getTranslationState(owner)).toBeUndefined(); expect(owner.innerHTML).toBe(sourceHTML);
-        expect(corrections.lookup).not.toHaveBeenCalled(); controller.abort();
-    });
-
-    it('持续翻译、状态替换与恢复不积累弱引用壳，自有DOM短路也即时注销', () => {
-        let mutations!: (records: MutationRecord[]) => void;
-        vi.stubGlobal('MutationObserver', class {
-            constructor(callback: typeof mutations) {mutations = callback;}
-            observe() {} disconnect() {}
-        });
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        const main = document.querySelector('main')!;
-        const owned = document.createElement('span'); owned.setAttribute('data-fr-translation-owned', 'true');
-        for (let index = 0; index < 200; index++) {
-            const owner = document.createElement('p'); owner.textContent = 'Temporary translation.'; main.appendChild(owner);
-            const first = beginTranslation(owner, 'bilingual')!;
-            const snapshot = {query: {source: owner.textContent, sourceLanguage: 'en', targetLanguage: 'zh-Hans',
-                context: '', materialId: createMaterialId(location.href)}};
-            registerPersonalCorrectionResult(owner, first.state, snapshot);
-            markTranslationComplete(owner, first.state, first.generation, false);
-            const replacement = beginTranslation(owner, 'bilingual')!;
-            registerPersonalCorrectionResult(owner, replacement.state, snapshot);
-            restoreTranslation(owner); owner.remove();
-            mutations([{type: 'childList', target: owned, addedNodes: [], removedNodes: []} as unknown as MutationRecord]);
-        }
-        const deref = vi.spyOn(WeakRef.prototype, 'deref');
-        try {
-            mutations([{type: 'childList', target: main, addedNodes: [document.createElement('div')], removedNodes: []} as unknown as MutationRecord]);
-            expect(deref).not.toHaveBeenCalled();
-            expect(corrections.lookup).not.toHaveBeenCalled();
-        } finally {deref.mockRestore(); controller.abort();}
-    });
-
-    it.each([true, false])('仅译文期间关闭个人校订，底稿存在=%s，恢复双语不重放旧记忆', baseline => {
-        const {owner, state, sourceHTML, nodes} = corrected(baseline);
-        config.personalCorrectionsEnabled = false; disableVisiblePersonalCorrections();
-        expect(corrections.lookup).not.toHaveBeenCalled();
-        expect(nodes.every(node => owner.contains(node))).toBe(true);
-        if (baseline) {
-            expect(state.mode).toBe('single');
-            expect(owner.querySelector('.fluent-read-single-slot')!.getAttribute('aria-label')).toBe('译文1。');
-            expect(syncTranslationDisplayMode(owner, state, 1)).toBe(true);
-            expect(state.bilingualContent!.textContent).toBe('译文1。');
-            expect(state.bilingualContent!.hasAttribute('data-fr-personal-correction')).toBe(false);
-            expect(restoreTranslation(owner)).toBe(true);
-        } else expect(getTranslationState(owner)).toBeUndefined();
-        expect(owner.innerHTML).toBe(sourceHTML);
-    });
-
-    it.each([false, true])('仅译文记忆更新与删除原位重绘；显式模式覆盖=%s始终保留', async explicit => {
-        const {owner, state, nodes, translations} = corrected();
-        state.bilingualReplay!.displayModeOverridden = explicit || undefined;
-        const controller = state.controller, generation = state.generation;
-        corrections.lookup.mockResolvedValueOnce({exact: {id: 'updated', translation: '更新后的个人译文。'}});
-        await refreshVisiblePersonalCorrections();
-        expect(owner.querySelector('.fluent-read-single-slot')!.getAttribute('aria-label')).toBe('更新后的个人译文。');
-        expect(state.mode).toBe('single'); expect(state.bilingualReplay!.displayModeOverridden).toBe(explicit || undefined);
-        await refreshVisiblePersonalCorrections();
-        expect(owner.querySelector('.fluent-read-single-slot')!.getAttribute('aria-label')).toBe(translations[0]);
-        expect(state.bilingualReplay!.personalCorrectionId).toBeUndefined();
-        expect(state.controller).toBe(controller); expect(state.generation).toBe(generation);
-        expect(nodes.every(node => owner.contains(node))).toBe(true);
-        expect(syncTranslationDisplayMode(owner, state, 1)).toBe(!explicit);
-        expect(owner.textContent).not.toContain('个人译文');
-        expect(corrections.lookup).toHaveBeenCalledTimes(2);
-        expect(restoreTranslation(owner)).toBe(true); expect(owner.firstChild).toBe(nodes[0]);
-    });
-
-    it('仅译文复用记忆删除且无服务底稿时恢复原文，不保留可重放个人结果', async () => {
-        const {owner, nodes, sourceHTML} = corrected(false);
-        await refreshVisiblePersonalCorrections();
-        expect(getTranslationState(owner)).toBeUndefined();
-        syncPageTranslationDisplayMode(1);
-        expect(owner.innerHTML).toBe(sourceHTML); expect(owner.firstChild).toBe(nodes[0]);
-    });
-
-    it.each(['heading', 'route', 'move'] as const)('仅译文期间%s使个人校订语境失效，恢复后切回双语也无旧结果', async reason => {
-        const {owner, nodes, heading, sourceHTML} = corrected();
-        const section = document.createElement('section'); section.innerHTML = '<h2>Another team</h2>';
-        document.querySelector('main')!.appendChild(section);
-        const controller = new AbortController(); watchPersonalCorrectionContext(controller.signal);
-        if (reason === 'heading') {
-            heading.textContent = 'Another team'; invalidateStalePersonalCorrectionContexts();
-        }
-        else if (reason === 'route') {
-            vi.stubGlobal('location', {href: 'https://example.com/another'});
-            document.dispatchEvent(new window.Event('fluentread-route-change'));
-        } else section.appendChild(owner);
-        await new Promise(resolve => setTimeout(resolve, 0));
-        controller.abort();
-        expect(getTranslationState(owner)).toBeUndefined(); syncPageTranslationDisplayMode(1);
-        expect(owner.innerHTML).toBe(sourceHTML); expect(owner.firstChild).toBe(nodes[0]);
-        expect(corrections.lookup).not.toHaveBeenCalled();
     });
 
     it.each(['single', 'bilingual'] as const)('当前%s重绘沿用显式模式覆盖；保护Google与原文节点', mode => {
@@ -422,11 +203,10 @@ describe('已提交网页译文显示切换', () => {
     });
 
     it('仅译文转双语使用当前安全链接属性与冻结译文选项，随后恢复仍保留宿主修改', () => {
-        const {owner, state} = committed('single', {longParagraphLineBreak: true, personalCorrectionId: 'saved'});
+        const {owner, state} = committed('single', {longParagraphLineBreak: true});
         const link = owner.querySelector('a')!; link.setAttribute('href', 'https://example.com/after');
         expect(syncTranslationDisplayMode(owner, state, 1)).toBe(true);
         expect(state.bilingualContent!.querySelector('a')!.getAttribute('href')).toBe('https://example.com/after');
-        expect(state.bilingualContent!.getAttribute('data-fr-personal-correction')).toBe('true');
         expect(restoreTranslation(owner)).toBe(true);
         expect(link.getAttribute('href')).toBe('https://example.com/after');
     });

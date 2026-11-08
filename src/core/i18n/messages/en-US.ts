@@ -6,16 +6,12 @@
  * 并保留参数化旧文案的安全回退，支持后续翻译者继续补齐未 key 化区域。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入、提示词或翻译结果。
  */
-import videoLearningText from './video-learning/en-US.json';
 import selfHelpText from './self-help/en-US.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
 import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesEnglishMessages} from './sectionTranslationRules';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/en-US.json';
 import settingsCopyText from './settings-copy/en-US.json';
 import brandTaglines from './brand-taglines.json';
 import {onboardingEnglishMessages} from './onboarding';
@@ -26,11 +22,8 @@ import {legacyTextOverrides} from './legacy-overrides';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsEnglishMessages} from './localTts';
 import {translationStatsEnglishMessages} from './translationStats';
-import {localTranslationEnglishMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -39,16 +32,11 @@ export const enUSMessages = {
     "feedback.serviceHint": "Check the selected service’s connection or model settings, then try again.",
     "feedback.retryHint": "Try again shortly. Your source text and selection will stay available.",
     ...countForms['en-US'],
-    ...personalCorrectionMessages['en-US'],
     "document.config.loadFailed": "Could not load settings. Reload and try again.",
     "popup.compact.translate": "Translate",
     "popup.compact.restore": "Restore",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['en-US'],
-    ...pdfReadingMessages['en-US'],
-    ...informationHighlightMessages['en-US'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "Remove source request headers",
     "settings.headers.help": "The list is empty by default. Applies only to FluentRead background requests to the exact domain, shared by all services. Subdomains are separate. Remove an entry or uncheck a header to restore defaults.",
@@ -414,7 +402,6 @@ export const enUSMessages = {
     "settings.excludedLanguages.hint": "Applies from the next translation. Short text and content whose language cannot be identified are still translated.",
     "options.userscriptUnavailableTitle": "Unavailable in the userscript",
     "options.userscriptUnavailableDescription": "This feature needs the browser extension runtime. Install the FluentRead extension to use it.",
-    ...localTtsEnglishMessages,
     ...translationStatsEnglishMessages,
     "settings.services.library.freeReady": "No API key needed. Available free services are selected automatically.",
     "settings.services.library.keepOne": "Keep at least one service enabled.",
@@ -557,7 +544,6 @@ export const enUSMessages = {
     "writing.demo.reviewHint": "The assistant drafts from the discussion. Review and edit the reply.",
     "writing.demo.insertHint": "The draft is back in the reply box. Check it, then send it yourself.",
 
-    ...localTranslationEnglishMessages,
     "settings.requestLimits.modelTitle": "Model request limits",
     "settings.requestLimits.globalTitle": "Request limits",
     "settings.requestLimits.globalHelp": "Services and models without custom settings share these limits.",

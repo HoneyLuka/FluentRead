@@ -300,16 +300,6 @@ describe('术语库与真实翻译编排协作', () => {
         expect(h.identities.every(identity => !Object.hasOwn(identity, 'glossaryTerms'))).toBe(true);
     });
 
-    it('文档和视频继承各自默认选择，显式空数组仍关闭', async () => {
-        const h = harness();
-        h.config.glossaryLibraries = [library(), library('video', '视频代理'), library('document', '文档代理')];
-        h.config.videoGlossaryIds = ['video'];
-        h.config.documentGlossaryIds = ['document'];
-        await expect(h.broker.translateWithCache({origin: 'agent', glossaryContext: 'video'})).resolves.toBe('视频代理');
-        await expect(h.broker.translateWithCache({origin: 'agent', glossaryContext: 'document'})).resolves.toBe('文档代理');
-        await expect(h.broker.translateWithCache({origin: 'agent', glossaryContext: 'video', glossaryIds: []})).resolves.toBe('译文:agent');
-    });
-
     it('编辑命中词后隔离缓存；编辑未命中词仍可复用相同译文', async () => {
         const h = harness();
         await h.request({origin: 'agent'});

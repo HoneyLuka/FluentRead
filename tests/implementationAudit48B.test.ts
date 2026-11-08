@@ -53,7 +53,7 @@ function background(repository: EncryptedConfigRepository) {
         getItem: async () => null, setItem: async () => undefined, removeItem: async () => undefined,
     }});
 }
-const storedConfig = {on: true, service: 'freeTranslation', from: 'auto', to: 'zh-Hans', videoServiceDefaultMigrated: true};
+const storedConfig = {on: true, service: 'freeTranslation', from: 'auto', to: 'zh-Hans'};
 function backups(version: number, to: string) {
     return {schemaVersion: 1, entries: [{version, savedAt: '2026-10-06T00:00:00Z', config: {...storedConfig, to}}], nextVersion: version + 1};
 }
@@ -64,27 +64,6 @@ async function loadBackupStore(port: ConfigStoragePort) {
     const config = await import('@/src/services/config/store');
     await Promise.all([config.configReady, config.configHistoryReady]);
     return import('@/src/services/config/autoBackupStore');
-}
-async function userscriptFixture(initial?: unknown) {
-    const values = new Map<string, string>([['local:config', JSON.stringify(storedConfig)]]);
-    if (initial !== undefined) values.set('local:configAutoBackups', JSON.stringify(initial));
-    const window = new EventTarget();
-    const document = Object.assign(new EventTarget(), {visibilityState: 'visible'});
-    for (const target of [window, document]) {
-        vi.spyOn(target, 'addEventListener').mockImplementation((type, callback, options) => {
-            EventTarget.prototype.addEventListener.call(target, type, callback, options);
-            fixtureDisposers.push(() => target.removeEventListener(type, callback, options));
-        });
-    }
-    vi.stubGlobal('window', window); vi.stubGlobal('document', document);
-    vi.stubGlobal('GM_getValue', async (key: string, fallback: unknown) => values.get(key) ?? fallback);
-    const setValue = vi.fn(async (key: string, value: string) => {values.set(key, value);});
-    vi.stubGlobal('GM_setValue', setValue);
-    vi.stubGlobal('GM_deleteValue', async (key: string) => {values.delete(key);});
-    vi.resetModules();
-    const adapter = await import('../userscript/storage');
-    adapter.completeUserscriptConfigPreparation();
-    return {adapter, values, setValue, window};
 }
 function recordProbe(name: string, evidence: Record<string, unknown>) {
     console.log(`AUDIT48B_PROBE_DONE ${name}`);
@@ -338,110 +317,6 @@ describe('implementation audit 48 B: controlled public storage and backup flows'
         const captured = await store.captureConfigAutoBackup({savedAt: 'explicit'});
         expect(captured.entries.map(entry => entry.version)).toEqual([5, 6]);
         await expect(repository.get('local:configAutoBackups')).resolves.toMatchObject({nextVersion: 7});
-    });
-
-    it.each(['empty baseline', 'legacy projection'])('the actual userscript adapter defers %s writes and preserves a concurrent durable checkpoint', async (kind) => {
-        const initial = kind === 'legacy projection' ? backups(7, 'ja') : undefined;
-        if (initial) Object.assign(initial.entries[0].config, {token: {openai: 'controlled-legacy-secret'}, count: 7});
-        const fixture = await userscriptFixture(initial);
-        const started = deferred<void>();
-        const resume = deferred<void>();
-        let delay = true;
-        fixture.setValue.mockImplementation(async (key, value) => {
-            if (key === 'local:configAutoBackups' && delay) {started.resolve(); await resume.promise;}
-            fixture.values.set(key, value);
-        });
-        const store = await loadBackupStore(fixture.adapter.configStorage);
-        await Promise.race([started.promise, store.configAutoBackupsReady]);
-        // An independent GM context commits while baseline's automatic write is pending.
-        delay = false;
-        await fixture.setValue('local:configAutoBackups', JSON.stringify(backups(15, 'fr')));
-        resume.resolve();
-        await store.configAutoBackupsReady;
-        const disk = JSON.parse(fixture.values.get('local:configAutoBackups')!);
-        const memory = store.getConfigAutoBackupsSnapshot();
-        recordProbe(`userscript-${kind === 'empty baseline' ? 'baseline' : 'projection'}`, {
-            hasAtomicPort: 'setItemIfUnchanged' in fixture.adapter.configStorage,
-            concurrentVersion: 15, finalDiskVersion: disk.entries[0].version,
-            memoryVersionBeforeFocus: memory.entries[0].version,
-            backupSetCallsBeforeExplicitCapture: fixture.setValue.mock.calls.filter(([key]) => key === 'local:configAutoBackups').length,
-        });
-        expect(disk.entries[0].version).toBe(15);
-        expect(memory.entries[0].version).toBe(initial ? 7 : 1);
-        expect(JSON.stringify(memory)).not.toContain('controlled-legacy-secret');
-        expect(memory.entries[0].config).not.toHaveProperty('count');
-        expect(fixture.setValue.mock.calls.filter(([key]) => key === 'local:configAutoBackups')).toHaveLength(1);
-        const observed = deferred<void>();
-        const stop = store.subscribeConfigAutoBackups(state => {if (state.entries[0].version === 15) observed.resolve();});
-        fixture.window.dispatchEvent(new Event('focus'));
-        await observed.promise;
-        stop();
-        const captured = await store.captureConfigAutoBackup({savedAt: 'explicit-capture'});
-        expect(captured.entries.map(entry => entry.version)).toEqual([15, 16]);
-        expect(JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!)).toEqual(captured);
-        expect(fixture.setValue.mock.calls.filter(([key]) => key === 'local:configAutoBackups')).toHaveLength(2);
-    });
-
-    it('an actual userscript delayed write echo cannot replace a newer observed backup in memory', async () => {
-        const fixture = await userscriptFixture(backups(1, 'ja'));
-        const store = await loadBackupStore(fixture.adapter.configStorage);
-        await store.configAutoBackupsReady;
-        const started = deferred<void>();
-        const resume = deferred<void>();
-        let delay = true;
-        fixture.setValue.mockImplementation(async (key, value) => {
-            // GM commits first, but completion (and adapter's local watch echo) is delayed.
-            fixture.values.set(key, value);
-            if (key === 'local:configAutoBackups' && delay) {started.resolve(); await resume.promise;}
-        });
-        const capturing = store.captureConfigAutoBackup({config: {...storedConfig, to: 'de'}, savedAt: 'pending'});
-        await started.promise;
-        delay = false;
-        await fixture.setValue(store.CONFIG_AUTO_BACKUP_STORAGE_KEY, JSON.stringify(backups(5, 'fr')));
-        const observed = deferred<void>();
-        const listener = vi.fn(state => {if (state.entries[0].version === 5) observed.resolve();});
-        const stop = store.subscribeConfigAutoBackups(listener);
-        fixture.window.dispatchEvent(new Event('focus'));
-        await observed.promise;
-        const countBeforeEcho = listener.mock.calls.length;
-        resume.resolve();
-        const result = await capturing;
-        recordProbe('userscript-late-echo', {concurrentVersion: 5,
-            finalDiskVersion: JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!).entries[0].version,
-            finalMemoryVersion: result.entries[0].version,
-            notificationsBeforeEcho: countBeforeEcho, notificationsAfterEcho: listener.mock.calls.length});
-        expect(result.entries[0]).toMatchObject({version: 5, config: {to: 'fr'}});
-        expect(JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!).entries[0].version).toBe(5);
-        expect(listener).toHaveBeenCalledTimes(countBeforeEcho);
-        stop();
-        const next = await store.captureConfigAutoBackup({savedAt: 'next'});
-        expect(next.entries.map(entry => entry.version)).toEqual([5, 6]);
-        expect(JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!)).toEqual(next);
-    });
-
-    it('a failed explicit userscript capture releases its pending echo state and the next capture persists', async () => {
-        const fixture = await userscriptFixture(backups(1, 'ja'));
-        const store = await loadBackupStore(fixture.adapter.configStorage);
-        await store.configAutoBackupsReady;
-        const started = deferred<void>();
-        const fail = deferred<void>();
-        fixture.setValue.mockImplementationOnce(async (key, value) => {
-            expect(key).toBe(store.CONFIG_AUTO_BACKUP_STORAGE_KEY);
-            expect(JSON.parse(value).entries.map((entry: {version: number}) => entry.version)).toEqual([1, 2]);
-            started.resolve();
-            await fail.promise;
-        });
-        const failed = store.captureConfigAutoBackup({savedAt: 'failed'});
-        const rejected = expect(failed).rejects.toThrow('controlled GM set failure');
-        await started.promise;
-        fail.reject(new Error('controlled GM set failure'));
-        await rejected;
-        expect(store.getConfigAutoBackupsSnapshot().entries.map(entry => entry.version)).toEqual([1]);
-        expect(JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!).entries.map((entry: {version: number}) => entry.version)).toEqual([1]);
-        const captured = await store.captureConfigAutoBackup({savedAt: 'recovered'});
-        expect(captured.entries.map(entry => entry.version)).toEqual([1, 2]);
-        expect(captured.entries.at(-1)?.savedAt).toBe('recovered');
-        expect(JSON.parse(fixture.values.get(store.CONFIG_AUTO_BACKUP_STORAGE_KEY)!)).toEqual(captured);
     });
 
     it.each([false, true])('an initial backup read failure retains a usable state with newer watch=%s', async (newerWatch) => {
@@ -794,7 +669,7 @@ describe('implementation audit 48 B: controlled public storage and backup flows'
         const remove = vi.fn();
         const disconnect = vi.fn(async () => undefined);
         const session = {account: {id: 'fixture-account', email: 'fixture@example.test'}, request: async <T>(operation: (credential: string) => Promise<T>) => operation('controlled-credential')};
-        const ports: DriveSyncPorts = {auth: {availability: () => ({available: true, reason: ''}), open: async () => session, disconnect}, api: {read: async () => structuredClone(remote), write: async () => {throw new Error('unexpected write');}, remove}, snapshot: async () => storedConfig, apply: async () => {throw new Error('unexpected apply');}, readState: async () => structuredClone(state), writeState: async value => {state = structuredClone(value);}, now: () => 100};
+        const ports: Omit<DriveSyncPorts, 'accountChangedError'> = {auth: {availability: () => ({available: true, reason: ''}), open: async () => session, disconnect}, api: {read: async () => structuredClone(remote), write: async () => {throw new Error('unexpected write');}, remove}, snapshot: async () => storedConfig, apply: async () => {throw new Error('unexpected apply');}, readState: async () => structuredClone(state), writeState: async value => {state = structuredClone(value);}, now: () => 100};
         const sync = createGoogleDriveSync(ports);
         const preview = await sync.prepareDelete(1, 'fixture-client');
         remote = {...remote, content: 'changed', file: {...remote.file, version: '2', etag: '"2"'}};

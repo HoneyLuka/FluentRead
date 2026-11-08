@@ -42,7 +42,6 @@ import {getMissingCredentialMessage} from '@/src/core/config/validation';
 import {resolveTranslationLanguages} from '@/src/core/translation/languages';
 import {buildPageSummaryPrompt, buildPageSummarySystemPrompt} from '@/src/core/translation/prompts';
 import {translateWithOpenAICompatibleAiSdk as translateWithSdk, type AiSdkTranslationRequest} from '@/src/providers/translation/ai-sdk/openai-compatible';
-import {translateWithOpenAICompatibleAiSdk as translateWithStandalone} from '@/userscript/openaiCompatible';
 import {resolveOpenAICompatibleEndpoint} from '@/src/providers/translation/ai-sdk/endpoints';
 import azureOpenai from '@/src/providers/translation/azure-openai';
 import {normalizeAiSdkError} from '@/src/providers/translation/ai-sdk/errors';
@@ -124,12 +123,13 @@ function ollamaBroker(translateWithOpenAICompatibleAiSdk: typeof translateWithSd
   });
 }
 
-describe.each([['locked SDK', translateWithSdk], ['standalone HTTP', translateWithStandalone]] as const)('%s OpenAI-compatible transport', (_name, translateWithOpenAICompatibleAiSdk) => {
+describe('locked SDK OpenAI-compatible transport', () => {
+  const translateWithOpenAICompatibleAiSdk = translateWithSdk;
   it.each([
     ['official OpenAI', 'https://api.openai.com/v1/chat/completions', {max_tokens: 96}, {max_completion_tokens: 96}],
     ['compatible legacy', 'https://gateway.test/v1/chat/completions', {max_tokens: 96}, {max_tokens: 96}],
     ['compatible explicit', 'https://gateway.test/v1/chat/completions', {max_tokens: null, max_completion_tokens: 32}, {max_completion_tokens: 32}],
-  ])('normalizes final SDK and standalone translation requests for %s', async (_name, endpoint, budget, expected) => {
+  ])('normalizes final SDK translation requests for %s', async (_name, endpoint, budget, expected) => {
     mockConfig.custom = endpoint;
     mockConfig.model.custom = 'arbitrary-model';
     mockConfig.customBody.custom = JSON.stringify({...budget, service_tier: 'fast', reasoning_effort: 'none'});
@@ -341,7 +341,7 @@ describe.each([['locked SDK', translateWithSdk], ['standalone HTTP', translateWi
     expect(mockConfig.proxy[services.huanYuan]).toBe(proxy);
   });
 
-  it('通过 runtimeFetch 发起 AI SDK 请求，使 userscript 可复用 GM transport', async () => {
+  it('通过 runtimeFetch 发起 AI SDK 请求而不是直接使用原生 fetch', async () => {
     const nativeFetch = vi.fn().mockRejectedValue(new Error('不应调用原生 fetch'));
     vi.stubGlobal('fetch', nativeFetch);
     const runtimeTransport = vi.fn().mockResolvedValue(successResponse('GM 译文'));

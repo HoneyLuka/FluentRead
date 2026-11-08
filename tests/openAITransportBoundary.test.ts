@@ -8,15 +8,13 @@ import {providerConfigFixture, withProviderSnapshot} from './helpers/providerSna
 import {translateOpenAICompatible, type AiSdkTranslationRequest, type OpenAICompatibleCall, type OpenAICompatibleExecution} from '@/src/providers/translation/ai-sdk/openai-transport';
 import {LlmTransportError, normalizeAiSdkError} from '@/src/providers/translation/ai-sdk/errors';
 import {LlmTransportError as SharedError} from '@/src/providers/translation/ai-sdk/transport-errors';
-import {translateWithOpenAICompatibleAiSdk as direct} from '@/userscript/openaiCompatible';
 import {translateWithOpenAICompatibleAiSdk as sdk} from '@/src/providers/translation/ai-sdk/openai-compatible';
 import * as endpoints from '@/src/providers/translation/ai-sdk/endpoints';
 import * as templates from '@/src/services/translation/templates';
 import {setRuntimeFetch} from '@/src/platform/http/runtime';
-import {attachTranslationImageInput, attachTranslationModelUsageObserver, attachTranslationRequestScheduler, attachTranslationProviderConfig, requireTranslationProviderConfig} from '@/src/services/translation/requestSnapshot';
+import {attachTranslationModelUsageObserver, attachTranslationRequestScheduler, attachTranslationProviderConfig, requireTranslationProviderConfig} from '@/src/services/translation/requestSnapshot';
 import {createTranslationRequestScheduler} from '@/src/services/translation/requestScheduler';
 import {boundErrorResponse} from '@/src/providers/translation/ai-sdk/boundedErrorResponse';
-import {userscriptFetch} from '@/userscript/http';
 import type {TranslationConfigSource} from '@/src/services/translation/types';
 
 const config = () => providerConfigFixture({service: 'custom', model: {custom: 'fixture-model'}, token: {},
@@ -30,27 +28,7 @@ const flush = async () => {for (let i = 0; i < 20; i++) await Promise.resolve();
 afterEach(() => {setRuntimeFetch(); vi.restoreAllMocks(); vi.useRealTimers();});
 
 describe('shared OpenAI request and response boundary', () => {
-  it('passes its local error-body policy through the real GM adapter without sending it as a header', async () => {
-    const huge = 'x'.repeat(1024 * 1024); let details!: UserscriptXmlHttpRequestDetails;
-    globalThis.GM_xmlhttpRequest = value => {
-      details = value;
-      queueMicrotask(() => value.onload?.({status: 429, responseText: huge, responseHeaders: 'retry-after: 3\r\nx-request-id: gm-fixture'}));
-      return {abort() {}};
-    };
-    setRuntimeFetch(userscriptFetch);
-    try {
-      await translateOpenAICompatible(request(), execution(async call => {
-        const response = await call.fetch('https://fixture.invalid/v1/chat/completions', {method: 'POST', body: '{}'});
-        expect(response.status).toBe(429);
-        expect(response.headers.get('retry-after')).toBe('3');
-        expect(response.headers.get('x-request-id')).toBe('gm-fixture');
-        expect(await response.text()).toContain('上游错误响应过大');
-        return 'checked';
-      }));
-      expect(Object.keys(details.headers ?? {}).some(name => name.toLowerCase().includes('errorbody'))).toBe(false);
-    } finally {globalThis.GM_xmlhttpRequest = undefined;}
-  });
-  it('re-exports one error class instead of producing incompatible SDK and standalone identities', () => {
+  it('exposes one shared transport error class across provider modules', () => {
     expect(SharedError).toBe(LlmTransportError);
   });
 
@@ -108,7 +86,7 @@ describe('shared OpenAI request and response boundary', () => {
   it.each(['{broken', 'null', '{"choices":[]}', '{"choices":[{"message":{"content":null}}]}'])
   ('keeps malformed or non-text HTTP responses as errors rather than rebuilding success: %s', async body => {
     setRuntimeFetch(async () => new Response(body));
-    await expect(direct(request())).rejects.toBeInstanceOf(LlmTransportError);
+    await expect(sdk(request())).rejects.toBeInstanceOf(LlmTransportError);
   });
 
   it('uses an attached scheduler without inventing a lease or a signal when the executor omits init', async () => {
@@ -139,17 +117,6 @@ describe('shared OpenAI request and response boundary', () => {
     }));
     expect(lease.holdUntil).toHaveBeenCalledTimes(1);
     await expect(lease.holdUntil.mock.calls[0][0]).resolves.toMatchObject({response: expect.any(Response)});
-  });
-
-  it.each([
-    ['image_url is not supported by this model', true],
-    ['invalid model request', false],
-  ] as const)('keeps explicit image rejection ownership: %s', async (message, unsupported) => {
-    setRuntimeFetch(async () => new Response(JSON.stringify({error: {message}}), {status: 400}));
-    const source = attachTranslationImageInput(request(), 'data:image/png;base64,AAAA');
-    const error = await direct(source).catch(error => error);
-    expect(Boolean(error.imageInputUnsupported)).toBe(unsupported);
-    expect(error instanceof LlmTransportError).toBe(!unsupported);
   });
 
   it.each([false, true])('preserves complete failed response bytes and HTTP metadata with scheduler=%s', async useScheduler => {
@@ -311,20 +278,7 @@ describe('shared OpenAI request and response boundary', () => {
     expect(reader.releaseLock).toHaveBeenCalledOnce();
   });
 
-  it('does not infer unsupported image input from a truncated error body', async () => {
-    let stream!: ReadableStreamDefaultController<Uint8Array>;
-    const prefix = new TextEncoder().encode('{"error":{"message":"image_url is not supported by this model"}}');
-    const tooLarge = new Uint8Array(32_769); tooLarge.set(prefix);
-    setRuntimeFetch(async () => new Response(new ReadableStream<Uint8Array>({start(controller) {stream = controller; controller.enqueue(tooLarge);}}), {status: 400}));
-    const source = attachTranslationImageInput(request(), 'data:image/png;base64,AAAA');
-    const error = await direct(source).catch(error => error);
-    expect(error).toBeInstanceOf(LlmTransportError);
-    expect(error.imageInputUnsupported).toBeUndefined(); expect(error.statusCode).toBe(400);
-    stream.close();
-  });
-
-  it.each([['SDK', sdk], ['standalone', direct]] as const)(
-    'caps a nonterminating oversized HTTP error before the actual %s executor consumes it', async (_name, translate) => {
+  it('caps a nonterminating oversized HTTP error before the SDK executor consumes it', async () => {
       let stream!: ReadableStreamDefaultController<Uint8Array>;
       let networkSignal: AbortSignal | null | undefined;
       setRuntimeFetch(async (_input, init) => {
@@ -333,27 +287,24 @@ describe('shared OpenAI request and response boundary', () => {
           stream = controller; controller.enqueue(new Uint8Array(4 * 1024 * 1024));
         }}), {status: 400, headers: {'retry-after': '2', 'x-request-id': 'bounded-id'}});
       });
-      const error = await translate(request()).catch(error => error);
+      const error = await sdk(request()).catch(error => error);
       expect(error).toMatchObject({kind: 'bad-request', statusCode: 400, requestId: 'bounded-id', retryAfterMs: 2_000});
       expect(error.message).toContain('上游错误响应过大');
       expect(networkSignal?.aborted).toBe(true);
       stream.close();
-    },
-  );
+  });
 
-  it.each([['SDK', sdk], ['standalone', direct]] as const)(
-    'bounds a stalled HTTP error without a scheduler for the actual %s executor', async (_name, translate) => {
+  it('bounds a stalled HTTP error without a scheduler for the SDK executor', async () => {
       vi.useFakeTimers();
       let stream!: ReadableStreamDefaultController<Uint8Array>;
       setRuntimeFetch(async () => new Response(new ReadableStream<Uint8Array>({start(controller) {stream = controller;}}), {status: 400}));
-      const result = translate(request()).catch(error => error);
+      const result = sdk(request()).catch(error => error);
       await flush(); await vi.advanceTimersByTimeAsync(1_000);
       const error = await result;
       expect(error).toMatchObject({kind: 'bad-request', statusCode: 400});
       expect(error.message).toContain('读取超时');
       stream.close();
-    },
-  );
+  });
 
   it('keeps a real SDK retry behind the noncooperative previous HTTP attempt', async () => {
     vi.useFakeTimers();

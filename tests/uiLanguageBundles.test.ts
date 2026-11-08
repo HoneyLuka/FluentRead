@@ -99,77 +99,32 @@ describe('界面语言注册表', () => {
         expect(files.filter(({relativeDest}) => relativeDest.startsWith('i18n/'))).toEqual([]);
     });
 
-    it('本地化 PDF 段落进度保留完成数、总量和百分比，七语恢复入口均有文案', () => {
-        bundles.registerAllUiLanguageBundles();
-        for (const language of ['zh-CN', ...Object.keys(bundles.UI_LANGUAGE_BUNDLES)] as const) {
-            const progress = i18n.translate('document.translationProgress.count', language as any, {completed: 35, total: 100, percent: 35});
-            expect(progress).toContain('35');
-            expect(progress).toContain('100');
-            expect(progress).toContain('%');
-            expect(progress).not.toMatch(/[{}]/u);
-            for (const key of ['document.translationProgress.waitingRetry', 'document.translationProgress.collectingAfterFailure',
-                'document.translationRecovery.retry', 'document.translationRecovery.switchService', 'document.translationRecovery.pauseAndSwitch',
-                'document.translationRecovery.details', 'document.translationRecovery.interrupted', 'document.translationRecovery.unavailable']) {
-                expect(i18n.translate(key, language as any)).not.toBe(key);
-            }
-            expect(i18n.translate('document.translationRecovery.kept', language as any)).toBe('document.translationRecovery.kept');
-        }
-        expect(i18n.translate('document.translationProgress.count', 'zh-CN', {completed: 35, total: 100, percent: 35}))
-            .toBe('已翻译 35/100 个文本段落（35%）');
-        expect(i18n.translate('document.translationRecovery.retry', 'zh-CN')).toBe('重试');
-        expect(i18n.translate('document.translationRecovery.switchService', 'zh-CN')).toBe('更换服务');
-        expect(i18n.translate('document.translationRecovery.pauseAndSwitch', 'zh-CN')).toBe('暂停并更换服务');
-        expect(i18n.translate('document.translationRecovery.details', 'zh-CN')).toBe('详情');
-        expect(i18n.translate('document.translationRecovery.interrupted', 'zh-CN')).toBe('翻译暂时中断');
-        expect(i18n.translate('document.translationRecovery.unavailable', 'zh-CN')).toBe('当前服务不可用');
-        expect(i18n.translate('document.translationRecovery.unavailable', 'en-US')).toBe('Service unavailable');
-    });
 
     it('默认中文入口只消费共享文案的独立中文常量', () => {
         const source = readFileSync(resolve('src/core/i18n/messages/zh-CN.ts'), 'utf8');
-        expect(source).toContain("import {pdfReadingChineseMessages} from './pdfReading'");
-        expect(source).toContain("import {informationHighlightChineseMessages} from './informationHighlight'");
         expect(source).toContain("import {compositeTranslationChineseMessages} from './compositeTranslation'");
         expect(source).toContain("import {aiRequestTimeoutChineseMessages} from './aiRequestTimeout'");
-        expect(source).toContain("import {personalCorrectionChineseMessages} from './personalCorrections'");
+        expect(source).toContain("import {selectionDictionaryChineseMessages} from './selectionDictionary'");
         expect(source).not.toMatch(/\b(?:pdfReadingMessages|informationHighlightMessages|compositeTranslationMessages|aiRequestTimeoutMessages|personalCorrectionMessages)\b/u);
     });
-
-    it('独立的七语常量保持完整目录和资源生成的语言映射一致', async () => {
-        const [pdf, highlight, chinese, composite, timeout, corrections] = await Promise.all([
-            import('@/src/core/i18n/messages/pdfReading'),
-            import('@/src/core/i18n/messages/informationHighlight'),
+    it('保留的独立七语常量与资源生成的语言映射一致', async () => {
+        const [chinese, composite, timeout, dictionary] = await Promise.all([
             import('@/src/core/i18n/messages/zh-CN'),
             import('@/src/core/i18n/messages/compositeTranslation'),
             import('@/src/core/i18n/messages/aiRequestTimeout'),
-            import('@/src/core/i18n/messages/personalCorrections'),
+            import('@/src/core/i18n/messages/selectionDictionary'),
         ]);
         expect(composite.compositeTranslationMessages['zh-CN']).toBe(composite.compositeTranslationChineseMessages);
         expect(timeout.aiRequestTimeoutMessages['zh-CN']).toBe(timeout.aiRequestTimeoutChineseMessages);
-        expect(corrections.personalCorrectionMessages['zh-CN']).toBe(corrections.personalCorrectionChineseMessages);
-        const languages = [
-            ['zh-CN', pdf.pdfReadingChineseMessages, highlight.informationHighlightChineseMessages],
-            ['en-US', pdf.pdfReadingEnglishMessages, highlight.informationHighlightEnglishMessages],
-            ['ja-JP', pdf.pdfReadingJapaneseMessages, highlight.informationHighlightJapaneseMessages],
-            ['ko-KR', pdf.pdfReadingKoreanMessages, highlight.informationHighlightKoreanMessages],
-            ['fr-FR', pdf.pdfReadingFrenchMessages, highlight.informationHighlightFrenchMessages],
-            ['ru-RU', pdf.pdfReadingRussianMessages, highlight.informationHighlightRussianMessages],
-            ['es-ES', pdf.pdfReadingSpanishMessages, highlight.informationHighlightSpanishMessages],
-        ] as const;
-        for (const [language, pdfMessages, highlightMessages] of languages) {
-            expect(pdf.pdfReadingMessages[language]).toBe(pdfMessages);
-            expect(highlight.informationHighlightMessages[language]).toBe(highlightMessages);
+        for (const language of ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'fr-FR', 'ru-RU', 'es-ES'] as const) {
             const catalog = language === 'zh-CN' ? chinese.zhCNMessages : bundles.UI_LANGUAGE_BUNDLES[language].messages;
-            for (const [key, value] of Object.entries({...(pdfMessages as Readonly<Record<string, string>>),
-                ...(highlightMessages as Readonly<Record<string, string>>),
-                ...(composite.compositeTranslationMessages[language] as Readonly<Record<string, string>>),
+            for (const [key, value] of Object.entries({...(composite.compositeTranslationMessages[language] as Readonly<Record<string, string>>),
                 ...(timeout.aiRequestTimeoutMessages[language] as Readonly<Record<string, string>>),
-                ...(corrections.personalCorrectionMessages[language] as Readonly<Record<string, string>>)})) {
+                ...(dictionary.selectionDictionaryMessages[language] as Readonly<Record<string, string>>)})) {
                 expect(catalog[key as keyof typeof catalog], `${language}: ${key}`).toBe(value);
             }
         }
-    });
-});
+    });});
 
 describe('界面语言资源按需加载', () => {
     it('中文和已注册语言不发请求；并发请求同一语言只读取一次并注册', async () => {

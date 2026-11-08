@@ -16,10 +16,10 @@ import {
     SELECTION_TTS_GOOGLE_MESSAGE_TYPE,
     SELECTION_TTS_MESSAGE_TYPE,
     SELECTION_TTS_STOP_MESSAGE_TYPE,
+    type SelectionTtsAudio,
     type SelectionTtsContext,
 } from '@/src/features/selection-translation/background/ttsHandler';
 import {createSelectionTtsSynthesizer} from '@/src/features/selection-translation/background/selectionTtsSynthesis';
-import type {LocalTtsAudio} from '@/src/features/local-tts/protocol';
 
 function deferred<T>() {
     let resolve!: (value: T) => void;
@@ -28,11 +28,11 @@ function deferred<T>() {
     return {promise, resolve, reject};
 }
 
-const audio = (): LocalTtsAudio => ({
+const audio = (): SelectionTtsAudio => ({
     audio: new Uint8Array([1, 2]).buffer,
-    contentType: 'audio/wav', voice: 'af_heart', backend: 'wasm',
+    contentType: 'audio/wav', voice: 'af_heart',
 });
-const page = () => ({url: 'chrome-extension://controlled-extension/options.html#settings-vocabulary'});
+const page = () => ({url: 'chrome-extension://controlled-extension/options.html#settings-selection'});
 const pageAudio = {
     success: true, transport: 'page', audioBase64: 'AQI=', contentType: 'audio/wav', voice: 'af_heart',
 };
@@ -45,12 +45,12 @@ function createRuntime() {
         signal?: AbortSignal;
         abortEvents: number;
         settled: boolean;
-        task: ReturnType<typeof deferred<LocalTtsAudio>>;
+        task: ReturnType<typeof deferred<SelectionTtsAudio>>;
     }> = [];
     const responses: Promise<unknown>[] = [];
     let abortListeners = 0;
-    const local = vi.fn((text: string, _language: string, _voice: string, signal?: AbortSignal) => {
-        const job = {text, signal, abortEvents: 0, settled: false, task: deferred<LocalTtsAudio>()};
+    const online = vi.fn((text: string, _language: string, _voices: unknown, signal?: AbortSignal) => {
+        const job = {text, signal, abortEvents: 0, settled: false, task: deferred<SelectionTtsAudio>()};
         jobs.push(job);
         const onAbort = () => {job.abortEvents++;};
         if (signal) {signal.addEventListener('abort', onAbort); abortListeners++;}
@@ -61,10 +61,9 @@ function createRuntime() {
             if (signal) {signal.removeEventListener('abort', onAbort); abortListeners--;}
         });
     });
-    const online = vi.fn(async (): Promise<never> => {throw new Error('Unexpected online fallback');});
     const synthesize = createSelectionTtsSynthesizer({
-        getMode: () => 'local-only', getLocalVoice: () => 'af_heart', getOnlineVoices: () => [],
-        synthesizeLocal: local, synthesizeOnline: online,
+        getOnlineVoices: () => [],
+        synthesizeOnline: online,
     });
     const play = vi.fn(async () => {}), stop = vi.fn(async () => {}), notify = vi.fn(async () => {});
     const handlers = createSelectionTtsBackgroundHandlers({
@@ -82,14 +81,13 @@ function createRuntime() {
         send({type: SELECTION_TTS_MESSAGE_TYPE, text, language: 'en-US', clientRequestId: id}, sender);
     const stopPage = (sender: unknown, id?: unknown) =>
         send({type: SELECTION_TTS_STOP_MESSAGE_TYPE, clientRequestId: id}, sender);
-    const subject = {jobs, local, online, play, stop, notify, send, start, stopPage,
+    const subject = {jobs, online, play, stop, notify, send, start, stopPage,
         async cleanup() {
             await flush();
             for (const job of jobs) job.task.resolve(audio());
             await Promise.all(responses);
             expect(jobs.every(job => job.settled)).toBe(true);
             expect(abortListeners).toBe(0);
-            expect(online).not.toHaveBeenCalled();
         }};
     runtimes.push(subject);
     return subject;
@@ -159,7 +157,7 @@ describe('extension-page TTS ownership at the public handler/router boundary', (
         expect(rt.jobs[0].signal).toBeInstanceOf(AbortSignal); expect(rt.jobs[0].signal?.aborted).toBe(false);
         await rt.stopPage(sender, id); expect(rt.jobs[0].signal?.aborted).toBe(true);
         rt.jobs[0].task.resolve(audio()); await expect(next).resolves.toEqual(cancelled);
-        expect(rt.local).toHaveBeenCalledOnce(); expect(rt.play).not.toHaveBeenCalled();
+        expect(rt.online).toHaveBeenCalledOnce(); expect(rt.play).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -282,10 +280,10 @@ describe('extension-page TTS ownership at the public handler/router boundary', (
             await expect(rt.start(sender, invalid)).resolves.toMatchObject({
                 success: false, error: 'TTS clientRequestId 必须是非空字符串',
             });
-            expect(rt.local).toHaveBeenCalledOnce(); expect(rt.jobs[0].signal?.aborted).toBe(false);
+            expect(rt.online).toHaveBeenCalledOnce(); expect(rt.jobs[0].signal?.aborted).toBe(false);
         }
         await expect(rt.start(sender, id, ' ')).resolves.toMatchObject({success: false, error: 'TTS 文本为空'});
-        expect(rt.local).toHaveBeenCalledOnce(); expect(rt.jobs[0].signal?.aborted).toBe(false);
+        expect(rt.online).toHaveBeenCalledOnce(); expect(rt.jobs[0].signal?.aborted).toBe(false);
         await rt.stopPage(sender, id); expect(rt.jobs[0].signal?.aborted).toBe(true);
         rt.jobs[0].task.resolve(audio()); await expect(active).resolves.toEqual(cancelled);
         expect(rt.play).not.toHaveBeenCalled(); expect(rt.stop).not.toHaveBeenCalled();

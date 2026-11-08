@@ -4,8 +4,6 @@ import * as hashModule from '@/src/shared/function/sha256';
 import * as pageDiscourse from '@/src/services/translation/context/pageDiscourse';
 import {translateText, translateTextBatch} from '@/src/services/translation/client';
 import type {CompositeTranslationProvider} from '@/src/core/config/compositeTranslation';
-import {createQuickTranslationProfile} from '@/src/core/config/quickTranslation';
-import {resolveQuickTranslationInvocation} from '@/src/features/quick-translation/core';
 
 const fixture = vi.hoisted(() => ({config: {
     service: 'microsoft', model: {microsoft: 'default-model'}, customModel: {}, modelThinking: {},
@@ -50,21 +48,6 @@ describe('网页翻译配置捕获与词库摘要复用', () => {
         location.href = 'https://another.test/article';
         expect(captureFullPageTranslationConfig().displayMode).toBe('bilingual');
         expect(saved.displayMode).toBe('single'); expect(fixture.config.display).toBe(1);
-    });
-    it('真实快捷方案的默认显示继承可随全局切换，只有显式方案产生显示冻结标记', () => {
-        const profile = createQuickTranslationProfile('full-page', []);
-        const settings = {...fixture.config, fullPageTranslationMode: 'viewport' as const, translationScope: 'content' as const};
-        const first = captureFullPageTranslationConfig(resolveQuickTranslationInvocation(profile, settings));
-        expect(first.displayMode).toBe('bilingual'); expect(first.displayModeOverridden).toBeUndefined();
-        fixture.config.display = 0; settings.display = 0;
-        const second = captureFullPageTranslationConfig(resolveQuickTranslationInvocation(profile, settings));
-        expect(second.displayMode).toBe('single'); expect(second.displayModeOverridden).toBeUndefined();
-        // 请求快照仍冻结请求当时的模式；已译内容是否跟随全局由独立覆盖标记决定。
-        expect(first.displayMode).toBe('bilingual');
-        for (const [mode, expected] of [['bilingual', 'bilingual'], ['translation-only', 'single']] as const) {
-            const explicit = captureFullPageTranslationConfig(resolveQuickTranslationInvocation({...profile, displayMode: mode}, settings));
-            expect(explicit).toMatchObject({displayMode: expected, displayModeOverridden: true});
-        }
     });
     it('只有显式显示覆盖冻结本次模式，服务或语言覆盖仍允许网页显示即时切换', () => {
         expect(captureFullPageTranslationConfig().displayModeOverridden).toBeUndefined();

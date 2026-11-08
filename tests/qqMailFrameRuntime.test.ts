@@ -593,29 +593,6 @@ describe('frame bridge cleanup after extension reload', () => {
         } finally { invalidate(); }
     });
 
-    it('forwards a configured embedded quick profile, guards hover and ignores a late failure after disposal', async () => {
-        const {start} = await readingFrame('embedded');
-        let rejectOld!: (error: Error) => void;
-        mocks.sendMessage.mockImplementation(message => message.action === 'toggle'
-            ? new Promise((_resolve, reject) => {rejectOld = reject;})
-            : Promise.resolve({enabled: true, revision: 0, sessionId: null}));
-        let invalidate!: () => void;
-        await start({isInvalid: false, onInvalidated: (callback: () => void) => {invalidate = callback;}} as never);
-        const toggle = mocks.mountQuick.mock.calls[0][5];
-        const isSiteDisabled = mocks.mountHover.mock.calls[0][0].isSiteDisabled;
-        expect(isSiteDisabled()).toBe(false);
-        const invocation = {service: 'test-service', fullPageMode: 'viewport'};
-        toggle(invocation);
-        expect(mocks.sendMessage).toHaveBeenCalledWith({type: 'embeddedFrameRequest', action: 'toggle', invocation});
-        invalidate();
-        expect(isSiteDisabled()).toBe(true);
-        const calls = mocks.sendMessage.mock.calls.length;
-        toggle(invocation);
-        rejectOld(new Error('late failure'));
-        await Promise.resolve(); await Promise.resolve();
-        expect(mocks.sendMessage).toHaveBeenCalledTimes(calls);
-        expect(mocks.removeStyles).toHaveBeenCalledOnce();
-    });
 
     it('invalidates the embedded page cache only for extension-owned messages', async () => {
         const {start} = await readingFrame('embedded');

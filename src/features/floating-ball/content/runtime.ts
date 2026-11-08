@@ -10,7 +10,6 @@ import {config, requestConfigPatch, subscribeConfig} from '@/src/services/config
 import type {Config} from '@/src/core/config/model';
 import {isFloatingBallDisabledOnSite} from '@/src/core/site-rules/domain';
 import {reactive} from 'vue';
-import {subscribeMangaTranslation, openMangaEntry, openMangaReading, subscribeMangaReading, type MangaTranslationStatus} from '@/src/features/image-translation/public';
 import browser from 'webextension-polyfill';
 import {
   autoTranslateEnglishPage,
@@ -48,8 +47,6 @@ let unsubscribeTranslationToolbarStatus: (() => void) | null = null;
 let unsubscribePresentationConfig: (() => void) | null = null;
 let floatingBallPresentation: FloatingBallPresentation | null = null;
 let removeFullscreenListener: (() => void) | null = null;
-let unsubscribeMangaTranslation: (() => void) | null = null;
-let unsubscribeMangaReading: (() => void) | null = null;
 let anchoredPopup: ReturnType<typeof createAnchoredPopup> | null = null;
 const MOUNT_WAIT_NOTICE = 'floating-ball-mount-wait';
 let removeMountWaitVisibility: (() => void) | null = null;
@@ -188,15 +185,6 @@ export function mountFloatingBall(ctx?: ContentScriptContext) {
   // 展示契约是响应式对象，设置页改动无需重新挂载即可同步到已显示的悬浮球。
   const presentation = reactive(readPresentation(config));
   floatingBallPresentation = presentation;
-  const manga = reactive<MangaTranslationStatus>({available: false, active: false, pending: false, errors: 0});
-  const unsubscribeManga = subscribeMangaTranslation(status => Object.assign(manga, status));
-  let mangaStopped = false;
-  const stopManga = () => {if (!mangaStopped) {mangaStopped = true; unsubscribeManga();}};
-  unsubscribeMangaTranslation = stopManga;
-  const mangaReadingState = reactive({open:false});
-  const stopReading = subscribeMangaReading(open => {mangaReadingState.open = open;});
-  unsubscribeMangaReading = stopReading;
-
   unfinishedMounts += 1;
   let creation: ReturnType<typeof createVueShadowUi>;
   try {creation = createVueShadowUi(contentScriptContext, {
@@ -211,10 +199,6 @@ export function mountFloatingBall(ctx?: ContentScriptContext) {
       initialTranslating: isFullPageTranslationActive(),
       initialTranslationStatus: getTranslationToolbarStatus(),
       presentation,
-      manga,
-      mangaReadingState,
-      onMangaToggle: (event: MouseEvent) => { if (event.isTrusted) openMangaEntry(); },
-      onMangaReading: (event: MouseEvent) => {if(event.isTrusted)openMangaReading(event);},
       onSettingsClick: (event: MouseEvent) => openPopup(event),
       // 两个坐标字段必须一起提交，避免连续拖动或跨页面保存时只留下其中一个。
       onPositionChanged: (newPosition: 'left' | 'right', verticalPosition: number) => {
@@ -238,8 +222,6 @@ export function mountFloatingBall(ctx?: ContentScriptContext) {
     // 宿主页可以向开放的 Shadow Tree 派发合成点击，因此翻译、设置和位置控件必须留在 closed 边界内。
     mode: 'closed',
   });} catch (error) {
-    stopManga();
-    if (unsubscribeMangaTranslation === stopManga) unsubscribeMangaTranslation = null;
     if (floatingBallPresentation === presentation) floatingBallPresentation = null;
     console.error('[FluentRead] 悬浮球挂载失败', error);
     finishMountAttempt();
@@ -286,12 +268,6 @@ export function mountFloatingBall(ctx?: ContentScriptContext) {
     console.error('[FluentRead] 悬浮球挂载失败', error);
     return null;
   }).finally(() => {
-    if (!floatingBallUi || requestId !== mountRequestId) {
-      stopManga();
-      stopReading();
-      if (unsubscribeMangaTranslation === stopManga) unsubscribeMangaTranslation = null;
-      if (unsubscribeMangaReading === stopReading) unsubscribeMangaReading = null;
-    }
     if (requestId === mountRequestId) mountingPromise = null;
     finishMountAttempt();
   });
@@ -322,10 +298,6 @@ export function unmountFloatingBall() {
     anchoredPopup?.close();
     anchoredPopup = null;
   }
-  unsubscribeMangaTranslation?.();
-  unsubscribeMangaTranslation = null;
-  unsubscribeMangaReading?.();
-  unsubscribeMangaReading = null;
   unsubscribeFullPageTranslationProgress?.();
   unsubscribeFullPageTranslationProgress = null;
   unsubscribeTranslationToolbarStatus?.();

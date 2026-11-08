@@ -520,33 +520,6 @@ describe('悬浮球 content runtime', () => {
     expect(staleUi.remove).toHaveBeenCalledOnce();
   });
 
-  it.each(['old-first','new-first'] as const)('reopens after enable-disable-enable while mounts resolve %s', async order => {
-    const first=pendingUi(),second=pendingUi();const stale=ui(),live=ui({toggleTranslation:vi.fn()});
-    const stopOld=vi.fn(),stopNew=vi.fn();mocks.subscribeMangaTranslation.mockReturnValueOnce(stopOld).mockReturnValueOnce(stopNew);
-    mocks.createVueShadowUi.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    const runtime=await import('@/src/features/floating-ball/content/runtime');
-    vi.doMock('@/src/app/content/features',()=>({mountFloatingBall:runtime.mountFloatingBall,unmountFloatingBall:runtime.unmountFloatingBall}));
-    const {createContentRuntimeMessageHandler}=await import('@/src/app/content/messageRuntime');
-    const handler=createContentRuntimeMessageHandler({} as never,{isSiteDisabled:()=>false,updateSiteDisabled:async()=>undefined} as never);
-    try {
-      const respond=vi.fn();
-      handler({type:'toggleFloatingBall',isEnabled:true},{},respond);
-      handler({type:'toggleFloatingBall',isEnabled:false},{},respond);
-      handler({type:'toggleFloatingBall',isEnabled:true},{},respond);
-      expect(mocks.createVueShadowUi).toHaveBeenCalledTimes(2);expect(stopOld).toHaveBeenCalledOnce();
-      const current=runtime.mountFloatingBall();
-      if(order==='old-first') {
-        first.resolve(stale);await vi.waitFor(()=>expect(stale.remove).toHaveBeenCalledOnce());
-        expect(runtime.mountFloatingBall()).toBe(current);second.resolve(live);await current;
-      } else {
-        second.resolve(live);await current;first.resolve(stale);
-        await vi.waitFor(()=>expect(stale.remove).toHaveBeenCalledOnce());
-      }
-      expect(runtime.toggleFloatingBallTranslation()).toBe(true);expect(live.remove).not.toHaveBeenCalled();
-      expect(stopOld).toHaveBeenCalledOnce();expect(stopNew).not.toHaveBeenCalled();
-    } finally {runtime.unmountFloatingBall();vi.doUnmock('@/src/app/content/features');}
-    expect(stopNew).toHaveBeenCalledOnce();
-  });
 
   it('keeps the current mount owned when a canceled earlier mount fails late', async () => {
     const first=pendingUi(),second=pendingUi();const live=ui({toggleTranslation:vi.fn()});
@@ -584,25 +557,6 @@ describe('悬浮球 content runtime', () => {
     await vi.waitFor(()=>expect(mocks.createVueShadowUi).toHaveBeenCalledTimes(3));
     const live=ui({toggleTranslation:vi.fn()});third.resolve(live);await vi.waitFor(()=>expect(runtime.toggleFloatingBallTranslation()).toBe(true));
     const other=ui();second.resolve(other);await vi.waitFor(()=>expect(other.remove).toHaveBeenCalledOnce());runtime.unmountFloatingBall();
-  });
-
-  it.each(['getURL','create'] as const)('cleans synchronous %s failures without consuming mount slots', async failure => {
-    const stopFirst=vi.fn(),stopSecond=vi.fn(),stopLive=vi.fn();
-    mocks.subscribeMangaTranslation.mockReturnValueOnce(stopFirst).mockReturnValueOnce(stopSecond).mockReturnValueOnce(stopLive);
-    const error=new Error('context unavailable');
-    if(failure==='getURL')mocks.getURL.mockImplementationOnce(()=>{throw error;}).mockImplementationOnce(()=>{throw error;});
-    else mocks.createVueShadowUi.mockImplementationOnce(()=>{throw error;}).mockImplementationOnce(()=>{throw error;});
-    const live=ui({toggleTranslation:vi.fn()});mocks.createVueShadowUi.mockResolvedValue(live);
-    const consoleError=vi.spyOn(console,'error').mockImplementation(()=>undefined);
-    const runtime=await import('@/src/features/floating-ball/content/runtime');
-    try {
-      await expect(runtime.mountFloatingBall({} as never)).resolves.toBeNull();
-      await expect(runtime.mountFloatingBall()).resolves.toBeNull();
-      expect(stopFirst).toHaveBeenCalledOnce();expect(stopSecond).toHaveBeenCalledOnce();
-      await runtime.mountFloatingBall();expect(runtime.toggleFloatingBallTranslation()).toBe(true);
-      expect(mocks.showPageNotice).not.toHaveBeenCalled();expect(consoleError).toHaveBeenCalledTimes(2);
-    } finally {runtime.unmountFloatingBall();consoleError.mockRestore();}
-    expect(stopLive).toHaveBeenCalledOnce();
   });
 
   it('bounds hung WXT creations during rapid toggles and retries only the latest enabled request', async () => {
@@ -727,28 +681,6 @@ describe('悬浮球 content runtime', () => {
     expect(mocks.createVueShadowUi).toHaveBeenCalledOnce();
     runtime.unmountFloatingBall();
     expect(mountedUi.remove).toHaveBeenCalledOnce();
-  });
-  it('reconciles a removed floating-ball host through the actual registry, releasing old subscriptions and callbacks', async () => {
-    const {createContentFeatureRegistry} = await import('@/src/app/content/featureRegistry');
-    const runtime = await import('@/src/features/floating-ball/content/runtime');
-    const first = ui({setTranslationState: vi.fn(), setTranslationStatus: vi.fn(), setPosition: vi.fn()});
-    const secondInstance = {setTranslationState: vi.fn(), setTranslationStatus: vi.fn(), setPosition: vi.fn()}, second = ui(secondInstance);
-    const id = 'fluent-read-floating-ball-container';
-    mocks.createVueShadowUi.mockImplementationOnce(async () => {first.shadowHost.id = id; return first;})
-      .mockImplementationOnce(async () => {second.shadowHost.id = id; return second;});
-    const context = {isInvalid: false} as never, activation = new AbortController();
-    const registry = createContentFeatureRegistry([{id: 'floating-ball', isEnabled: () => true, mount: () => runtime.mountFloatingBall(context),
-      unmount: runtime.unmountFloatingBall, isMounted: () => Boolean(document.getElementById(id))}]);
-    await registry.mountEnabled({ctx: context, signal: activation.signal, isCurrent: () => true});
-    const staleProgress = mocks.subscribeFullPageTranslationProgress.mock.calls[0][0], staleStatus = mocks.subscribeTranslationToolbarStatus.mock.calls[0][0], staleConfig = mocks.subscribeConfig.mock.calls[0][0];
-    document.body.replaceWith(document.createElement('body')); await registry.reconcileEnabled(); expect(mocks.createVueShadowUi).toHaveBeenCalledOnce();
-    first.shadowHost.remove(); await expect(registry.reconcileEnabled()).resolves.toEqual([{id: 'floating-ball', status: 'mounted'}]);
-    expect(document.getElementById(id)).toBe(second.shadowHost); expect(first.remove).toHaveBeenCalledOnce();
-    for (const unsubscribe of [mocks.unsubscribeMangaTranslation, mocks.unsubscribeFullPageTranslationProgress, mocks.unsubscribeTranslationToolbarStatus, mocks.unsubscribeConfig]) expect(unsubscribe).toHaveBeenCalledOnce();
-    staleProgress({active: true}); staleStatus('error'); staleConfig({...mocks.config, floatingBallPosition: 'left'});
-    expect(secondInstance.setTranslationState).not.toHaveBeenCalled(); expect(secondInstance.setTranslationStatus).not.toHaveBeenCalled(); expect(secondInstance.setPosition).not.toHaveBeenCalled();
-    mocks.subscribeFullPageTranslationProgress.mock.calls[1][0]({active: true}); expect(secondInstance.setTranslationState).toHaveBeenCalledWith(true);
-    registry.unmountAll(); expect(second.remove).toHaveBeenCalledOnce(); expect(mocks.restoreOriginalContent).not.toHaveBeenCalled();
   });
   it('rejects a late replacement mount after deactivation and lets the next registry activation recover', async () => {
     const {createContentFeatureRegistry} = await import('@/src/app/content/featureRegistry');
@@ -988,18 +920,3 @@ describe('全文翻译进度面板 content runtime', () => {
     expect(mountedUi.remove).toHaveBeenCalledOnce();
   });
 });
-
- it('漫画入口订阅当前状态、只接收可信点击，卸载清理订阅', async () => {
-    mocks.createVueShadowUi.mockResolvedValue(ui());
-    const runtime = await import('@/src/features/floating-ball/content/runtime');
-    await runtime.mountFloatingBall({} as never);
-    const props = mocks.createVueShadowUi.mock.calls[0][1].props;
-    mocks.subscribeMangaTranslation.mock.calls[0][0]({available: true, active: true, pending: true, errors: 0});
-    expect(props.manga).toEqual({available: true, active: true, pending: true, errors: 0});
-    props.onMangaToggle({isTrusted: false}); expect(mocks.openMangaEntry).not.toHaveBeenCalled();
-    props.onMangaToggle({isTrusted: true}); expect(mocks.openMangaEntry).toHaveBeenCalledOnce();
-    props.onMangaReading({isTrusted:false});expect(mocks.openMangaReading).not.toHaveBeenCalled();
-    const event={isTrusted:true};props.onMangaReading(event);expect(mocks.openMangaReading).toHaveBeenCalledWith(event);
-    mocks.subscribeMangaReading.mock.calls[0][0](true);expect(props.mangaReadingState.open).toBe(true);
-    runtime.unmountFloatingBall(); expect(mocks.unsubscribeMangaTranslation).toHaveBeenCalledOnce();expect(mocks.unsubscribeMangaReading).toHaveBeenCalledOnce();
- });

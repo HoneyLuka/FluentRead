@@ -65,7 +65,6 @@ export function refreshBilingualTranslationSkeleton(
         longParagraphLineBreak: replay.longParagraphLineBreak,
         translationBeforeOriginal: replay.translationBeforeOriginal,
         sourceText: replay.sources.join('\n'),
-        ...(import.meta.env.BROWSER !== 'userscript' ? {personalCorrectionId: replay.personalCorrectionId} : {}),
     });
     state.sourceTextNodes = collectLiveTranslationTextSlots(
         node,

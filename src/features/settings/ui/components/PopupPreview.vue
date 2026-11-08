@@ -19,7 +19,6 @@
       </span>
       <span class="preview-header-actions">
         <span class="preview-header-icon"><Coffee /></span>
-        <span v-if="sidepanelAvailable" class="preview-header-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M12.5 3.5v13M5.5 8h4M5.5 11h4"/></svg></span>
         <span><Setting />{{ translateLegacy('设置') }}</span>
       </span>
     </header>
@@ -150,7 +149,6 @@ import {computed} from 'vue'
 import {Coffee, Setting} from '@element-plus/icons-vue'
 import {version} from '@/package.json'
 import ServiceIcon from '@/src/ui/components/ServiceIcon.vue'
-import {canOpenTranslationSidepanel} from '@/src/platform/browser/translationSidepanel'
 import {
   POPUP_QUICK_FEATURE_IDS,
   popupModuleOptions,
@@ -180,20 +178,17 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{'edit:scope': [scope: 'popupModule' | 'quickFeature']}>()
 const {t, translateLegacy} = useUiI18n()
-const iconUrl = globalThis.__FLUENTREAD_ICON_DATA__ || '/icon/128.png'
-const sidepanelAvailable = import.meta.env.BROWSER !== 'userscript' && canOpenTranslationSidepanel()
+const iconUrl = '/icon/128.png'
 
 // 固定范例用于比较外观，不表示这些服务、快捷键或开关已在用户配置中启用。
-const previewProviders = ['localTranslation', 'freeTranslation', 'microsoft', 'deepseek']
-const sampleQuickFeatureIds: PopupQuickFeatureId[] = ['hover', 'selection', 'image', 'document']
+const previewProviders = ['freeTranslation', 'google', 'microsoft', 'deepseek']
+const sampleQuickFeatureIds: PopupQuickFeatureId[] = ['hover', 'selection']
 const sampleSummaries: Record<PopupQuickFeatureId, string> = {
   hover: 'Ctrl',
   selection: '已关闭',
   appearance: '仅显示译文',
-  image: 'Shift+Z',
-  document: 'PDF / Word / …',
 }
-const sampleStatus: Partial<Record<PopupQuickFeatureId, 'on' | 'off'>> = {hover: 'on', selection: 'off', image: 'on'}
+const sampleStatus: Partial<Record<PopupQuickFeatureId, 'on' | 'off'>> = {hover: 'on', selection: 'off'}
 
 const orderedModules = computed<readonly PreviewLayoutItem[]>(() => props.modules
   ?? popupModuleOptions.map((module) => ({id: module.id, label: t(module.labelKey)})))

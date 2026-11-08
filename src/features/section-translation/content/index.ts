@@ -5,7 +5,6 @@
  * 模块边界：本模块只做入口编排与结果提示，不绘制高亮、不实现区域判定，也不直接操作译文 DOM；选择界面归 ./picker，区域翻译与恢复归全文翻译 feature 的公开接口，按键口径归 core/config/sectionTranslation。
  */
 import {matchesSectionTranslationHotkey} from '@/src/core/config/sectionTranslation';
-import {matchesConfiguredHotkey as matchesHotkey} from '@/src/core/hotkey';
 import {normalizeUiLanguage, translate} from '@/src/core/i18n';
 import {
     inspectTranslationSection,
@@ -17,7 +16,6 @@ import {
 } from '@/src/features/full-page-translation/public';
 import {showPageNotice} from '@/src/features/page-notice/public';
 import {config, requestConfigPatch, subscribeConfig} from '@/src/services/config/store';
-import {resolveQuickTranslationInvocation} from '@/src/features/quick-translation/public';
 import {resolveSectionLocators} from '../locator';
 import {createRememberedSectionRuntime} from './remembered';
 import {showSectionReminder} from './reminder';
@@ -85,11 +83,8 @@ export function mountSectionTranslationContentFeature(
         enabled: () => !lifetime.aborted && !options.isSiteDisabled() && config.on === true && !isFullPageTranslationActive() && !isSectionPickerActive(),
         resolve: resolveSectionLocators,
         translate: async (roots, rule, signal) => {
-            const profile = rule.profileId ? config.quickTranslationProfiles.find(item => item.id === rule.profileId && item.action === 'section') : undefined;
-            // 删除方案后不擅自改用其他服务，保留规则供设置页调整。
-            if (rule.profileId && !profile) throw new Error('section-profile-unavailable');
-            const invocation = profile ? resolveQuickTranslationInvocation(profile, config) : undefined;
-            const result = await ensureTranslationSection(roots, invocation, signal);
+            void rule;
+            const result = await ensureTranslationSection(roots, undefined, signal);
             if (signal.aborted) return;
             if (result.failed || result.action === 'blocked' || result.action === 'cancelled') throw new Error('section-translation-failed');
         },
@@ -107,7 +102,6 @@ export function mountSectionTranslationContentFeature(
         }
         activeProfileId = invocation?.profileId ?? '';
         const revision = ++selectionRevision;
-        const profileHotkey = config.quickTranslationProfiles?.find(profile => profile.id === invocation?.profileId)?.hotkey;
         return startSectionPicker({
             initialPoint: pointer,
             rememberScopes: sectionRememberScopes(document.location?.href ?? ''),
@@ -141,7 +135,7 @@ export function mountSectionTranslationContentFeature(
                 }
             },
             text,
-            isExitHotkey: event => matchesConfiguredHotkey(event) || Boolean(profileHotkey && matchesHotkey(event, profileHotkey)),
+            isExitHotkey: event => matchesConfiguredHotkey(event),
             isEditing: isEditingInPage,
         });
     };

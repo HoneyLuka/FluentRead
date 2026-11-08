@@ -5,16 +5,12 @@
  * 主要内容：保持语言名称使用各自原生写法，并为尚未 key 化的旧 UI 提供日语映射。
  * 模块边界：资源只描述扩展自己的界面文本；不会翻译网页正文、用户输入或翻译结果。
  */
-import videoLearningText from './video-learning/ja-JP.json';
 import selfHelpText from './self-help/ja-JP.json';
 import {compositeTranslationMessages, compositeTranslationLegacyText} from './compositeTranslation';
 import {aiRequestTimeoutMessages} from './aiRequestTimeout';
 import {selectionDictionaryMessages} from './selectionDictionary';
 import {sectionTranslationRulesJapaneseMessages} from './sectionTranslationRulesAsian';
 import {mimoRetirementLegacyText} from './mimoRetirement';
-import {pdfReadingMessages} from './pdfReading';
-import {informationHighlightMessages} from './informationHighlight';
-import reencounterText from './reencounter/ja-JP.json';
 import settingsCopyText from './settings-copy/ja-JP.json';
 import brandTaglines from './brand-taglines.json';
 import googleDriveText from './google-drive/ja-JP.json';
@@ -25,11 +21,8 @@ import {legacyTextOverrides} from './legacy-overrides';
 import {sectionTranslationRulesLegacyText} from './sectionTranslationRulesLegacy';
 import {createLegacyCorrectionText} from './legacy-corrections';
 import {createRuntimeFeedbackLegacyText} from './runtime-feedback';
-import {localTtsJapaneseMessages} from './localTts';
 import {translationStatsJapaneseMessages} from './translationStats';
-import {localTranslationJapaneseMessages} from './localTranslation';
 
-import {personalCorrectionMessages} from './personalCorrections';
 
 import countForms from './count-forms.json';
 
@@ -38,16 +31,11 @@ export const jaJPMessages = {
     "feedback.serviceHint": "選択したサービスの接続やモデル設定を確認して、もう一度お試しください。",
     "feedback.retryHint": "少し待って再試行してください。原文と現在の選択範囲は保持されます。",
     ...countForms['ja-JP'],
-    ...personalCorrectionMessages['ja-JP'],
     "document.config.loadFailed": "設定を読み込めませんでした。再読み込みしてもう一度お試しください。",
     "popup.compact.translate": "翻訳",
     "popup.compact.restore": "戻す",
-    ...videoLearningText,
     ...selfHelpText,
     ...compositeTranslationMessages['ja-JP'],
-    ...pdfReadingMessages['ja-JP'],
-    ...informationHighlightMessages['ja-JP'],
-    ...reencounterText,
     ...settingsCopyText.messages,
     "settings.headers.title": "送信元リクエストヘッダーを削除",
     "settings.headers.help": "初期状態ではリストは空です。すべてのサービスで共有され、FluentRead が指定した完全一致のドメインへ送るリクエストだけに適用されます。サブドメインは別途追加してください。項目の削除またはチェックの解除で既定の動作に戻ります。",
@@ -413,7 +401,6 @@ export const jaJPMessages = {
     "settings.excludedLanguages.hint": "次の翻訳から適用されます。短いテキストや言語を判定できない内容は引き続き翻訳します。",
     "options.userscriptUnavailableTitle": "ユーザースクリプトでは利用できません",
     "options.userscriptUnavailableDescription": "この機能にはブラウザー拡張機能の実行環境が必要です。利用するには FluentRead 拡張機能をインストールしてください。",
-    ...localTtsJapaneseMessages,
     ...translationStatsJapaneseMessages,
     "settings.services.library.freeReady": "API キーは不要です。利用可能な無料サービスを自動で選択します。",
     "settings.services.library.keepOne": "少なくとも1つのサービスを有効にしてください。",
@@ -556,7 +543,6 @@ export const jaJPMessages = {
     "writing.demo.reviewHint": "会話を参考に下書きを作成します。内容を確認し、修正できます。",
     "writing.demo.insertHint": "下書きを返信欄に戻しました。確認してから自分で送信します。",
 
-    ...localTranslationJapaneseMessages,
     "settings.requestLimits.modelTitle": "モデルのリクエスト制限",
     "settings.requestLimits.globalTitle": "リクエスト制限",
     "settings.requestLimits.globalHelp": "個別設定のないサービスとモデルは、この制限を共有します。",
