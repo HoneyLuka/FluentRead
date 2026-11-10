@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
-import {createGoogleDriveSyncHandler, GOOGLE_DRIVE_SYNC_MESSAGE_TYPE as type} from '@/src/app/background/handlers/googleDriveSync';
+import {createGoogleDriveSyncHandler, GOOGLE_DRIVE_SYNC_MESSAGE_TYPE as type, type DriveWebOauthActions} from '@/src/app/background/handlers/googleDriveSync';
 import {isTrustedSettingsSender} from '@/src/app/background/handlers/trustedSettingsSender';
 import {GOOGLE_DRIVE_APPLICATION_PASSPHRASE} from '@/src/platform/google-drive/constants';
 import {DriveError} from '@/src/platform/google-drive/auth';
@@ -8,9 +8,10 @@ import {DriveEncryptionError} from '@/src/platform/google-drive/encryption';
 import {DriveConfigError} from '@/src/core/config/driveSync';
 import type {createGoogleDriveSync} from '@/src/services/config/googleDriveSync';
 
-function fixture(trusted = true) {
+const verifier = 'v'.repeat(43);
+function fixture(trusted = true, webOauth?: DriveWebOauthActions) {
     const service = {status: vi.fn(), cancel: vi.fn(), prepare: vi.fn(), commit: vi.fn(), prepareDelete: vi.fn(), commitDelete: vi.fn()} as unknown as ReturnType<typeof createGoogleDriveSync>;
-    return {service, handler: createGoogleDriveSyncHandler(service, () => trusted)};
+    return {service, webOauth, handler: createGoogleDriveSyncHandler(service, () => trusted, webOauth)};
 }
 describe('Google Drive 可信消息协议', () => {
     it('已上传但待核验返回可本地化提示，不将后续校验失败描述为未上传',async()=>{
@@ -86,4 +87,41 @@ it('Google Drive prepare 的敏感信息同意只能是 boolean，旧消息缺�
         expect(await f.handler.handle({type, clientId: 'fixture-client', action: 'prepare', includeSensitive}, {sender: {tab: {id: 7}}})).toMatchObject({success: true});
         expect(f.service.prepare).toHaveBeenLastCalledWith(GOOGLE_DRIVE_APPLICATION_PASSPHRASE, 7, 'fixture-client', includeSensitive ?? false);
     }
+});
+
+describe('Google Drive Web OAuth 连接动作', () => {
+    it('connect 校验授权码与 PKCE 校验值后只向 Web 端口传递这对值并返回最新状态', async () => {
+        const web: DriveWebOauthActions = {connect: vi.fn(async () => undefined), signOut: vi.fn(async () => undefined)};
+        const f = fixture(true, web);
+        vi.mocked(f.service.status).mockResolvedValueOnce({available: true, reason: '', webOauth: {clientId: 'fixture-client', redirectUri: 'https://fixture.example/callback', signedIn: true}, account: null, lastSyncedAt: null});
+        expect(await f.handler.handle({type, clientId: 'fixture-client', action: 'connect', code: '4/0Ax4Xb-fixture', codeVerifier: verifier}, {})).toEqual({success: true, data: {available: true, reason: '', webOauth: {clientId: 'fixture-client', redirectUri: 'https://fixture.example/callback', signedIn: true}, account: null, lastSyncedAt: null}});
+        expect(web.connect).toHaveBeenCalledWith('4/0Ax4Xb-fixture', verifier);
+        // 授权码与校验值格式错误直接拒绝，不触碰 Web 端口。
+        for (const message of [{code: 'bad code'}, {code: ''}, {code: 1}, {code: 'x'.repeat(2049)}, {code: '4/0Ax4Xb-fixture', codeVerifier: 'short'}, {code: '4/0Ax4Xb-fixture', codeVerifier: 'x'.repeat(129)}, {code: '4/0Ax4Xb-fixture', codeVerifier: 1}, {code: '4/0Ax4Xb-fixture'}]) {
+            expect(await f.handler.handle({type, clientId: 'fixture-client', action: 'connect', ...message}, {})).toMatchObject({success: false, error: '无效的 Google 授权结果，请重新连接。'});
+        }
+        expect(web.connect).toHaveBeenCalledOnce();
+        // 缺少 clientId 与不可信发送者同样拒绝。
+        expect(await f.handler.handle({type, action: 'connect', code: '4/0Ax4Xb-fixture', codeVerifier: verifier}, {})).toMatchObject({success: false});
+        const denied = fixture(false, web);
+        expect(await denied.handler.handle({type, clientId: 'fixture-client', action: 'connect', code: '4/0Ax4Xb-fixture', codeVerifier: verifier}, {})).toMatchObject({success: false, error: 'Google Drive 同步仅允许从扩展设置页面操作。'});
+        expect(web.connect).toHaveBeenCalledOnce();
+    });
+    it('signOut 只清除本机连接记录；两个动作在未配置 Web 路径时给出明确提示', async () => {
+        const web: DriveWebOauthActions = {connect: vi.fn(async () => undefined), signOut: vi.fn(async () => undefined)};
+        const f = fixture(true, web);
+        await f.handler.handle({type, clientId: 'fixture-client', action: 'signOut'}, {});
+        expect(web.signOut).toHaveBeenCalledOnce();
+        const native = fixture(true);
+        expect(await native.handler.handle({type, clientId: 'fixture-client', action: 'signOut'}, {})).toMatchObject({success: false, error: '当前浏览器使用系统授权管理 Google 连接，无需退出。'});
+        expect(await native.handler.handle({type, clientId: 'fixture-client', action: 'connect', code: '4/0Ax4Xb-fixture', codeVerifier: verifier}, {})).toMatchObject({success: false, error: '当前构建未配置 Google 网页授权，请在 Chrome 中使用系统授权或按维护者指南配置。'});
+    });
+    it('连接与退出只反射安全错误，网络失败映射为可重试提示', async () => {
+        const web: DriveWebOauthActions = {connect: vi.fn(async () => {throw new DriveError('无法连接 Google 授权服务，请检查网络后重试。');}), signOut: vi.fn(async () => {throw new Error('fixture-private-upstream-key');})};
+        const f = fixture(true, web);
+        expect(await f.handler.handle({type, clientId: 'fixture-client', action: 'connect', code: '4/0Ax4Xb-fixture', codeVerifier: verifier}, {})).toEqual({success: false, error: '无法连接 Google 授权服务，请检查网络后重试。'});
+        const response = await f.handler.handle({type, clientId: 'fixture-client', action: 'signOut'}, {});
+        expect(JSON.stringify(response)).not.toContain('fixture-private');
+        expect(response).toMatchObject({success: false, error: '连接 Google 账号未完成，请重试。'});
+    });
 });

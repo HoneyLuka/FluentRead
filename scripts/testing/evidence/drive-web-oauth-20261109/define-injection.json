@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-09",
+  "checks": {
+    "safari-mv2": {
+      "clientId": true,
+      "clientSecret": true,
+      "redirectUri": true,
+      "privatePassphrase": true
+    },
+    "chrome-mv3": {
+      "clientId": true,
+      "clientSecret": true,
+      "redirectUri": true,
+      "privatePassphrase": true
+    }
+  }
+}

@@ -113,7 +113,14 @@
     "settings.cloud.deleteCloudEffect": "确认后将从 {provider} 删除当前云端备份",
     "settings.cloud.deleteVerificationPrompt": "请输入「{phrase}」以确认删除。",
     "settings.webdav.concurrentWarning": "为避免云端备份被覆盖，请勿同时在多台设备上同步",
-    "settings.cloud.uploadUnverified": "配置已上传到 Google Drive，但暂时无法完成校验。请重新读取云端备份确认；本机配置未修改。"
+    "settings.cloud.uploadUnverified": "配置已上传到 Google Drive，但暂时无法完成校验。请重新读取云端备份确认；本机配置未修改。",
+    "settings.cloud.webConnectSync": "连接 Google 账号并同步",
+    "settings.cloud.webSignOut": "退出 Google 连接",
+    "settings.cloud.webSignedOut": "已退出 Google 连接",
+    "settings.cloud.webAuthTabClosed": "Google 授权页已关闭，连接未完成。",
+    "settings.cloud.webAuthDenied": "Google 授权被拒绝，连接未完成。",
+    "settings.cloud.webAuthStateInvalid": "Google 授权返回结果校验失败，请重试。",
+    "settings.cloud.webAuthOpenFailed": "无法打开 Google 授权页，请重试。"
   },
   "legacy": {
     "普通云备份包含不属于此范围的字段，请重新生成备份。": "普通云备份包含不属于此范围的字段，请重新生成备份。",

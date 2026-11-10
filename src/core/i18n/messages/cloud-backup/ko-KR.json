@@ -113,7 +113,14 @@
     "settings.cloud.deleteCloudEffect": "확인하면 {provider}에서 현재 클라우드 백업을 삭제합니다.",
     "settings.cloud.deleteVerificationPrompt": "삭제를 확인하려면 “{phrase}”를 입력하세요.",
     "settings.webdav.concurrentWarning": "이 서비스는 동시 쓰기를 방지할 수 없습니다. 저장, 병합 또는 삭제 전에 클라우드 백업을 다시 확인합니다. 다른 기기에서 동시에 동기화하지 마세요.",
-    "settings.cloud.uploadUnverified": "설정이 Google Drive에 업로드되었지만 검증을 완료하지 못했습니다. 클라우드 백업을 다시 읽어 확인하세요. 기기 설정은 변경되지 않았습니다."
+    "settings.cloud.uploadUnverified": "설정이 Google Drive에 업로드되었지만 검증을 완료하지 못했습니다. 클라우드 백업을 다시 읽어 확인하세요. 기기 설정은 변경되지 않았습니다.",
+    "settings.cloud.webConnectSync": "Google 계정 연결 후 동기화",
+    "settings.cloud.webSignOut": "Google 연결 해제",
+    "settings.cloud.webSignedOut": "Google 연결을 해제했습니다",
+    "settings.cloud.webAuthTabClosed": "Google 인증 페이지가 닫혀 연결이 완료되지 않았습니다.",
+    "settings.cloud.webAuthDenied": "Google 인증이 거부되어 연결이 완료되지 않았습니다.",
+    "settings.cloud.webAuthStateInvalid": "Google 인증 응답 검증에 실패했습니다. 다시 시도하세요.",
+    "settings.cloud.webAuthOpenFailed": "Google 인증 페이지를 열 수 없습니다. 다시 시도하세요."
   },
   "legacy": {
     "普通云备份包含不属于此范围的字段，请重新生成备份。": "일반 설정 클라우드 백업에 해당 범위에 속하지 않는 필드가 포함되어 있습니다. 백업을 다시 생성하세요.",
@@ -125,6 +132,13 @@
     "云端备份已变化，请重新检查后再删除。": "백업이 변경되었습니다. 삭제 전에 다시 확인하세요.",
     "云端备份缺少安全删除所需的版本信息，请到服务商管理页面手动删除。": "안전한 삭제에 필요한 버전 정보가 없습니다. 서비스 관리 페이지에서 삭제하세요.",
     "删除后仍检测到云端备份，可能已被其他设备重新创建，请重新检查。": "삭제 후에도 백업이 있습니다. 다른 기기가 다시 생성했을 수 있습니다. 다시 확인하세요.",
-    "删除预览属于其他页面或已失效，请在原设置页面继续。": "다른 페이지의 미리보기이거나 만료되었습니다. 원래 설정 페이지에서 계속하세요."
+    "删除预览属于其他页面或已失效，请在原设置页面继续。": "다른 페이지의 미리보기이거나 만료되었습니다. 원래 설정 페이지에서 계속하세요.",
+    "请先连接 Google 账号，再进行 Google Drive 同步。": "Google Drive와 동기화하려면 먼저 Google 계정을 연결하세요.",
+    "Google 授权已失效，请重新连接 Google 账号。": "Google 인증이 만료되었습니다. Google 계정을 다시 연결하세요.",
+    "无法连接 Google 授权服务，请检查网络后重试。": "Google 인증 서비스에 연결할 수 없습니다. 네트워크를 확인하고 다시 시도하세요.",
+    "当前构建未配置 Google 网页授权，请在 Chrome 中使用系统授权或按维护者指南配置。": "이 빌드에는 Google 웹 인증이 구성되어 있지 않습니다. Chrome에서는 시스템 인증을 사용하거나 유지 관리 가이드에 따라 구성하세요.",
+    "无效的 Google 授权结果，请重新连接。": "Google 인증 결과가 유효하지 않습니다. 다시 연결하세요.",
+    "当前浏览器使用系统授权管理 Google 连接，无需退出。": "이 브라우저는 시스템 인증으로 Google 연결을 관리하므로 연결 해제가 필요하지 않습니다.",
+    "连接 Google 账号未完成，请重试。": "Google 계정 연결이 완료되지 않았습니다. 다시 시도하세요."
   }
 }

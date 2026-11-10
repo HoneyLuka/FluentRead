@@ -48,3 +48,15 @@ it('Google Drive 客户端 prepare 默认排除且明确传递单次同意，拒
     for (const consent of [null, 1, 'true', {}, []]) expect(() => client.prepare(consent as boolean)).toThrow('布尔值');
     expect(mocks.send).toHaveBeenCalledTimes(3);
 });
+
+it('Web OAuth connect/signOut 复用同一协议，只发送授权码与 PKCE 校验值', async () => {
+    mocks.send.mockClear();
+    mocks.send.mockResolvedValue({success: true, data: {available: true}});
+    const verifier = 'v'.repeat(43);
+    await client.connect('4/0Ax4Xb-fixture', verifier);
+    await client.signOut();
+    expect(mocks.send.mock.calls.map(([message]) => message.action)).toEqual(['connect', 'signOut']);
+    expect(mocks.send).toHaveBeenNthCalledWith(1, {type: 'googleDriveEncryptedSync', action: 'connect', clientId: expect.any(String), code: '4/0Ax4Xb-fixture', codeVerifier: verifier});
+    expect(mocks.send).toHaveBeenNthCalledWith(2, {type: 'googleDriveEncryptedSync', action: 'signOut', clientId: expect.any(String)});
+    expect(mocks.send.mock.calls.every(([message]) => !('passphrase' in message) && !('clientSecret' in message))).toBe(true);
+});

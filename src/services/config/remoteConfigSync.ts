@@ -2,12 +2,13 @@
  * @file src/services/config/remoteConfigSync.ts
  * 文件职责：编排 Google Drive 的范围化云备份和单次用户确认事务。
  * 主要内容：单次授权、账号绑定、上次成功同步的账号记录、密文基线、三方合并、
- * 掩码预览、可安全中断读取的预览取消、只读恢复与内容核验兼容能力、绑定账号与文件版本的删除确认、过期检查与授权缓存清理；清理失败独立提示。
+ * 掩码预览、可安全中断读取的预览取消、只读恢复与内容核验兼容能力、绑定账号与文件版本的删除确认、过期检查与授权缓存清理；清理失败独立提示；状态透出异步可用性与 Web OAuth 连接信息。
  * 模块边界：通过端口读写配置与云端存储；不持久化口令，不向设置页面传递完整配置。
  */
 import {buildDriveSyncDiff, driveSyncPayload, driveValuesEqual, parseDriveSyncPayload, resolveDriveSyncDiff, toDriveSyncConfig, parseDriveSyncSnapshot, projectDriveSyncConfig, restoreDriveSyncSettings, validateDriveSyncConsent, type DriveSyncConfig, type DriveSyncDiff} from '@/src/core/config/driveSync';
 import {decryptDriveConfig, encryptDriveConfig, decryptDrivePreview, encryptDrivePreview, validateDrivePassphrase} from '@/src/platform/google-drive/encryption';
 import {canMutateCloudFile, CloudSyncError, type CloudSyncAccount as DriveAccount, type CloudSyncSession as DriveSession, type CloudSyncFile as DriveFile, type CloudSyncRemote as DriveRemote} from '@/src/core/config/cloudSync';
+import type {DriveAuthAvailability} from '@/src/platform/google-drive/auth';
 
 export interface DriveSyncState {
     version: 1;
@@ -20,7 +21,7 @@ export interface DriveSyncState {
     cleanupPending?: true;
     prepared?: {id: string; expiresAt: number; content: string; tabId?: number; clientId?: string; format?: 2; scope?: 'settings' | 'complete'; remote?: DriveRemote | null; operation?: 'delete'; deletion?: {account: DriveAccount; remote: DriveRemote | null}};
 }
-export interface DriveSyncStatus {available: boolean; reason: string; account: DriveAccount | null; lastSyncedAt: number | null; cleanupPending?: true}
+export interface DriveSyncStatus extends DriveAuthAvailability {account: DriveAccount | null; lastSyncedAt: number | null; cleanupPending?: true}
 export interface CloudBackupDeletePreview {id: string; account: DriveAccount; hasRemote: boolean; canDelete: boolean; expiresAt: number}
 export interface CloudBackupDeleteResult extends DriveSyncStatus {deleted: boolean}
 export interface DriveSyncPreview {
@@ -36,7 +37,7 @@ export interface DriveSyncPreview {
 }
 export type DriveSyncDirection = 'upload' | 'download' | 'merge';
 export interface DriveSyncPorts<Session extends DriveSession = DriveSession> {
-    auth: {availability(): {available: boolean; reason: string}; open(interactive?: boolean, signal?: AbortSignal): Promise<Session>; disconnect(): Promise<void>};
+    auth: {availability(): Promise<DriveAuthAvailability>; open(interactive?: boolean, signal?: AbortSignal): Promise<Session>; disconnect(): Promise<void>};
     api: {read(session: Session, signal?: AbortSignal): Promise<DriveRemote | null>; write(session: Session, content: string, previous: DriveFile | null): Promise<DriveFile>; remove(session: Session, previous: DriveFile): Promise<void>};
     snapshot(): Promise<Record<string, unknown>>;
     apply(config: DriveSyncConfig): Promise<void>;
@@ -119,7 +120,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
         }
     }
     async function status(): Promise<DriveSyncStatus> {
-        const availability = ports.auth.availability();
+        const availability = await ports.auth.availability();
         const state = readState(await ports.readState());
         // 打开设置不获取令牌；顺便清理旧实现留下的连接或已经过期的事务。
         let cleanupPending = state.cleanupPending;
@@ -167,7 +168,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
         }
         // 服务器确认不存在后才清除本机合并基线及同步记录；不读写用户配置或连接设置。
         await ports.writeState(emptyState());
-        return {...ports.auth.availability(), account: null, lastSyncedAt: null, deleted: Boolean(current)};
+        return {...await ports.auth.availability(), account: null, lastSyncedAt: null, deleted: Boolean(current)};
     }
     async function prepare(passphrase: string, tabId: number | undefined, clientId: string | undefined, includeSensitive: boolean, signal: AbortSignal): Promise<DriveSyncPreview> {
         validateDriveSyncConsent(includeSensitive);
@@ -263,7 +264,7 @@ export function createRemoteConfigSync<Session extends DriveSession>(ports: Driv
             }
         }
         await ports.writeState({version: 1, connected: false, accountId: session.account.id, baseline: content, lastSyncedAt: ports.now(), lastSyncedAccount: session.account});
-        return {...ports.auth.availability(), account: session.account, lastSyncedAt: ports.now()};
+        return {...await ports.auth.availability(), account: session.account, lastSyncedAt: ports.now()};
     }
     return {
         status: () => exclusive(status),

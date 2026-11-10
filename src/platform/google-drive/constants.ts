@@ -1,8 +1,8 @@
 /**
  * @file src/platform/google-drive/constants.ts
- * 文件职责：定义 Google Drive 同步的公开应用身份、最小权限和文件协议标识。
- * 主要内容：集中商店扩展 ID、公开 OAuth Client ID、应用数据文件名与同步状态键。
- * 模块边界：只描述公开协议，不包含测试用户、登录令牌、用户口令或浏览器副作用。
+ * 文件职责：定义 Google Drive 同步的公开应用身份、最小权限和文件协议标识，并为自用构建提供构建期注入的 Web OAuth 凭据与私有口令。
+ * 主要内容：集中商店扩展 ID、公开 OAuth Client ID、应用数据文件名与同步状态键；解析 wxt.config 注入的 FLUENTREAD_DRIVE_* 环境变量（未注入时回落公开默认值）。
+ * 模块边界：只描述公开协议与构建期注入结果，不包含测试用户、登录令牌或浏览器副作用；私有口令与 Web 客户端密钥只在自用构建产物中出现，不写入源码。
  */
 export const GOOGLE_DRIVE_DEFAULT_CLIENT_ID = '474699705334-7fua4hnkq1nmfu92cof0kdnmqsk5kth8.apps.googleusercontent.com';
 export const GOOGLE_DRIVE_EXTENSION_ID = 'djnlaiohfaaifbibleebjggkghlmcpcj';
@@ -22,3 +22,18 @@ export const GOOGLE_DRIVE_EXTENSION_PUBLIC_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ
 
 // 固定应用口令是公开的格式兼容参数；拿到密文的人可以据此解密，访问保护依赖 Google 授权。
 export const GOOGLE_DRIVE_APPLICATION_PASSPHRASE = 'FluentReadEncryption';
+
+// wxt.config.ts 的 vite.define 在构建期把 FLUENTREAD_DRIVE_PASSPHRASE 静态替换进产物；
+// 测试与未配置构建直接读取运行时 process.env（undefined 时回落公开口令，与官方版行为一致）。
+export function resolveDriveSyncPassphrase(injected: string | undefined = process.env.FLUENTREAD_DRIVE_PASSPHRASE): string {
+    return injected && injected.trim() ? injected : GOOGLE_DRIVE_APPLICATION_PASSPHRASE;
+}
+
+// 自用精简版私有口令：未注入时与官方扩展相同，旧备份保持可读。
+export const GOOGLE_DRIVE_SYNC_PASSPHRASE = resolveDriveSyncPassphrase();
+
+// Safari 等无 chrome.identity 的宿主走 Web OAuth（uBlacklist 式网页授权）。
+// 三个值均由 wxt.config.ts 从 FLUENTREAD_DRIVE_WEB_* 环境变量注入；未注入时为空串，Web 路径保持不可用。
+export const GOOGLE_DRIVE_WEB_CLIENT_ID = process.env.FLUENTREAD_DRIVE_WEB_CLIENT_ID ?? '';
+export const GOOGLE_DRIVE_WEB_CLIENT_SECRET = process.env.FLUENTREAD_DRIVE_WEB_CLIENT_SECRET ?? '';
+export const GOOGLE_DRIVE_WEB_REDIRECT_URI = process.env.FLUENTREAD_DRIVE_WEB_REDIRECT_URI ?? '';

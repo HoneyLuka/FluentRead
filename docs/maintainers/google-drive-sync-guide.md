@@ -355,6 +355,60 @@ v3 元数据响应头缺少强 ETag 时，补取同一文件的 [v2 File 元数�
 
 Google Auth Platform 的 Production 与 Chrome Web Store 发布是两个独立步骤。完成 OAuth 所需品牌资料与验证，再发布包含同步功能的扩展包；仅创建 Client ID 不会让旧商店版本自动获得新按钮。Edge、Firefox 若要支持同类同步，需要设计与其网页登录流程匹配的客户端，本次提供清楚的支持范围提示。[Edge 官方 API 支持列表](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/api-support)
 
+## 13 Safari 网页授权（Web OAuth，自用精简构建）
+
+Safari 没有 Chrome 的 `chrome.identity`，官方版因此提示“仅支持 Chrome 扩展”。自用精简构建通过 uBlacklist 式**网页授权**补上这条路：设置页生成 PKCE 校验值，新标签页打开 Google 同意页，截获重定向到回调页的授权码后交给后台换取令牌。Chrome 构建不受影响——原生 identity 存在时永远优先走原生路径；未注入凭据时 Safari 行为与官方版一致。
+
+### 13.1 Google Cloud 控制台
+
+在同一个 Google Cloud 项目里（Drive API 与 `drive.appdata` 范围已按第 6 节配置）：
+
+1. **客户端 / Clients → 创建客户端**，应用类型选择 **Web 应用 / Web application**，名称如 `FluentRead Web`。
+2. **已获授权的重定向 URI** 填写一个你控制的静态回调页地址，例如 GitHub Pages 上的 `https://<用户名>.github.io/fluentread-oauth/callback`。
+3. 复制生成的 **客户端 ID** 与 **客户端密钥**。Web 客户端需要密钥，这与 Chrome 扩展客户端不同。
+4. 测试用户按第 6.6 节在同一项目的目标对象中添加。
+
+回调页内容无关紧要——扩展只读取页签 URL 上的 `code`/`state` 参数并立即关闭该页签；可以是一句“请返回扩展”。页面必须以 HTTPS 公开可访问，且地址与控制台登记、`.env` 填写的值**完全一致**（含路径、末尾斜杠）。
+
+### 13.2 构建注入
+
+复制 `.env.example` 为 `.env`（或 `.env.local`）并填写：
+
+```dotenv
+FLUENTREAD_DRIVE_WEB_CLIENT_ID=<Web 客户端 ID>.apps.googleusercontent.com
+FLUENTREAD_DRIVE_WEB_CLIENT_SECRET=<Web 客户端密钥>
+FLUENTREAD_DRIVE_WEB_REDIRECT_URI=https://<用户名>.github.io/fluentread-oauth/callback
+FLUENTREAD_DRIVE_PASSPHRASE=<至少 12 位的私有口令，可选>
+```
+
+`wxt.config.ts` 的 `vite.define` 在构建期把它们静态替换进产物（`.env` 由 WXT 的 dotenv 加载）。三项 Web 凭据齐全时 Safari 构建才启用网页授权；`FLUENTREAD_DRIVE_PASSPHRASE` 留空回落公开口令 `FluentReadEncryption`，换成私有值后与官方版云端备份互不兼容，需删除云端旧备份重新上传。client secret 会随自用产物分发：PKCE 之下它不是唯一防线，但不要放进公开仓库。
+
+```bash
+pnpm build:safari
+```
+
+随后按 Safari 官方流程用 Xcode 把 `.output/safari-mv2` 转换打包安装。
+
+### 13.3 Safari 网站访问权限
+
+设置页通过 `tabs.onUpdated` 读取授权页签的 URL，Safari 要求扩展对相应网站拥有访问权限。安装后若点击“连接 Google 账号并同步”没有任何反应，在 Safari 的 **设置 → 扩展 → 流畅阅读 → 网站** 中，把 `accounts.google.com` 与回调页宿主（如 `github.io`）设为“允许”，或整体允许所有网站。没有该权限时无法截获授权码，连接会在页签关闭时提示未完成。
+
+### 13.4 用户流程与连接生命周期
+
+- 未连接时入口显示“**连接 Google 账号并同步**”：新标签页打开 Google 同意页（`access_type=offline`、`prompt=consent select_account`，每次连接都返回新的刷新令牌），完成同意后自动返回设置页继续同步预览；删除云端备份与更换账号也会先走同一连接流程，更换账号强制重新弹出账号选择。
+- 刷新令牌保存在后台加密配置仓库键 `local:googleDriveWebOauthCredentials`，不进入配置快照或云备份；访问令牌只在内存中缓存并提前 60 秒过期，静默用刷新令牌换发。同步、删除与更换账号的交互前都会重新查询连接状态，避免把已失效的连接当作已登录。
+- Google 返回 `invalid_grant`（撤销授权、长期未用）时自动清除本机刷新令牌并提示重新连接；每次同步结束只清内存令牌缓存，**不会**断开连接。入口提供“**退出 Google 连接**”显式清除刷新令牌；撤销第三方授权仍到 Google 账号管理页操作。
+- 其余预览、确认、冲突合并、删除确认与 Chrome 原生路径完全共用；账号绑定同样使用 Drive `permissionId`。
+
+### 13.5 维护代码位置
+
+| 模块 | 职责 |
+| --- | --- |
+| `src/platform/google-drive/webOauth.ts` | PKCE S256、授权 URL、授权码交换与刷新令牌访问（fetch 注入） |
+| `src/platform/google-drive/webOauthCredentials.ts` | 刷新令牌的加密配置仓库读写与损坏拒绝 |
+| `src/platform/google-drive/auth.ts` | 双路径可用性、Web 身份（内存令牌缓存、invalid_grant 清凭证）与 401 重放复用 |
+| `src/features/settings/ui/GoogleDriveSync.vue` | 授权页签打开与授权码截获、连接/退出入口、interactiveAuth 钩子 |
+
 ### 大小限制
 
 配置 JSON 最多 **20 MiB**，云端加密文件最多 **32 MiB**。本机预览暂存独立预留 1 MiB 元数据空间，云端文件和基线不重复封装；能上传的配置可再次预览、合并和跨设备恢复。超出限制时停止操作，不覆盖本机或已有云端配置，可使用完整数据备份。

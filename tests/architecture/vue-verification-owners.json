@@ -192,15 +192,11 @@
       "scenario": "真实客户端模板七语即时切换、扩展/脚本入口区别、显隐和归一化事件及关闭状态"
     },
     "src/features/settings/ui/GoogleDriveSync.vue": {
-      "kind": "frozen-debt",
-      "sourceSha256": "d16fc451ca9b1a1d40b40574b228aad61290b68b8d55ec385ef4f2d5a866f07f",
-      "reason": "把 Google Drive 作为配置云备份的一种存储方式接入共用界面。 当前尚未登记可确认的自动组件行为消费者；不把父组件mock或源码契约算作该组件行为证明。",
-      "exitCriteria": "修改此文件前，以真实SFC执行对应事件/异步/取消场景并登记消费者，或纳入正式逐文件严格覆盖；不得刷新冻结hash延续豁免。",
-      "browser": {
-        "runner": "scripts/testing/run-google-drive-sync-ui-test.cjs",
-        "scope": "真实同步页预览和上传下载方向、失败恢复",
-        "limitation": "身份及Drive响应为受控端口；本轮未执行浏览器，不能证明真实账号。"
-      }
+      "kind": "behavior",
+      "tests": [
+        "tests/googleDriveWebSignIn.test.ts"
+      ],
+      "scenario": "真实SFC网页授权连接：Chrome 原生默认按钮、未连接时 PKCE 授权页签截获与 state 校验、拒绝/关闭/校验失败取消、连接成功后继续共用预览、更换账号强制重连与退出连接"
     },
     "src/features/settings/ui/HarnessSettings.vue": {
       "kind": "behavior",
@@ -332,7 +328,9 @@
     },
     "src/features/settings/ui/SiteRulePreview.vue": {
       "kind": "behavior",
-      "tests": ["tests/sitePreferencesLifecycle.test.ts"],
+      "tests": [
+        "tests/sitePreferencesLifecycle.test.ts"
+      ],
       "scenario": "真实SFC检查网址、解释网站与全局显示优先级、响应外部偏好、提示过期输入、显示适配范围并发出规则检查事件"
     },
     "src/features/settings/ui/TranslationCacheSettings.vue": {

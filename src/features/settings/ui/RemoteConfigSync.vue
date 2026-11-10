@@ -8,6 +8,7 @@
 删除入口在核验和删除请求期间显示加载动画，完成或失败后恢复；同步操作不触发删除动画。
 通过左侧操作插槽集中显示同步与连接设置，右侧记录插槽统一显示账号和时间，窄屏改为上下排列；预览顶部一行显示本次账号、同步范围标签（说明收在悬停提示里）和更换账号入口；按两步流程说明影响范围，
 先选择操作再确认影响，确认页把方向、差异数量与一句影响说明合并在标题下，没有差异时不显示展开按钮和空列表，只有存在被隐藏内容的条目才提示“已隐藏”；默认展示差异与连接变更类别，小屏保留操作区。
+父级可注入 interactiveAuth 钩子：同步、删除与更换账号在发起预览前先完成供应商所需的交互式连接（如 Safari 的 Google 网页授权），钩子失败则中止本次操作且不打扰已有预览；操作插槽同时透出最新状态供父级区分连接入口。
 Drive 已上传但未完成核验时单独显示警示，不误报未上传，也不更新成功记录。
 模块边界：只消费后台脱敏预览和同步记录；不获取完整配置、令牌或用户口令，由父级提供存储方式和客户端。
 -->
@@ -28,7 +29,7 @@ Drive 已上传但未完成核验时单独显示警示，不误报未上传，�
     <el-alert v-if="status?.cleanupPending && !previewVisible" :title="t('settings.cloud.cleanupPending')" type="warning" :closable="false" show-icon class="drive-error" />
     <div class="drive-actions">
       <div class="drive-action-buttons">
-        <slot name="actions" :available="status?.available === true" :busy="busy" :sync="prepare">
+        <slot name="actions" :available="status?.available === true" :busy="busy" :sync="prepare" :status="status">
           <el-button v-if="status?.available" type="primary" :loading="busy" :disabled="busy" :data-testid="`${kind}-sync-now`" @click="prepare">{{ t('settings.cloud.syncNow', {provider}) }}</el-button>
         </slot>
       </div>
@@ -183,7 +184,7 @@ import type {DriveChoice} from '@/src/core/config/driveSync';
 import type {DriveSyncDirection, DriveSyncPreview, DriveSyncStatus} from '@/src/services/config/googleDriveSync';
 import type {CloudBackupDeletePreview} from '@/src/services/config/remoteConfigSync';
 
-const props = defineProps<{client: Pick<ReturnType<typeof createCloudBackupClient>, 'status' | 'prepare' | 'commit' | 'cancel' | 'prepareDelete' | 'commitDelete'>; provider: string; kind: 'google-drive'}>();
+const props = defineProps<{client: Pick<ReturnType<typeof createCloudBackupClient>, 'status' | 'prepare' | 'commit' | 'cancel' | 'prepareDelete' | 'commitDelete'>; provider: string; kind: 'google-drive'; interactiveAuth?: (context: {reason: 'sync' | 'delete' | 'switchAccount'}) => Promise<DriveSyncStatus | void>}>();
 const emit = defineEmits<{busy: [value: boolean]}>();
 const {t: baseT, translateLegacy, language} = useUiI18n();
 const client = props.client;
@@ -252,7 +253,14 @@ async function perform(operation: () => Promise<void>, deletionOperation = false
   }}
   finally {if (alive) {busy.value = false; deleting.value = false;}}
 }
+async function runInteractiveAuth(reason: 'sync' | 'delete' | 'switchAccount') {
+  if (!props.interactiveAuth) return;
+  // Safari 网页授权等供应商连接在预览前完成；失败直接中止，不触碰已有预览。连接成功返回的最新状态立即并入本面板。
+  const refreshed = await props.interactiveAuth({reason});
+  if (refreshed) status.value = refreshed;
+}
 async function requestPreview() {
+  await runInteractiveAuth('sync');
   const result = await client.prepare(includeSensitive.value);
   if (!alive) {await client.cancel(result.id); return;}
   preview.value = result;
@@ -264,6 +272,7 @@ async function requestPreview() {
 }
 async function prepare() {await perform(requestPreview);}
 async function requestDeletion() {
+  await runInteractiveAuth('delete');
   deleteConfirmation.value = '';
   const result = await client.prepareDelete();
   if (!alive) {await client.cancel(result.id); return;}
@@ -274,6 +283,7 @@ async function prepareDeletion() {
   await perform(requestDeletion, true);
 }
 async function changeDeletionAccount() {await perform(async () => {
+  await runInteractiveAuth('switchAccount');
   await client.cancel(deletion.value?.id);
   if (!alive) return;
   try {await requestDeletion();} catch (failure) {deleteVisible.value = false; throw failure;}
@@ -313,6 +323,8 @@ function confirmSensitive() {
 }
 async function switchAccount() {
   await perform(async () => {
+    // 更换账号在 Web OAuth 路径必须重新走同意流程才能切换 Google 账号；授权失败保留当前预览。
+    await runInteractiveAuth('switchAccount');
     switchingAccount.value = true;
     try {
       await client.cancel(preview.value?.id);

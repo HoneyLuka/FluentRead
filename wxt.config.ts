@@ -246,6 +246,12 @@ export default defineConfig({
             },
             define: {
                 'process.env.VUE_APP_VERSION': JSON.stringify(packageJson.version),
+                // 自用精简版：Safari 等无 chrome.identity 宿主的 Google Web OAuth 凭据与私有备份口令。
+                // WXT 在解析配置前已用 dotenv 载入 .env；未设置时注入空串，Web 路径回落不可用、口令回落公开默认值。
+                'process.env.FLUENTREAD_DRIVE_WEB_CLIENT_ID': JSON.stringify(process.env.FLUENTREAD_DRIVE_WEB_CLIENT_ID ?? ''),
+                'process.env.FLUENTREAD_DRIVE_WEB_CLIENT_SECRET': JSON.stringify(process.env.FLUENTREAD_DRIVE_WEB_CLIENT_SECRET ?? ''),
+                'process.env.FLUENTREAD_DRIVE_WEB_REDIRECT_URI': JSON.stringify(process.env.FLUENTREAD_DRIVE_WEB_REDIRECT_URI ?? ''),
+                'process.env.FLUENTREAD_DRIVE_PASSPHRASE': JSON.stringify(process.env.FLUENTREAD_DRIVE_PASSPHRASE ?? ''),
             },
             // 源码层脱敏是主要控制；生产构建再移除诊断输出，作为未来新增日志的纵深防护。
             esbuild: isProductionBuild ? {drop: ['console', 'debugger']} : undefined,

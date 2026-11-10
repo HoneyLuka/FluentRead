@@ -669,7 +669,7 @@ describe('implementation audit 48 B: controlled public storage and backup flows'
         const remove = vi.fn();
         const disconnect = vi.fn(async () => undefined);
         const session = {account: {id: 'fixture-account', email: 'fixture@example.test'}, request: async <T>(operation: (credential: string) => Promise<T>) => operation('controlled-credential')};
-        const ports: Omit<DriveSyncPorts, 'accountChangedError'> = {auth: {availability: () => ({available: true, reason: ''}), open: async () => session, disconnect}, api: {read: async () => structuredClone(remote), write: async () => {throw new Error('unexpected write');}, remove}, snapshot: async () => storedConfig, apply: async () => {throw new Error('unexpected apply');}, readState: async () => structuredClone(state), writeState: async value => {state = structuredClone(value);}, now: () => 100};
+        const ports: Omit<DriveSyncPorts, 'accountChangedError'> = {auth: {availability: async () => ({available: true, reason: ''}), open: async () => session, disconnect}, api: {read: async () => structuredClone(remote), write: async () => {throw new Error('unexpected write');}, remove}, snapshot: async () => storedConfig, apply: async () => {throw new Error('unexpected apply');}, readState: async () => structuredClone(state), writeState: async value => {state = structuredClone(value);}, now: () => 100};
         const sync = createGoogleDriveSync(ports);
         const preview = await sync.prepareDelete(1, 'fixture-client');
         remote = {...remote, content: 'changed', file: {...remote.file, version: '2', etag: '"2"'}};

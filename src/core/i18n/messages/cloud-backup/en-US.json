@@ -113,7 +113,14 @@
     "settings.cloud.deleteCloudEffect": "Confirmation deletes the current cloud backup from {provider}.",
     "settings.cloud.deleteVerificationPrompt": "Type “{phrase}” to confirm deletion.",
     "settings.webdav.concurrentWarning": "This provider cannot prevent concurrent writes. The cloud backup is checked again before saving, merging, or deleting. Avoid syncing from other devices at the same time.",
-    "settings.cloud.uploadUnverified": "Configuration was uploaded to Google Drive, but verification could not be completed. Read the cloud backup again to confirm. Device settings were not changed."
+    "settings.cloud.uploadUnverified": "Configuration was uploaded to Google Drive, but verification could not be completed. Read the cloud backup again to confirm. Device settings were not changed.",
+    "settings.cloud.webConnectSync": "Connect Google account and sync",
+    "settings.cloud.webSignOut": "Sign out of Google",
+    "settings.cloud.webSignedOut": "Signed out of Google",
+    "settings.cloud.webAuthTabClosed": "The Google authorization page was closed before connecting.",
+    "settings.cloud.webAuthDenied": "Google authorization was declined before connecting.",
+    "settings.cloud.webAuthStateInvalid": "The Google authorization response failed validation. Please retry.",
+    "settings.cloud.webAuthOpenFailed": "Could not open the Google authorization page. Please retry."
   },
   "legacy": {
     "普通云备份包含不属于此范围的字段，请重新生成备份。": "The general-settings cloud backup contains fields outside its scope. Generate a new backup.",
@@ -125,6 +132,13 @@
     "云端备份已变化，请重新检查后再删除。": "The cloud backup changed. Check it again before deleting.",
     "云端备份缺少安全删除所需的版本信息，请到服务商管理页面手动删除。": "The backup lacks the version information required for safe deletion. Delete it manually in the provider management page.",
     "删除后仍检测到云端备份，可能已被其他设备重新创建，请重新检查。": "A backup is still present after deletion. Another device may have recreated it. Check again.",
-    "删除预览属于其他页面或已失效，请在原设置页面继续。": "This deletion preview belongs to another page or expired. Continue in the original settings page."
+    "删除预览属于其他页面或已失效，请在原设置页面继续。": "This deletion preview belongs to another page or expired. Continue in the original settings page.",
+    "请先连接 Google 账号，再进行 Google Drive 同步。": "Connect your Google account before syncing with Google Drive.",
+    "Google 授权已失效，请重新连接 Google 账号。": "The Google authorization has expired. Reconnect your Google account.",
+    "无法连接 Google 授权服务，请检查网络后重试。": "Could not reach the Google authorization service. Check the network and retry.",
+    "当前构建未配置 Google 网页授权，请在 Chrome 中使用系统授权或按维护者指南配置。": "This build has no Google web authorization configured. Use the system sign-in in Chrome, or follow the maintainer guide.",
+    "无效的 Google 授权结果，请重新连接。": "The Google authorization result is invalid. Reconnect and try again.",
+    "当前浏览器使用系统授权管理 Google 连接，无需退出。": "This browser manages the Google connection through system authorization; no sign-out is needed.",
+    "连接 Google 账号未完成，请重试。": "Connecting the Google account did not complete. Please retry."
   }
 }

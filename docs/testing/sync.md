@@ -72,6 +72,8 @@ node scripts/testing/run-webdav-backup-ui-test.cjs \
 
 还检查完成、预览与提交失败、取消预览、切换供应商、重开设置与确认后立即关闭时仍保持已选范围，手动关闭持久保存、多页同步与存储失败保护，以及七语言风险文案解析、390px 无横向溢出、Escape 取消、深色风险文字对比度至少 4.5:1 和控制台异常。紧凑风险弹窗保留本机加密与存储位置、公开口令和泄露风险、默认未勾选的风险同意，省去重复建议。保存普通范围只更新当前云文件，不证明服务商历史版本被删除。此专项使用受控 WebDAV 夹具，不代表真实 Google 授权、真实第三方账号、商店版本或跨设备联调结果；Google 账号切换与准备失败还可用 Google 专项的 `--sensitive-only` 验证；旧扩展拒绝 v2 与旧事务失效由对应领域回归验证。
 
+`tests/googleDriveWebOauth.test.ts` 覆盖 Safari 网页授权协议：PKCE S256（RFC 7636 向量）、offline+consent 授权 URL、重定向结果读取、令牌端点 snake_case 表单与 invalid_grant/网络/服务错误映射、刷新令牌仓库读写与损坏拒绝、私有口令回落公开口令。`tests/googleDriveAuth.test.ts` 的新增分组覆盖 Web 身份：按刷新令牌报告登录状态、60 秒提前过期复用、invalid_grant 清凭证、401 重放与账号切换保护、断开只清内存缓存。`tests/googleDriveWebSignIn.test.ts` 以真实 SFC 挂载 `GoogleDriveSync.vue`，验证 Chrome 原生默认按钮、未连接时授权页签截获与 state 校验、拒绝/关闭/校验失败取消、连接成功后继续共用预览、更换账号强制重连与退出连接。这些测试使用受控 fetch 与页签端口，不代表真实 Google 账号或 Safari 实机授权。
+
 ## 云端备份删除专项
 
 `run-webdav-backup-ui-test.cjs --delete-loading-only` 只检查删除加载反馈：本机夹具延迟核验和删除请求，验证入口转圈、按钮禁用、确认按钮加载、失败后恢复，以及一次删除和本机配置保留。同步操作使用原有加载状态，删除入口只在删除相关请求期间转圈。

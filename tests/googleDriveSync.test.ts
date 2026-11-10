@@ -18,7 +18,7 @@ function fixture() {
     let clock = 1000;
     const session = () => ({account, request: async <T>(operation: (token: string) => Promise<T>) => operation('fixture-auth-token')});
     const ports: Omit<DriveSyncPorts, 'accountChangedError'> = {
-        auth: {availability: vi.fn(() => ({available: true, reason: ''})), open: vi.fn(async () => session()), disconnect: vi.fn(async () => undefined)},
+        auth: {availability: vi.fn(async () => ({available: true, reason: ''})), open: vi.fn(async () => session()), disconnect: vi.fn(async () => undefined)},
         api: {
             read: vi.fn(async () => remote),
             remove: vi.fn(async () => {remote = null;}),
@@ -313,7 +313,7 @@ describe('Google Drive 同步事务', () => {
     it('防御未配置浏览器、无效状态、授权失败、已结束事务和不存在的同步方向', async () => {
         const f = fixture();
         for (const state of [[], {}, {version: 2}, {version: 1}, {version: 1, connected: true}, {version: 1, connected: true, accountId: 'a'}, {version: 1, connected: true, accountId: 'a', baseline: ''}, {version: 1, connected: true, accountId: 'a', baseline: '', lastSyncedAt: 'bad'}]) {f.state = state; expect(await f.service.status()).toMatchObject({account: null});}
-        vi.mocked(f.ports.auth.availability).mockReturnValueOnce({available: false, reason: 'fixture unsupported'});
+        vi.mocked(f.ports.auth.availability).mockResolvedValueOnce({available: false, reason: 'fixture unsupported'});
         expect(await f.service.status()).toMatchObject({available: false});
         vi.mocked(f.ports.auth.open).mockRejectedValueOnce(new Error('fixture auth failure'));
         await expect(f.service.prepare(password, undefined, undefined, true)).rejects.toThrow('fixture auth failure');

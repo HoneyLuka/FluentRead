@@ -301,7 +301,8 @@
       "tests/clickSelectionConfig.test.ts",
       "tests/pointerSelectionSession.test.ts",
       "tests/aiMultiSegmentConfig.test.ts",
-      "tests/longPageMockTransport.test.ts"
+      "tests/longPageMockTransport.test.ts",
+      "tests/googleDriveWebOauth.test.ts"
     ],
     "functional": [
       "tests/aiSdkOpenAICompatible.test.ts",
@@ -434,7 +435,8 @@
       "tests/i18nSettingsCopy.test.ts",
       "tests/clickSelection.test.ts",
       "tests/clickSelectionSettingsLifecycle.test.ts",
-      "tests/aiMultiSegmentSettingsLifecycle.test.ts"
+      "tests/aiMultiSegmentSettingsLifecycle.test.ts",
+      "tests/googleDriveWebSignIn.test.ts"
     ],
     "regression": [
       "tests/discordServerIconBoundary.test.ts",

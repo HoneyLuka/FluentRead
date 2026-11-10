@@ -113,7 +113,14 @@
     "settings.cloud.deleteCloudEffect": "Al confirmar, se elimina la copia actual en la nube de {provider}.",
     "settings.cloud.deleteVerificationPrompt": "Escribe «{phrase}» para confirmar la eliminación.",
     "settings.webdav.concurrentWarning": "Este proveedor no puede evitar escrituras simultáneas. La copia se vuelve a comprobar antes de guardar, combinar o eliminar. Evita sincronizar otros dispositivos al mismo tiempo.",
-    "settings.cloud.uploadUnverified": "La configuración se subió a Google Drive, pero no se pudo completar la verificación. Vuelve a leer la copia para confirmar. Los ajustes del dispositivo no cambiaron."
+    "settings.cloud.uploadUnverified": "La configuración se subió a Google Drive, pero no se pudo completar la verificación. Vuelve a leer la copia para confirmar. Los ajustes del dispositivo no cambiaron.",
+    "settings.cloud.webConnectSync": "Conectar la cuenta de Google y sincronizar",
+    "settings.cloud.webSignOut": "Desconectar la cuenta de Google",
+    "settings.cloud.webSignedOut": "Cuenta de Google desconectada",
+    "settings.cloud.webAuthTabClosed": "Se cerró la página de autorización de Google; la conexión no se completó.",
+    "settings.cloud.webAuthDenied": "Se rechazó la autorización de Google; la conexión no se completó.",
+    "settings.cloud.webAuthStateInvalid": "No se pudo validar la respuesta de autorización de Google. Reinténtalo.",
+    "settings.cloud.webAuthOpenFailed": "No se pudo abrir la página de autorización de Google. Reinténtalo."
   },
   "legacy": {
     "普通云备份包含不属于此范围的字段，请重新生成备份。": "La copia en la nube de ajustes generales contiene campos fuera de su alcance. Genera una nueva copia.",
@@ -125,6 +132,13 @@
     "云端备份已变化，请重新检查后再删除。": "La copia cambió. Compruébala antes de eliminarla.",
     "云端备份缺少安全删除所需的版本信息，请到服务商管理页面手动删除。": "Falta la información de versión necesaria. Elimina la copia en la página de gestión del proveedor.",
     "删除后仍检测到云端备份，可能已被其他设备重新创建，请重新检查。": "Todavía hay una copia tras eliminarla. Otro dispositivo puede haberla creado de nuevo. Compruébalo.",
-    "删除预览属于其他页面或已失效，请在原设置页面继续。": "Esta vista previa pertenece a otra página o caducó. Continúa en la página original."
+    "删除预览属于其他页面或已失效，请在原设置页面继续。": "Esta vista previa pertenece a otra página o caducó. Continúa en la página original.",
+    "请先连接 Google 账号，再进行 Google Drive 同步。": "Conecta tu cuenta de Google antes de sincronizar con Google Drive.",
+    "Google 授权已失效，请重新连接 Google 账号。": "La autorización de Google ha caducado. Vuelve a conectar tu cuenta de Google.",
+    "无法连接 Google 授权服务，请检查网络后重试。": "No se pudo conectar con el servicio de autorización de Google. Comprueba la red y reintenta.",
+    "当前构建未配置 Google 网页授权，请在 Chrome 中使用系统授权或按维护者指南配置。": "Esta compilación no tiene configurada la autorización web de Google. Usa el inicio de sesión del sistema en Chrome o sigue la guía del mantenedor.",
+    "无效的 Google 授权结果，请重新连接。": "El resultado de autorización de Google no es válido. Vuelve a conectar.",
+    "当前浏览器使用系统授权管理 Google 连接，无需退出。": "Este navegador gestiona la conexión de Google mediante la autorización del sistema; no hace falta desconectar.",
+    "连接 Google 账号未完成，请重试。": "La conexión de la cuenta de Google no se completó. Reintenta."
   }
 }

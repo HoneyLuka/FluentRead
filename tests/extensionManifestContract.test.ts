@@ -996,9 +996,9 @@ describe('Chrome unified ZIP packaging', () => {
                 runtime: {id: runtimeId, getManifest: () => offline}, fetch: vi.fn(),
             };
             const auth = createDriveAuth(ports);
-            expect(auth.availability()).toEqual({available: true, reason: ''});
+            await expect(auth.availability()).resolves.toEqual({available: true, reason: ''});
             ports.runtime.id = 'aakdnohjinpalkgcdkjpbbfbkieohfce';
-            expect(auth.availability().reason).toContain('扩展 ID');
+            await expect(auth.availability()).resolves.toMatchObject({reason: expect.stringContaining('扩展 ID')});
             await expect(auth.open(true)).rejects.toThrow('OAuth 客户端不匹配');
             expect(ports.identity!.getAuthToken).not.toHaveBeenCalled();
             expect(ports.fetch).not.toHaveBeenCalled();
